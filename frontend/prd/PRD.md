@@ -1,4 +1,4 @@
-# CardTrack — PRD v1.1 (Final, Single File)
+# CardTrack — PRD v1  (Final, Single File)
 
 **Project:** CardTrack (Credit Card Recommendation UI Prototype)  
 **Mode:** UI-only, CSV-seeded (read-only), LocalStorage persistence (read/write)  
@@ -24,6 +24,8 @@ Build a mobile UI prototype that lets users:
 - Card autocomplete + verified badge/tick (SVG asset)
 - Wallet setup supports multiple cards
 - Wallet setup captures **cycle spend baseline per card** ("Spent so far (this cycle)")
+- Wallet setup prevent duplicate card selection across wallet rows:
+  - once a card is selected in one wallet entry, it is removed from suggestions in other entries (except the current row’s selected value)
 - Refresh UX helper:
   - Show "Next refresh: …" computed from refresh day-of-month + today's date (robust for invalid days like Feb 30)
 - Post-profile creation loading transition:
@@ -82,6 +84,8 @@ Build a mobile UI prototype that lets users:
 - Verified badge uses SVG tick asset: `/assets/cards/tick.svg`
 - Register screen header:
   - **No "Step 1 of 3: Create Profile" pill** on the Register screen
+- Register wallet cards:
+  - A card already selected in another wallet row must not appear in autocomplete suggestions (except the card already selected in the current row).
 - Each wallet card captures:
   - refresh day-of-month (1–31) (label: "Refresh")
   - annual fee date (required if card is selected)
@@ -225,6 +229,7 @@ Render inside a centered "device frame" to mimic a phone:
   - Card selector with autocomplete (from `cards_master.csv`)
     - right side: Verified badge shown only when valid
     - tick asset: `src="/assets/cards/tick.svg"`
+    - autocomplete suggestions exclude cards already selected in other wallet card blocks (prevents duplicates)
   - Row of 2 fields:
     - Refresh Day (dropdown 1–31, label: "Refresh")
     - Annual Fee Date (date input)
