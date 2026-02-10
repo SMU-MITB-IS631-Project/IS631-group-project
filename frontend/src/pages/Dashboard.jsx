@@ -1,0 +1,197 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import CardSurface from '../components/CardSurface';
+import { CardThumbnail } from '../components/CardAutocomplete';
+import {
+  loadCardsMaster, loadUserProfile, loadTransactions,
+  getCurrentMonthKey, shiftMonth, formatMonthLabel,
+  filterTransactionsByMonth, getMonthSummary, getCardSpendForMonth,
+  getAvailableMonths,
+} from '../utils/dataAdapter';
+
+function formatDateDMonYYYY(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const day = d.getDate();
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${day}-${months[d.getMonth()]}-${d.getFullYear()}`;
+}
+
+export default function Dashboard() {
+  const navigate = useNavigate();
+  const [cardsMaster, setCardsMaster] = useState([]);
+  const [profile, setProfile] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [monthKey, setMonthKey] = useState(getCurrentMonthKey());
+
+  useEffect(() => {
+    const p = loadUserProfile();
+    if (!p) { navigate('/register'); return; }
+    setProfile(p);
+    loadCardsMaster().then(setCardsMaster);
+  }, []);
+
+  // Reload transactions when returning to this page
+  useEffect(() => {
+    setTransactions(loadTransactions());
+  }, []);
+
+  // Also listen for focus to refresh data
+  useEffect(() => {
+    function handleFocus() {
+      setTransactions(loadTransactions());
+    }
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
+  const availableMonths = getAvailableMonths(transactions);
+  const monthTxns = filterTransactionsByMonth(transactions, monthKey);
+  const summary = getMonthSummary(monthTxns, cardsMaster, profile?.wallet || []);
+  const showArrows = availableMonths.length > 1;
+
+  const topCardMaster = cardsMaster.find(c => c.card_id === summary.topCardId);
+
+  const hasBaseline = profile?.wallet?.some(wc => (wc.cycle_spend_sgd || 0) > 0);
+
+  return (
+    <div className="pb-6 px-4 pt-6">
+      {/* Header */}
+      <div className="mb-4 px-[14px]">
+        <h1 className="text-[22px] font-semibold tracking-tight text-primary-dark">Dashboard</h1>
+      </div>
+
+      {/* Month Selector */}
+      <div className="flex items-center justify-center gap-4 mb-5">
+        {showArrows && (
+          <button
+            type="button"
+            onClick={() => setMonthKey(prev => shiftMonth(prev, -1))}
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/60 text-muted transition-colors"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+        )}
+        <span className="bg-white px-5 py-1.5 rounded-full text-sm font-semibold text-text shadow-sm border border-border">
+          {formatMonthLabel(monthKey)}
+        </span>
+        {showArrows && (
+          <button
+            type="button"
+            onClick={() => setMonthKey(prev => shiftMonth(prev, 1))}
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/60 text-muted transition-colors"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        )}
+      </div>
+
+      {/* Monthly Summary */}
+      <CardSurface className="mb-4">
+        <h2 className="text-xs font-semibold text-muted mb-3 uppercase tracking-wide">Monthly Summary</h2>
+        <div className="flex items-start justify-between">
+          <div className="space-y-2">
+            <div>
+              <div className="text-2xl font-bold text-text">${summary.total.toFixed(2)}</div>
+              <div className="text-xs text-muted">Total spend</div>
+            </div>
+            <div>
+              <div className="text-lg font-semibold text-text">{summary.count}</div>
+              <div className="text-xs text-muted">Transactions</div>
+            </div>
+          </div>
+          <div className="flex flex-col items-end">
+            {topCardMaster && (
+              <CardThumbnail imagePath={topCardMaster.image_path} name={topCardMaster.card_name} size="lg" />
+            )}
+            <div className="mt-2 text-right">
+              <div className="text-xs font-medium text-text">Top Card:</div>
+              <div className="text-xs text-muted">{summary.topCardSpend > 0 ? summary.topCardName : '—'}</div>
+            </div>
+          </div>
+        </div>
+      </CardSurface>
+
+      {/* Transactions List */}
+      <CardSurface className="mb-4">
+        {hasBaseline && (
+          <h2 className="text-xs font-semibold text-muted mb-3 uppercase tracking-wide">Prior Spend</h2>
+        )}
+
+        {/* Baseline rows (display-only, from wallet cycle_spend_sgd) */}
+        {profile?.wallet?.filter(wc => (wc.cycle_spend_sgd || 0) > 0).map(wc => {
+          const card = cardsMaster.find(c => c.card_id === wc.card_id);
+          return (
+            <div key={`baseline-${wc.card_id}`} className="flex items-center justify-between gap-3 mb-3 opacity-70">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-text truncate">
+                  {card?.card_name || wc.card_id}
+                </div>
+              </div>
+              <div className="text-sm font-semibold text-text shrink-0 tabular-nums">
+                ${(wc.cycle_spend_sgd || 0).toFixed(2)}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Stronger divider between baseline and transactions */}
+        {hasBaseline && <hr className="border-gray-300/70 my-3" />}
+
+        <h2 className="text-xs font-semibold text-muted mb-3 uppercase tracking-wide">Transactions</h2>
+
+        {monthTxns.length === 0 ? (
+          <p className="text-sm text-muted text-center py-4">No transactions yet. Log a transaction from Recommend.</p>
+        ) : (
+          <div className="divide-y divide-gray-200/60">
+            {monthTxns.map(txn => {
+              const card = cardsMaster.find(c => c.card_id === txn.card_id);
+              return (
+                <div key={txn.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-text truncate">{txn.item}</div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium truncate max-w-[120px]">
+                        {card?.card_name || txn.card_id}
+                      </span>
+                      <span className="text-[11px] text-muted">{formatDateDMonYYYY(txn.date)}</span>
+                    </div>
+                  </div>
+                  <div className="text-sm font-semibold text-text ml-3">
+                    ${txn.amount_sgd.toFixed(2)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardSurface>
+
+      {/* Card Overview */}
+      {profile && profile.wallet && profile.wallet.length > 0 && (
+        <CardSurface className="mb-4">
+          <h2 className="text-xs font-semibold text-muted mb-3 uppercase tracking-wide">Card Overview</h2>
+          <div className="space-y-3">
+            {profile.wallet.map(wc => {
+              const card = cardsMaster.find(c => c.card_id === wc.card_id);
+              const spend = getCardSpendForMonth(monthTxns, wc.card_id, wc.cycle_spend_sgd || 0);
+              return (
+                <div key={wc.card_id} className="flex items-center gap-3">
+                  <CardThumbnail imagePath={card?.image_path} name={card?.card_name} size="md" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-text truncate">{card?.card_name || wc.card_id}</div>
+                    <div className="text-xs text-muted">
+                      Annual fee: {wc.annual_fee_billing_date || 'Not set'}
+                    </div>
+                  </div>
+                  <div className="text-sm font-semibold text-text">
+                    ${spend.toFixed(2)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardSurface>
+      )}
+    </div>
+  );
+}
