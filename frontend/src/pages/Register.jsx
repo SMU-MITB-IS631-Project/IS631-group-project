@@ -37,6 +37,12 @@ export default function Register() {
   const [walletCards, setWalletCards] = useState([{ ...EMPTY_WALLET_CARD }]);
   const [preference, setPreference] = useState('miles');
   const [errors, setErrors] = useState({});
+    // --- prevent duplicate card selection across wallet rows ---
+  const takenCardIds = new Set(walletCards.map(w => w.card_id).filter(Boolean));
+  function getCardsForRow(rowIndex) {
+    const currentId = walletCards[rowIndex]?.card_id;
+    return cardsMaster.filter(c => c.card_id === currentId || !takenCardIds.has(c.card_id));
+  }
 
   useEffect(() => {
     loadCardsMaster().then(setCardsMaster);
@@ -171,7 +177,7 @@ export default function Register() {
                 )}
                 <div className="space-y-2.5">
                   <CardAutocomplete
-                    cards={cardsMaster}
+                    cards={getCardsForRow(idx)}
                     value={wc.card_id}
                     onChange={val => updateWalletCard(idx, 'card_id', val)}
                     placeholder="Search for a card..."
