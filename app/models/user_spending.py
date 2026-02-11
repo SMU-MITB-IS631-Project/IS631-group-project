@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Numeric, String, DateTime, Date, Enum as SAEnum, ForeignKey
+from sqlalchemy import Column, Integer, Numeric, String, DateTime, Date, Enum as SAEnum, ForeignKey
 from app.db.db import Base
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import relationship

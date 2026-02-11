@@ -36,8 +36,8 @@ class UserOwnedCardBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     user_id: int
     card_id: int
-    card_expiry_date: DateTime | None = None
-    billing_cycle_refresh_date: DateTime | None = None
+    card_expiry_date: datetime | None = None
+    billing_cycle_refresh_date: datetime | None = None
     status: UserOwnedCardStatus = UserOwnedCardStatus.Active
 
 class UserOwnedCardCreate(UserOwnedCardBase):

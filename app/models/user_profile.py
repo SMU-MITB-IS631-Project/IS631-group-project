@@ -17,7 +17,7 @@ class UserProfile(Base):
     password_hash = Column(String, nullable=False)
     name = Column(String, nullable=True)
     email = Column(String, nullable=True, unique=True)
-    benefits_preference = Column(SAEnum(BenefitsPreference), nullable=False, default=BenefitsPreference.NoPreference)
+    benefits_preference = Column(SAEnum(BenefitsPreference), nullable=False, default=BenefitsPreference.No_preference)
     created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 # Relationships with user_cards and user_spending tables
@@ -39,4 +39,4 @@ class UserProfileCreate(UserProfileBase):
 
 class UserProfileResponse(UserProfileBase):
     id: int
-    created_date: DateTime
+    created_date: datetime
