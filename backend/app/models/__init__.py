@@ -1,3 +1,3 @@
-from .transaction import Transaction, TransactionCreate, TransactionRequest
+from .transaction import UserTransaction as Transaction, TransactionCreate, TransactionRequest
 
 __all__ = ["Transaction", "TransactionCreate", "TransactionRequest"]

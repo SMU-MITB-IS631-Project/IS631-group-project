@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status
 from typing import Dict, Any
 
-from app.models.transaction import TransactionRequest, Transaction
+from app.models.transaction import TransactionRequest, TransactionResponse
 from app.services.data_service import (
     create_transaction,
     card_exists_in_wallet,
