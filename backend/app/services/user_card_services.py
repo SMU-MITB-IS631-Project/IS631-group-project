@@ -45,7 +45,33 @@ class UserCardManagementService:
             return []
         try:
             with open(csv_path, newline="", encoding="utf-8") as file:
-                return list(csv.DictReader(file))
+                reader = csv.DictReader(file)
+                # Validate that the expected card_id column exists
+                if not reader.fieldnames or "card_id" not in reader.fieldnames:
+                    logging.error(
+                        "Cards master CSV at %s is missing required 'card_id' header. "
+                        "Available headers: %s",
+                        csv_path,
+                        reader.fieldnames,
+                    )
+                    return []
+
+                rows: List[Dict[str, Any]] = []
+                for index, row in enumerate(reader, start=1):
+                    # Safely fetch and normalize card_id
+                    card_id = (row.get("card_id") or "").strip()
+                    if not card_id:
+                        logging.warning(
+                            "Skipping cards_master.csv row %d at %s due to missing/blank 'card_id': %r",
+                            index,
+                            csv_path,
+                            row,
+                        )
+                        continue
+                    row["card_id"] = card_id
+                    rows.append(row)
+
+                return rows
         except csv.Error as e:
             logging.error(f"CSV read error in {csv_path}: {e}")
             return []
