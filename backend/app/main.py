@@ -41,12 +41,9 @@ app.add_middleware(
 
 # Register routers
 app.include_router(transactions_router)
-<<<<<<< HEAD
 app.include_router(catalog_router)
-=======
 app.include_router(wallet_router)
 
->>>>>>> main
 
 if __name__ == "__main__":
     import uvicorn
