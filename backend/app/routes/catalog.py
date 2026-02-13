@@ -1,10 +1,14 @@
 from fastapi import APIRouter, HTTPException, Depends, status
-from app.models.cards import Card
-from app.models.user_owned_cards import UserOwnedCard
+
+from app.models.cards import Card, CardInfo, CardResponse
+from app.models.user_owned_cards import UserOwnedCard, UserOwnedCardResponse
 from app.services.catalog_service import CatalogService
 from app.dependencies.services import get_catalog_service
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/api/v1/catalog",
+    tags=["catalog"]
+)
 
 @router.get("/catalog", response_model=list[CardResponse])
 def get_catalog(service: CatalogService = Depends(get_catalog_service)):
@@ -12,4 +16,4 @@ def get_catalog(service: CatalogService = Depends(get_catalog_service)):
 
 @router.post("/", response_model=UserOwnedCardResponse, status_code=status.HTTP_201_CREATED)
 def add_user_owned_card(card: CardInfo, service: CatalogService = Depends(get_catalog_service)):
-    return service.add_card(card.id)
+    return service.add_user_owned_card(card.id)

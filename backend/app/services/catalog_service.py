@@ -10,7 +10,7 @@ class CatalogService:
         """Retrieve all cards from the database."""
         return self.db.query(Card).all()
     
-    def add_card(self, card_id: int):
+    def add_user_owned_card(self, user_id: int, card_id: int):
         """Add a new user owned card.
 
         To be refined again.
