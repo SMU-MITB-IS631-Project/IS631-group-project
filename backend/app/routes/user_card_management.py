@@ -101,7 +101,7 @@ def _error_response(
     return JSONResponse(status_code=status_code, content=body.model_dump())
 
 
-def _get_user_id_from_request(request: Request) -> str | None:
+def _get_user_id_from_request(request: Request) -> Optional[str]:
     user_id = request.headers.get("x-user-id")
     return user_id.strip() if user_id else None
 
