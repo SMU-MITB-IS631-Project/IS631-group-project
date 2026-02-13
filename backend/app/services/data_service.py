@@ -69,10 +69,32 @@ def create_transaction(transaction_data: Dict[str, Any], user_id: str = "u_001")
     return transaction
 
 
-def get_user_transactions(user_id: str = "u_001") -> List[Dict[str, Any]]:
-    """Get all transactions for a user"""
+def get_user_transactions(user_id: str = "u_001", sort_by_date_desc: bool = True) -> List[Dict[str, Any]]:
+    """Get all transactions for a user, optionally sorted by date DESC"""
     transactions = _load_json(TRANSACTIONS_FILE)
-    return transactions.get(user_id, [])
+    user_transactions = transactions.get(user_id, [])
+    
+    if sort_by_date_desc and user_transactions:
+        # Sort by date in descending order (newest first)
+        user_transactions = sorted(
+            user_transactions,
+            key=lambda t: t.get('date', '1900-01-01'),
+            reverse=True
+        )
+    
+    return user_transactions
+
+
+def get_transaction_by_id(transaction_id: str, user_id: str = "u_001") -> Dict[str, Any] | None:
+    """Get a specific transaction by ID for a user"""
+    transactions = _load_json(TRANSACTIONS_FILE)
+    user_transactions = transactions.get(user_id, [])
+    
+    for transaction in user_transactions:
+        if transaction.get('id') == transaction_id:
+            return transaction
+    
+    return None
 
 
 def init_sample_data() -> None:
