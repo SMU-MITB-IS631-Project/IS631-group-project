@@ -64,3 +64,6 @@ class UserProfileCreate(UserProfileBase):
 class UserProfileResponse(UserProfileBase):
     id: int
     created_date: datetime
+
+class UserProfileUpdate(UserProfileBase):
+    password: str
