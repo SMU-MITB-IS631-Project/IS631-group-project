@@ -1,4 +1,5 @@
 import csv
+import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -32,19 +33,24 @@ class UserCardManagementService:
         return os.path.join(self._backend_root(), "data", "user_card_audit_log.json")
 
     def _load_cards_master_rows(self) -> List[Dict[str, Any]]:
+        csv_path = os.path.join(
+            self._repo_root(),
+            "frontend",
+            "public",
+            "data",
+            "cards_master.csv",
+        )
+        if not os.path.exists(csv_path):
+            logging.warning(f"Cards master file not found at: {csv_path}")
+            return []
         try:
-            csv_path = os.path.join(
-                self._repo_root(),
-                "frontend",
-                "public",
-                "data",
-                "cards_master.csv",
-            )
-            if not os.path.exists(csv_path):
-                return []
             with open(csv_path, newline="", encoding="utf-8") as file:
                 return list(csv.DictReader(file))
-        except Exception:
+        except csv.Error as e:
+            logging.error(f"CSV read error in {csv_path}: {e}")
+            return []
+        except Exception as e:
+            logging.error(f"Failed to load cards master file {csv_path}: {e}")
             return []
 
     def _get_users(self) -> Dict[str, Any]:
@@ -73,7 +79,7 @@ class UserCardManagementService:
         changed = False
         for card in wallet:
             if not card.get("id"):
-                card["id"] = f"uc_{uuid.uuid4().hex[:8]}"
+                card["id"] = f"uc_{uuid.uuid4().hex}"
                 changed = True
             if "is_active" not in card:
                 card["is_active"] = True
@@ -122,11 +128,17 @@ class UserCardManagementService:
     def _get_rewards_rule(self, card_id: str) -> Dict[str, Any]:
         row = next((r for r in self._cards_master_rows if r.get("card_id") == card_id), None)
         reward_type = (row or {}).get("reward_type", "unknown")
+        
+        # Validate that hardcoded defaults exist in master data
         defaults = {
             "ww": "4.0 mpd for eligible online spend, base rate otherwise.",
             "prvi": "Higher miles on eligible spend categories; base miles otherwise.",
             "uobone": "Tiered cashback with minimum monthly spend requirements.",
         }
+        for default_id in defaults:
+            if default_id not in self._cards_master_ids:
+                logging.warning(f"Default reward rule for card_id '{default_id}' has no corresponding entry in cards_master.csv")
+        
         return {
             "reward_type": reward_type,
             "rule_summary": defaults.get(card_id, "See issuer terms for reward computation."),
@@ -165,6 +177,8 @@ class UserCardManagementService:
             card_id = card.get("card_id")
             if not card_id:
                 raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": f"wallet[{idx}].card_id", "reason": "Required."})
+            if not self._cards_master_rows:
+                raise ServiceError(500, "SERVER_ERROR", "Master card data is not available. Cannot validate card.", {})
             if self._cards_master_ids and card_id not in self._cards_master_ids:
                 raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": f"wallet[{idx}].card_id", "reason": "Not in cards master."})
 
@@ -182,7 +196,7 @@ class UserCardManagementService:
 
             normalized_wallet.append(
                 {
-                    "id": card.get("id") or f"uc_{uuid.uuid4().hex[:8]}",
+                    "id": card.get("id") or f"uc_{uuid.uuid4().hex}",
                     "card_id": card_id,
                     "refresh_day_of_month": refresh_day,
                     "annual_fee_billing_date": annual_date,
@@ -193,18 +207,27 @@ class UserCardManagementService:
 
         users = self._get_users()
         user_key = profile.get("user_id") or self.user_id or "u_001"
+        
+        # Preserve inactive cards by merging wallets
+        existing_user = users.get(user_key, {})
+        existing_wallet = existing_user.get("wallet", [])
+        active_new_card_ids = {c["card_id"] for c in normalized_wallet}
+        
+        merged_wallet = [c for c in existing_wallet if not c.get("is_active") or c.get("card_id") not in active_new_card_ids]
+        merged_wallet.extend(normalized_wallet)
+        
         users[user_key] = {
             "user_id": user_key,
             "username": username,
             "preference": preference,
-            "wallet": normalized_wallet,
+            "wallet": merged_wallet,
         }
         self._save_users(users)
         return {
             "user_id": users[user_key]["user_id"],
             "username": users[user_key]["username"],
             "preference": users[user_key]["preference"],
-            "wallet": [self._public_wallet_card(card) for card in normalized_wallet],
+            "wallet": [self._public_wallet_card(card) for card in merged_wallet if card.get("is_active")],
         }
 
     def add_user_card(self, card_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -212,7 +235,10 @@ class UserCardManagementService:
         card_id = card_data.get("card_id")
         if not card_id:
             raise ServiceError(400, "VALIDATION_ERROR", "card_id is required.", {"field": "user_card.card_id"})
-
+        
+        if not self._cards_master_rows:
+            raise ServiceError(500, "SERVER_ERROR", "Master card data is not available. Cannot validate card.", {})
+        
         if self._cards_master_ids and card_id not in self._cards_master_ids:
             raise ServiceError(
                 400,
@@ -232,7 +258,7 @@ class UserCardManagementService:
             raise ServiceError(409, "CONFLICT", f"card_id '{card_id}' already exists.", {"field": "user_card.card_id"})
 
         new_card = {
-            "id": f"uc_{uuid.uuid4().hex[:8]}",
+            "id": f"uc_{uuid.uuid4().hex}",
             "card_id": card_id,
             "refresh_day_of_month": card_data["refresh_day_of_month"],
             "annual_fee_billing_date": card_data["annual_fee_billing_date"],
