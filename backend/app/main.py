@@ -8,7 +8,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.routes import transactions_router, catalog_router
+from app.routes import  catalog_router
+from app.routes import transactions_router, wallet_router
 from app.services import init_sample_data
 
 
@@ -40,7 +41,12 @@ app.add_middleware(
 
 # Register routers
 app.include_router(transactions_router)
+<<<<<<< HEAD
 app.include_router(catalog_router)
+=======
+app.include_router(wallet_router)
+
+>>>>>>> main
 
 if __name__ == "__main__":
     import uvicorn

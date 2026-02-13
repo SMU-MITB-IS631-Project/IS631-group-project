@@ -10,7 +10,7 @@ from app.db.db import Base
 from app.models.cards import Card  # Import Card model
 from app.models.user_profile import UserProfile  # Import UserProfile model
 from app.models.user_owned_cards import UserOwnedCard  # Import UserOwnedCard model
-from app.models.user_spending import UserSpending  # Import UserSpending model
+from app.models.transaction import UserTransaction  # Import UserTransaction model
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
