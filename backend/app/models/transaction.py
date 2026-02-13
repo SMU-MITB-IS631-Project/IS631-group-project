@@ -1,42 +1,78 @@
-from pydantic import BaseModel, Field, validator
-from datetime import date
+from sqlalchemy import Column, Integer, Numeric, String, DateTime, Date, Boolean, Enum as SAEnum, ForeignKey
+from app.db.db import Base
+from pydantic import BaseModel, ConfigDict, field_validator
+from sqlalchemy.orm import relationship
+from datetime import datetime, date
+from enum import Enum as PyEnum
+from decimal import Decimal
 from typing import Optional
 
+class TransactionCategory(PyEnum):
+    Food = "food"
+    Travel = "travel"
+    Shopping = "shopping"
+    Bills = "bills"
+    Entertainment = "entertainment"
+    Others = "others"
+
+class TransactionChannel(PyEnum):
+    Online = "online"
+    Offline = "offline"
+
+class UserTransaction(Base):
+    __tablename__ = "transactions"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("user_profile.id", ondelete="CASCADE"), nullable=False)
+    card_id = Column(Integer, ForeignKey("cards.id", ondelete="CASCADE"), nullable=False)
+    amount_sgd = Column(Numeric(10,2), nullable=False)
+    item = Column(String, nullable=False)
+    channel = Column(SAEnum(TransactionChannel), nullable=False)
+    category = Column(SAEnum(TransactionCategory), nullable=True)
+    is_overseas = Column(Boolean, default=False, nullable=False)
+    transaction_date = Column(Date, default=date.today, nullable=False)
+    created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationship with UserProfile
+    user_profile = relationship("UserProfile", back_populates="transactions")
+    cards = relationship("Card", back_populates="transactions") 
+
+
+# Create Pydantic models for Transaction
 class TransactionCreate(BaseModel):
     """Transaction creation request (from API contract)"""
+    model_config = ConfigDict(from_attributes=True)
+    user_id: int
+    card_id: int
+    amount_sgd: Decimal
     item: str
-    amount_sgd: float
-    card_id: str
-    channel: str  # "online" or "offline"
+    channel: TransactionChannel  # "online" or "offline"
     is_overseas: bool = False
-    date: Optional[str] = None  # YYYY-MM-DD, defaults to today if omitted
+    transaction_date: date | None = None  # YYYY-MM-DD, defaults to today if omitted
+    category: TransactionCategory | None = None
 
-    @validator('item')
+    @field_validator("item")
+    @classmethod
     def item_required(cls, v):
         if not v or len(v.strip()) == 0:
-            raise ValueError('item is required')
+            raise ValueError("item is required")
         return v
 
-    @validator('amount_sgd')
+    @field_validator("amount_sgd")
+    @classmethod
     def amount_positive(cls, v):
         if v <= 0:
-            raise ValueError('amount_sgd must be greater than 0')
+            raise ValueError("amount_sgd must be greater than 0")
         return v
 
-    @validator('channel')
-    def channel_valid(cls, v):
-        if v not in ['online', 'offline']:
-            raise ValueError('channel must be "online" or "offline"')
-        return v
+    @field_validator("transaction_date", mode="before")
+    @classmethod
+    def set_transaction_date(cls, v):
+        return date.today() if v is None else v
 
-
-class Transaction(TransactionCreate):
+class TransactionResponse(TransactionCreate):
     """Transaction response model"""
-    id: str
-
-    class Config:
-        from_attributes = True
-
+    id: int
+    created_date: datetime
 
 class TransactionRequest(BaseModel):
     """Wrapper for API contract - POST body"""
