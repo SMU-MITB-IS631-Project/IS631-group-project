@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.routes import transactions_router, wallet_router
+from app.routes import transactions_router, user_card_router
 from app.services import init_sample_data
 
 
@@ -40,7 +40,7 @@ app.add_middleware(
 
 # Register routers
 app.include_router(transactions_router)
-app.include_router(wallet_router)
+app.include_router(user_card_router)
 
 
 if __name__ == "__main__":
