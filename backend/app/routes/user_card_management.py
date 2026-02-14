@@ -12,8 +12,7 @@ to app.services.user_card_services.
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Request, Response, status
-from fastapi.exceptions import RequestValidationError
+from fastapi import APIRouter, Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 
@@ -125,25 +124,12 @@ def _unauthorized_response() -> JSONResponse:
     )
 
 
-app = FastAPI(
-    title="CardTrack Wallet API (Draft)",
-    version="0.1.0",
-    docs_url="/api/docs",
-    openapi_url="/api/openapi.json",
+router = APIRouter(
+    prefix="/api/v1"
 )
 
 
-@app.exception_handler(RequestValidationError)
-async def request_validation_exception_handler(request, exc: RequestValidationError):  # type: ignore[override]
-    return _error_response(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        code="VALIDATION_ERROR",
-        message="Invalid request payload.",
-        details={"errors": exc.errors()},
-    )
-
-
-@app.get("/api/v1/user_cards", response_model=UserCardsResponse)
+@router.get("/user_cards", response_model=UserCardsResponse, tags=["user-cards"])
 def get_user_cards(request: Request):
     """View user-owned active cards with reward-rules metadata."""
     user_id = _get_user_id_from_request(request)
@@ -159,7 +145,7 @@ def get_user_cards(request: Request):
         return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
 
 
-@app.get("/api/v1/wallet", response_model=WalletResponse)
+@router.get("/wallet", response_model=WalletResponse, tags=["wallet"])
 def get_wallet_alias(request: Request):
     """Backward-compatible alias to preserve existing wallet endpoint."""
     result = get_user_cards(request)
@@ -177,7 +163,7 @@ def get_wallet_alias(request: Request):
     return {"wallet": wallet_only}
 
 
-@app.get("/api/v1/profile", response_model=ProfileResponse)
+@router.get("/profile", response_model=ProfileResponse, tags=["profile"])
 def get_profile(request: Request):
     """Contract endpoint: return current user profile with wallet cards."""
     try:
@@ -189,7 +175,7 @@ def get_profile(request: Request):
         return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
 
 
-@app.post("/api/v1/profile", response_model=ProfileResponse)
+@router.post("/profile", response_model=ProfileResponse, tags=["profile"])
 def save_profile(payload: ProfileRequest, request: Request):
     """Contract endpoint: create/update profile and wallet."""
     try:
@@ -201,7 +187,7 @@ def save_profile(payload: ProfileRequest, request: Request):
         return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
 
 
-@app.post("/api/v1/user_cards", status_code=status.HTTP_201_CREATED, response_model=WalletCardResponse)
+@router.post("/user_cards", status_code=status.HTTP_201_CREATED, response_model=WalletCardResponse, tags=["user-cards"])
 def add_user_card(payload: WalletCardCreate, request: Request):
     """Add a user-owned card."""
     user_id = _get_user_id_from_request(request)
@@ -225,13 +211,13 @@ def add_user_card(payload: WalletCardCreate, request: Request):
         return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
 
 
-@app.post("/api/v1/wallet", status_code=status.HTTP_201_CREATED, response_model=WalletCardResponse)
+@router.post("/wallet", status_code=status.HTTP_201_CREATED, response_model=WalletCardResponse, tags=["wallet"])
 def add_wallet_alias(payload: WalletCardCreate, request: Request):
     """Backward-compatible alias for add card endpoint."""
     return add_user_card(payload, request)
 
 
-@app.put("/api/v1/user_cards/{card_id}", response_model=WalletCardResponse)
+@router.put("/user_cards/{card_id}", response_model=WalletCardResponse, tags=["user-cards"])
 def put_user_card(card_id: str, payload: UserCardPut, request: Request):
     """Edit user-owned card details (full replacement of editable fields)."""
     user_id = _get_user_id_from_request(request)
@@ -255,7 +241,7 @@ def put_user_card(card_id: str, payload: UserCardPut, request: Request):
         return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
 
 
-@app.patch("/api/v1/wallet/{card_id}", response_model=WalletCardResponse)
+@router.patch("/wallet/{card_id}", response_model=WalletCardResponse, tags=["wallet"])
 def patch_wallet_alias(card_id: str, payload: WalletCardUpdate, request: Request):
     """Backward-compatible partial update endpoint."""
     user_id = _get_user_id_from_request(request)
@@ -291,7 +277,7 @@ def patch_wallet_alias(card_id: str, payload: WalletCardUpdate, request: Request
         return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
 
 
-@app.delete("/api/v1/user_cards/{card_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/user_cards/{card_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["user-cards"])
 def delete_user_card(card_id: str, request: Request):
     """Delete (soft-delete) a user-owned card and write an audit event."""
     user_id = _get_user_id_from_request(request)
@@ -307,7 +293,7 @@ def delete_user_card(card_id: str, request: Request):
         return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
 
 
-@app.delete("/api/v1/wallet/{card_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/wallet/{card_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["wallet"])
 def delete_wallet_alias(card_id: str, request: Request):
     """Backward-compatible alias for delete endpoint."""
     return delete_user_card(card_id, request)
