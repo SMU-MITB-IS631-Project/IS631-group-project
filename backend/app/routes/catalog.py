@@ -9,7 +9,7 @@ router = APIRouter(
     tags=["catalog"]
 )
 
-@router.get("/catalog", response_model=list[CardCatalogueResponse])
+@router.get("/", response_model=list[CardCatalogueResponse])
 def get_catalog(service: CatalogService = Depends(get_catalog_service)):
     return service.get_catalog()
 
