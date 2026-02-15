@@ -20,7 +20,7 @@ class UserProfile(Base):
     benefits_preference = Column(SAEnum(BenefitsPreference), nullable=False, default=BenefitsPreference.No_preference)
     created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-# Relationships with user_cards and user_spending tables
+# Relationships with user-owned cards and transactions
     user_owned_cards = relationship("UserOwnedCard", back_populates="user_profile", cascade="all, delete-orphan")
     user_transactions = relationship("UserTransaction", back_populates="user_profile", cascade="all, delete-orphan")
 

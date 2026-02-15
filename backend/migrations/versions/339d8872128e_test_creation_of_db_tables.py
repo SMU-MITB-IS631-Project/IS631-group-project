@@ -31,7 +31,7 @@ def upgrade() -> None:
     sa.Column('is_overseas', sa.Boolean(), nullable=False),
     sa.Column('transaction_date', sa.Date(), nullable=False),
     sa.Column('created_date', sa.DateTime(), nullable=False),
-    sa.ForeignKeyConstraint(['card_id'], ['cards.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['card_id'], ['card_catalogue.card_id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['user_id'], ['user_profile.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )

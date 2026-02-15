@@ -23,7 +23,7 @@ class UserTransaction(Base):
     __tablename__ = "transactions"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("user_profile.id", ondelete="CASCADE"), nullable=False)
-    card_id = Column(Integer, ForeignKey("cards.id", ondelete="CASCADE"), nullable=False)
+    card_id = Column(Integer, ForeignKey("card_catalogue.card_id", ondelete="CASCADE"), nullable=False)
     amount_sgd = Column(Numeric(10,2), nullable=False)
     item = Column(String, nullable=False)
     channel = Column(SAEnum(TransactionChannel), nullable=False)
@@ -33,8 +33,8 @@ class UserTransaction(Base):
     created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationship with UserProfile
-    user_profile = relationship("UserProfile", back_populates="transactions")
-    cards = relationship("Card", back_populates="transactions") 
+    user_profile = relationship("UserProfile", back_populates="user_transactions")
+    card_catalogue = relationship("CardCatalogue", back_populates="transactions")
 
 
 # Create Pydantic models for Transaction
