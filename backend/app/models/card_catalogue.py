@@ -11,9 +11,9 @@ class BankEnum(str, PyEnum):
     Standard_Chartered = "Standard_Chartered"
 
 class BenefitTypeEnum(str, PyEnum):
-    MILES = "Miles"
-    CASHBACK = "Cashback"
-    BOTH = "Both"
+    MILES = "MILES"
+    CASHBACK = "CASHBACK"
+    BOTH = "BOTH"
 
 class StatusEnum(str, PyEnum):
     VALID = "valid"
