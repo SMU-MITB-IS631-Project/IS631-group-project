@@ -6,9 +6,9 @@ from datetime import datetime
 from enum import Enum as PyEnum
 
 class BenefitsPreference(PyEnum):
-    Miles = "Miles"
-    Cashback = "Cashback"
-    No_preference = "No preference"
+    Miles = "miles"
+    Cashback = "cashback"
+    No_preference = "no preference"
 
 class UserProfile(Base):
     __tablename__ = "user_profile"
@@ -22,8 +22,19 @@ class UserProfile(Base):
 
 # Relationships with user_cards and user_spending tables
     user_owned_cards = relationship("UserOwnedCard", back_populates="user_profile", cascade="all, delete-orphan")
-    user_spending = relationship("UserSpending", back_populates="user_profile", cascade="all, delete-orphan")
+    user_transactions = relationship("UserTransaction", back_populates="user_profile", cascade="all, delete-orphan")
 
+    def to_dict(self) -> dict:
+        """Convert UserProfile instance to dictionary."""
+        return {
+            'id': self.id,
+            'username': self.username,
+            'password_hash': self.password_hash,
+            'name': self.name,
+            'email': self.email,
+            'benefits_preference': self.benefits_preference.value if self.benefits_preference else None,
+            'created_date': self.created_date.isoformat() if self.created_date else None,
+        }
 
 # Pydantic Models for Request/Response Validation
 class UserProfileBase(BaseModel):
@@ -40,3 +51,6 @@ class UserProfileCreate(UserProfileBase):
 class UserProfileResponse(UserProfileBase):
     id: int
     created_date: datetime
+
+class UserProfileUpdate(UserProfileBase):
+    password: str
