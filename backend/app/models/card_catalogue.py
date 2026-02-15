@@ -16,8 +16,8 @@ class BenefitTypeEnum(str, PyEnum):
     BOTH = "BOTH"
 
 class StatusEnum(str, PyEnum):
-    VALID = "valid"
-    INVALID = "invalid"
+    VALID = "VALID"
+    INVALID = "INVALID"
 
 # SQLAlchemy ORM Model
 class CardCatalogue(Base):
