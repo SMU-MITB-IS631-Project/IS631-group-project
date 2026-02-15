@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from app.models.cards import Card
+from app.models.card_catalogue import CardCatalogue
 from app.models.user_owned_cards import UserOwnedCard
 
 class CatalogService:
@@ -8,15 +8,13 @@ class CatalogService:
 
     def get_catalog(self):
         """Retrieve all cards from the database."""
-        return self.db.query(Card).all()
-    
+        return self.db.query(CardCatalogue).all()
+    """
     def add_user_owned_card(self, user_id: int, card_id: int):
-        """Add a new user owned card.
-
-        To be refined again.
-        """
+        
         new_user_owned_card = UserOwnedCard(card_id=card_id)
         self.db.add(new_user_owned_card)
         self.db.commit()
         self.db.refresh(new_user_owned_card)
         return new_user_owned_card
+    """

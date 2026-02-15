@@ -20,10 +20,21 @@ class UserProfile(Base):
     benefits_preference = Column(SAEnum(BenefitsPreference), nullable=False, default=BenefitsPreference.No_preference)
     created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-# Relationships with user_cards and user_spending tables
+# Relationships with user-owned cards and transactions
     user_owned_cards = relationship("UserOwnedCard", back_populates="user_profile", cascade="all, delete-orphan")
     user_transactions = relationship("UserTransaction", back_populates="user_profile", cascade="all, delete-orphan")
 
+    def to_dict(self) -> dict:
+        """Convert UserProfile instance to dictionary."""
+        return {
+            'id': self.id,
+            'username': self.username,
+            'password_hash': self.password_hash,
+            'name': self.name,
+            'email': self.email,
+            'benefits_preference': self.benefits_preference.value if self.benefits_preference else None,
+            'created_date': self.created_date.isoformat() if self.created_date else None,
+        }
 
 # Pydantic Models for Request/Response Validation
 class UserProfileBase(BaseModel):
@@ -40,3 +51,6 @@ class UserProfileCreate(UserProfileBase):
 class UserProfileResponse(UserProfileBase):
     id: int
     created_date: datetime
+
+class UserProfileUpdate(UserProfileBase):
+    password: str
