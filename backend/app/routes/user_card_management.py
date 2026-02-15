@@ -7,6 +7,7 @@ Implements Sprint 1 assigned user stories:
 
 Route handlers keep local error response shaping and delegate business logic
 to app.services.user_card_services.
+Card catalog validation is resolved by the service against backend data sources.
 """
 
 from datetime import datetime
