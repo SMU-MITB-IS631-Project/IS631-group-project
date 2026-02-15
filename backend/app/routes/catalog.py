@@ -14,8 +14,4 @@ router = APIRouter(
 def get_catalog(service: CatalogService = Depends(get_catalog_service)):
     return service.get_catalog()
 
-"""
-@router.post("/", response_model=UserOwnedCardResponse, status_code=status.HTTP_201_CREATED)
-def add_user_owned_card(card: CardCatalogue, service: CatalogService = Depends(get_catalog_service)):
-    return service.add_user_owned_card(card.id)
-"""
+# TODO: Implement endpoint for adding user-owned cards when requirements are defined.
