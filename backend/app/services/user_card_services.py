@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 import uuid
 
 from app.db.db import SessionLocal
-from app.models.cards import Card
+from app.models.card_catalogue import CardCatalogue
 from app.services.data_service import USERS_FILE, _load_json, _save_json
 
 
@@ -74,7 +74,7 @@ class UserCardManagementService:
         rows: List[Dict[str, Any]] = []
         try:
             with SessionLocal() as db:
-                cards = db.query(Card).all()
+                cards = db.query(CardCatalogue).all()
 
             for card in cards:
                 if hasattr(card, "card_id"):

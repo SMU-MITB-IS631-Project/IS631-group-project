@@ -13,12 +13,15 @@ in the application database.
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+import logging
 
 from fastapi import APIRouter, Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 
 from app.services.user_card_services import ServiceError, UserCardManagementService
+
+logger = logging.getLogger(__name__)
 
 
 class WalletCard(BaseModel):
@@ -189,28 +192,34 @@ def save_profile(payload: ProfileRequest, request: Request):
         return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
 
 
-@router.post("/user_cards", status_code=status.HTTP_201_CREATED, response_model=WalletCardResponse, tags=["user-cards"])
+@router.post("/user_cards", status_code=status.HTTP_201_CREATED, tags=["user-cards"])
 def add_user_card(payload: WalletCardCreate, request: Request):
     """Add a user-owned card."""
-    user_id = _get_user_id_from_request(request)
-    if not user_id:
-        return _unauthorized_response()
-
     try:
+        user_id = _get_user_id_from_request(request)
+        if not user_id:
+            return _unauthorized_response()
+
         service = _service_from_request(request)
         saved = service.add_user_card(payload.wallet_card.model_dump())
-        return {
-            "wallet_card": {
+        
+        # Return as JSONResponse
+        return JSONResponse(
+            status_code=status.HTTP_201_CREATED,
+            content={"wallet_card": {
                 "card_id": saved.get("card_id"),
                 "refresh_day_of_month": saved.get("refresh_day_of_month"),
                 "annual_fee_billing_date": saved.get("annual_fee_billing_date"),
                 "cycle_spend_sgd": saved.get("cycle_spend_sgd", 0),
-            }
-        }
+            }}
+        )
     except ServiceError as exc:
         return _error_response(exc.status_code, exc.code, exc.message, exc.details)
-    except Exception:
-        return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": {"code": "INTERNAL_ERROR", "message": str(e), "details": {}}}
+        )
 
 
 @router.post("/wallet", status_code=status.HTTP_201_CREATED, response_model=WalletCardResponse, tags=["wallet"])
