@@ -1,11 +1,14 @@
-import csv
 import logging
 import os
+import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import uuid
 
+from app.db.db import SessionLocal
+from app.models.card_catalogue import CardCatalogue
 from app.services.data_service import USERS_FILE, _load_json, _save_json
 
 
@@ -18,9 +21,14 @@ class ServiceError(Exception):
 
 
 class UserCardManagementService:
+    _cards_master_cache: Optional[List[Dict[str, Any]]] = None
+    _cards_master_cache_loaded_at: float = 0.0
+    _cards_master_cache_ttl_seconds: int = 300
+    _cards_master_cache_lock = threading.Lock()
+
     def __init__(self, user_id: Optional[str]) -> None:
         self.user_id = user_id
-        self._cards_master_rows = self._load_cards_master_rows()
+        self._cards_master_rows = self._get_cards_master_rows()
         self._cards_master_ids = {row["card_id"] for row in self._cards_master_rows}
 
     def _backend_root(self) -> str:
@@ -32,51 +40,77 @@ class UserCardManagementService:
     def _audit_log_file(self) -> str:
         return os.path.join(self._backend_root(), "data", "user_card_audit_log.json")
 
-    def _load_cards_master_rows(self) -> List[Dict[str, Any]]:
-        csv_path = os.path.join(
-            self._repo_root(),
-            "frontend",
-            "public",
-            "data",
-            "cards_master.csv",
+    @classmethod
+    def _get_cards_master_rows(cls) -> List[Dict[str, Any]]:
+        now = time.monotonic()
+        cache_is_fresh = (
+            cls._cards_master_cache is not None
+            and (now - cls._cards_master_cache_loaded_at) < cls._cards_master_cache_ttl_seconds
         )
-        if not os.path.exists(csv_path):
-            logging.warning(f"Cards master file not found at: {csv_path}")
-            return []
+        if cache_is_fresh:
+            assert cls._cards_master_cache is not None
+            return cls._cards_master_cache
+
+        with cls._cards_master_cache_lock:
+            now = time.monotonic()
+            cache_is_fresh = (
+                cls._cards_master_cache is not None
+                and (now - cls._cards_master_cache_loaded_at) < cls._cards_master_cache_ttl_seconds
+            )
+            if cache_is_fresh:
+                assert cls._cards_master_cache is not None
+                return cls._cards_master_cache
+
+            loaded_rows = cls._load_cards_master_rows()
+            if loaded_rows:
+                cls._cards_master_cache = loaded_rows
+                cls._cards_master_cache_loaded_at = now
+            else:
+                logging.warning(
+                    "Cards master cache not updated because loaded rows were empty; "
+                    "will retry on next access."
+                )
+            return loaded_rows
+
+    @classmethod
+    def _invalidate_cards_master_cache(cls) -> None:
+        with cls._cards_master_cache_lock:
+            cls._cards_master_cache = None
+            cls._cards_master_cache_loaded_at = 0.0
+
+    @classmethod
+    def _load_cards_master_rows(cls) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
         try:
-            with open(csv_path, newline="", encoding="utf-8") as file:
-                reader = csv.DictReader(file)
-                # Validate that the expected card_id column exists
-                if not reader.fieldnames or "card_id" not in reader.fieldnames:
-                    logging.error(
-                        "Cards master CSV at %s is missing required 'card_id' header. "
-                        "Available headers: %s",
-                        csv_path,
-                        reader.fieldnames,
-                    )
-                    return []
+            with SessionLocal() as db:
+                cards = db.query(CardCatalogue).all()
 
-                rows: List[Dict[str, Any]] = []
-                for index, row in enumerate(reader, start=1):
-                    # Safely fetch and normalize card_id
-                    card_id = (row.get("card_id") or "").strip()
-                    if not card_id:
-                        logging.warning(
-                            "Skipping cards_master.csv row %d at %s due to missing/blank 'card_id': %r",
-                            index,
-                            csv_path,
-                            row,
-                        )
-                        continue
-                    row["card_id"] = card_id
-                    rows.append(row)
+            for card in cards:
+                # The current Card model only defines an `id` column; use it as the catalog identifier.
+                catalog_card_id = getattr(card, "id", None)
 
-                return rows
-        except csv.Error as e:
-            logging.error(f"CSV read error in {csv_path}: {e}")
-            return []
+                if catalog_card_id is None:
+                    logging.warning("Encountered Card record without an 'id' value; skipping.")
+                    continue
+
+                row: Dict[str, Any] = {"card_id": str(catalog_card_id)}
+
+                # If the Card model is later extended with a `reward_type` attribute,
+                # include it here, but avoid assuming it exists today.
+                if hasattr(card, "reward_type"):
+                    reward_type = getattr(card, "reward_type")
+                    if reward_type is not None:
+                        row["reward_type"] = str(reward_type)
+                rows.append(row)
+
+            if not rows:
+                logging.warning(
+                    "Card catalog query returned no valid identifier values from CardCatalogue "
+                    "(card_catalogue) table (no non-null id values found)."
+                )
+            return rows
         except Exception as e:
-            logging.error(f"Failed to load cards master file {csv_path}: {e}")
+            logging.error(f"Failed to load card catalog from database: {e}")
             return []
 
     def _get_users(self) -> Dict[str, Any]:
@@ -163,7 +197,7 @@ class UserCardManagementService:
         }
         for default_id in defaults:
             if default_id not in self._cards_master_ids:
-                logging.warning(f"Default reward rule for card_id '{default_id}' has no corresponding entry in cards_master.csv")
+                logging.warning(f"Default reward rule for card_id '{default_id}' has no corresponding entry in card_catalogue table")
         
         return {
             "reward_type": reward_type,

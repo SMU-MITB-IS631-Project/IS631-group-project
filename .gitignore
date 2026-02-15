@@ -1,0 +1,23 @@
+# Test scripts - temporary diagnostic files (created during development/debugging)
+test_*.py
+check_cards.py
+simple_test.py
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+.Python
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

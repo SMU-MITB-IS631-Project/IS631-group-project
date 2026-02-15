@@ -7,16 +7,21 @@ Implements Sprint 1 assigned user stories:
 
 Route handlers keep local error response shaping and delegate business logic
 to app.services.user_card_services.
+Card catalog validation is resolved by the service against the
+`card_catalogue` table/model in the application database.
 """
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+import logging
 
 from fastapi import APIRouter, Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 
 from app.services.user_card_services import ServiceError, UserCardManagementService
+
+logger = logging.getLogger(__name__)
 
 
 class WalletCard(BaseModel):
@@ -140,9 +145,9 @@ def get_user_cards(request: Request):
         service = _service_from_request(request)
         return {"user_cards": service.list_user_cards()}
     except ServiceError as exc:
-        return _error_response(exc.status_code, exc.code, exc.message, exc.details)
+        return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
     except Exception:
-        return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
+        return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
 
 
 @router.get("/wallet", response_model=WalletResponse, tags=["wallet"])
@@ -170,9 +175,9 @@ def get_profile(request: Request):
         profile = _service_for_profile(request).get_profile()
         return {"profile": profile}
     except ServiceError as exc:
-        return _error_response(exc.status_code, exc.code, exc.message, exc.details)
+        return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
     except Exception:
-        return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
+        return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
 
 
 @router.post("/profile", response_model=ProfileResponse, tags=["profile"])
@@ -182,33 +187,33 @@ def save_profile(payload: ProfileRequest, request: Request):
         profile = _service_for_profile(request).save_profile(payload.profile.model_dump())
         return {"profile": profile}
     except ServiceError as exc:
-        return _error_response(exc.status_code, exc.code, exc.message, exc.details)
+        return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
     except Exception:
-        return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
+        return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
 
 
 @router.post("/user_cards", status_code=status.HTTP_201_CREATED, response_model=WalletCardResponse, tags=["user-cards"])
 def add_user_card(payload: WalletCardCreate, request: Request):
     """Add a user-owned card."""
-    user_id = _get_user_id_from_request(request)
-    if not user_id:
-        return _unauthorized_response()
-
     try:
+        user_id = _get_user_id_from_request(request)
+        if not user_id:
+            return _unauthorized_response()
+
         service = _service_from_request(request)
         saved = service.add_user_card(payload.wallet_card.model_dump())
-        return {
-            "wallet_card": {
-                "card_id": saved.get("card_id"),
-                "refresh_day_of_month": saved.get("refresh_day_of_month"),
-                "annual_fee_billing_date": saved.get("annual_fee_billing_date"),
-                "cycle_spend_sgd": saved.get("cycle_spend_sgd", 0),
-            }
-        }
+        
+        return {"wallet_card": {
+            "card_id": saved.get("card_id"),
+            "refresh_day_of_month": saved.get("refresh_day_of_month"),
+            "annual_fee_billing_date": saved.get("annual_fee_billing_date"),
+            "cycle_spend_sgd": saved.get("cycle_spend_sgd", 0),
+        }}
     except ServiceError as exc:
-        return _error_response(exc.status_code, exc.code, exc.message, exc.details)
+        return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
     except Exception:
-        return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
+        logger.exception("Unhandled exception in add_user_card")
+        return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
 
 
 @router.post("/wallet", status_code=status.HTTP_201_CREATED, response_model=WalletCardResponse, tags=["wallet"])
@@ -236,9 +241,10 @@ def put_user_card(card_id: str, payload: UserCardPut, request: Request):
             }
         }
     except ServiceError as exc:
-        return _error_response(exc.status_code, exc.code, exc.message, exc.details)
+        return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
     except Exception:
-        return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
+        logger.exception("Unhandled exception in put_user_card")
+        return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
 
 
 @router.patch("/wallet/{card_id}", response_model=WalletCardResponse, tags=["wallet"])
@@ -249,13 +255,13 @@ def patch_wallet_alias(card_id: str, payload: WalletCardUpdate, request: Request
         return _unauthorized_response()
     updates = payload.model_dump(exclude_none=True)
     if not updates:
-        return _error_response(400, "VALIDATION_ERROR", "No fields to update.", {})
+        return _error_response(status_code=400, code="VALIDATION_ERROR", message="No fields to update.", details={})
 
     try:
         current_cards = _service_from_request(request).list_user_cards()
         current = next((c for c in current_cards if c.get("id") == card_id), None)
         if not current:
-            return _error_response(404, "NOT_FOUND", f"user_card_id '{card_id}' not found.", {})
+            return _error_response(status_code=404, code="NOT_FOUND", message=f"user_card_id '{card_id}' not found.", details={})
         merged = {
             "card_id": current.get("card_id"),
             "refresh_day_of_month": updates.get("refresh_day_of_month", current.get("refresh_day_of_month")),
@@ -272,9 +278,10 @@ def patch_wallet_alias(card_id: str, payload: WalletCardUpdate, request: Request
             }
         }
     except ServiceError as exc:
-        return _error_response(exc.status_code, exc.code, exc.message, exc.details)
+        return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
     except Exception:
-        return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
+        logger.exception("Unhandled exception in patch_wallet_alias")
+        return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
 
 
 @router.delete("/user_cards/{card_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["user-cards"])
@@ -288,9 +295,10 @@ def delete_user_card(card_id: str, request: Request):
         _service_from_request(request).delete_user_card(card_id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except ServiceError as exc:
-        return _error_response(exc.status_code, exc.code, exc.message, exc.details)
+        return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
     except Exception:
-        return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
+        logger.exception("Unhandled exception in delete_user_card")
+        return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
 
 
 @router.delete("/wallet/{card_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["wallet"])
