@@ -7,8 +7,8 @@ Implements Sprint 1 assigned user stories:
 
 Route handlers keep local error response shaping and delegate business logic
 to app.services.user_card_services.
-Card catalog validation is resolved by the service against the cards table
-in the application database.
+Card catalog validation is resolved by the service against the
+`card_catalogue` table/model in the application database.
 """
 
 from datetime import datetime
@@ -192,7 +192,7 @@ def save_profile(payload: ProfileRequest, request: Request):
         return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
 
 
-@router.post("/user_cards", status_code=status.HTTP_201_CREATED, tags=["user-cards"])
+@router.post("/user_cards", status_code=status.HTTP_201_CREATED, response_model=WalletCardResponse, tags=["user-cards"])
 def add_user_card(payload: WalletCardCreate, request: Request):
     """Add a user-owned card."""
     try:
@@ -203,23 +203,17 @@ def add_user_card(payload: WalletCardCreate, request: Request):
         service = _service_from_request(request)
         saved = service.add_user_card(payload.wallet_card.model_dump())
         
-        # Return as JSONResponse
-        return JSONResponse(
-            status_code=status.HTTP_201_CREATED,
-            content={"wallet_card": {
-                "card_id": saved.get("card_id"),
-                "refresh_day_of_month": saved.get("refresh_day_of_month"),
-                "annual_fee_billing_date": saved.get("annual_fee_billing_date"),
-                "cycle_spend_sgd": saved.get("cycle_spend_sgd", 0),
-            }}
-        )
+        return {"wallet_card": {
+            "card_id": saved.get("card_id"),
+            "refresh_day_of_month": saved.get("refresh_day_of_month"),
+            "annual_fee_billing_date": saved.get("annual_fee_billing_date"),
+            "cycle_spend_sgd": saved.get("cycle_spend_sgd", 0),
+        }}
     except ServiceError as exc:
         return _error_response(exc.status_code, exc.code, exc.message, exc.details)
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={"error": {"code": "INTERNAL_ERROR", "message": str(e), "details": {}}}
-        )
+    except Exception:
+        logger.exception("Unhandled exception in add_user_card")
+        return _error_response(500, "INTERNAL_ERROR", "Internal server error.", {})
 
 
 @router.post("/wallet", status_code=status.HTTP_201_CREATED, response_model=WalletCardResponse, tags=["wallet"])

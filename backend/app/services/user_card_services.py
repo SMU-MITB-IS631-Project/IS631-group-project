@@ -59,9 +59,16 @@ class UserCardManagementService:
             if cache_is_fresh:
                 return cls._cards_master_cache
 
-            cls._cards_master_cache = cls._load_cards_master_rows()
-            cls._cards_master_cache_loaded_at = now
-            return cls._cards_master_cache
+            loaded_rows = cls._load_cards_master_rows()
+            if loaded_rows:
+                cls._cards_master_cache = loaded_rows
+                cls._cards_master_cache_loaded_at = now
+            else:
+                logging.warning(
+                    "Cards master cache not updated because loaded rows were empty; "
+                    "will retry on next access."
+                )
+            return loaded_rows
 
     @classmethod
     def _invalidate_cards_master_cache(cls) -> None:
@@ -77,26 +84,27 @@ class UserCardManagementService:
                 cards = db.query(CardCatalogue).all()
 
             for card in cards:
-                if hasattr(card, "card_id"):
-                    catalog_card_id = getattr(card, "card_id")
-                elif hasattr(card, "code"):
-                    catalog_card_id = getattr(card, "code")
-                else:
-                    catalog_card_id = getattr(card, "id", None)
+                # The current Card model only defines an `id` column; use it as the catalog identifier.
+                catalog_card_id = getattr(card, "id", None)
 
                 if catalog_card_id is None:
+                    logging.warning("Encountered Card record without an 'id' value; skipping.")
                     continue
 
                 row: Dict[str, Any] = {"card_id": str(catalog_card_id)}
-                reward_type = getattr(card, "reward_type") if hasattr(card, "reward_type") else None
-                if reward_type is not None:
-                    row["reward_type"] = str(reward_type)
+
+                # If the Card model is later extended with a `reward_type` attribute,
+                # include it here, but avoid assuming it exists today.
+                if hasattr(card, "reward_type"):
+                    reward_type = getattr(card, "reward_type")
+                    if reward_type is not None:
+                        row["reward_type"] = str(reward_type)
                 rows.append(row)
 
             if not rows:
                 logging.warning(
-                    "Card catalog query returned no valid identifier values from cards table "
-                    "(checked card_id, code, then id)."
+                    "Card catalog query returned no valid identifier values from CardCatalogue "
+                    "(card_catalogue) table (no non-null id values found)."
                 )
             return rows
         except Exception as e:
