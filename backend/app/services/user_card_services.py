@@ -1,4 +1,3 @@
-import csv
 import logging
 import os
 from dataclasses import dataclass
@@ -6,6 +5,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import uuid
 
+from app.db.db import SessionLocal
+from app.models.cards import Card
 from app.services.data_service import USERS_FILE, _load_json, _save_json
 
 
@@ -33,50 +34,32 @@ class UserCardManagementService:
         return os.path.join(self._backend_root(), "data", "user_card_audit_log.json")
 
     def _load_cards_master_rows(self) -> List[Dict[str, Any]]:
-        csv_path = os.path.join(
-            self._repo_root(),
-            "frontend",
-            "public",
-            "data",
-            "cards_master.csv",
-        )
-        if not os.path.exists(csv_path):
-            logging.warning(f"Cards master file not found at: {csv_path}")
-            return []
+        rows: List[Dict[str, Any]] = []
         try:
-            with open(csv_path, newline="", encoding="utf-8") as file:
-                reader = csv.DictReader(file)
-                # Validate that the expected card_id column exists
-                if not reader.fieldnames or "card_id" not in reader.fieldnames:
-                    logging.error(
-                        "Cards master CSV at %s is missing required 'card_id' header. "
-                        "Available headers: %s",
-                        csv_path,
-                        reader.fieldnames,
-                    )
-                    return []
+            with SessionLocal() as db:
+                cards = db.query(Card).all()
 
-                rows: List[Dict[str, Any]] = []
-                for index, row in enumerate(reader, start=1):
-                    # Safely fetch and normalize card_id
-                    card_id = (row.get("card_id") or "").strip()
-                    if not card_id:
-                        logging.warning(
-                            "Skipping cards_master.csv row %d at %s due to missing/blank 'card_id': %r",
-                            index,
-                            csv_path,
-                            row,
-                        )
-                        continue
-                    row["card_id"] = card_id
-                    rows.append(row)
+            for card in cards:
+                catalog_card_id = getattr(card, "card_id", None)
+                if not catalog_card_id:
+                    catalog_card_id = getattr(card, "code", None)
+                if not catalog_card_id and getattr(card, "id", None) is not None:
+                    catalog_card_id = str(getattr(card, "id"))
 
-                return rows
-        except csv.Error as e:
-            logging.error(f"CSV read error in {csv_path}: {e}")
-            return []
+                if not catalog_card_id:
+                    continue
+
+                row: Dict[str, Any] = {"card_id": str(catalog_card_id)}
+                reward_type = getattr(card, "reward_type", None)
+                if reward_type is not None:
+                    row["reward_type"] = str(reward_type)
+                rows.append(row)
+
+            if not rows:
+                logging.warning("Card catalog query succeeded but returned no valid card IDs.")
+            return rows
         except Exception as e:
-            logging.error(f"Failed to load cards master file {csv_path}: {e}")
+            logging.error(f"Failed to load card catalog from database: {e}")
             return []
 
     def _get_users(self) -> Dict[str, Any]:
@@ -163,7 +146,7 @@ class UserCardManagementService:
         }
         for default_id in defaults:
             if default_id not in self._cards_master_ids:
-                logging.warning(f"Default reward rule for card_id '{default_id}' has no corresponding entry in cards_master.csv")
+                logging.warning(f"Default reward rule for card_id '{default_id}' has no corresponding entry in card catalog")
         
         return {
             "reward_type": reward_type,
