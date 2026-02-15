@@ -13,3 +13,4 @@ class Card(Base):
     # Relationships with user_owned_cards and user_spending tables
     user_owned_cards = relationship("UserOwnedCard", back_populates="cards", cascade="all, delete-orphan")
     user_spending = relationship("UserSpending", back_populates="cards", cascade="all, delete-orphan")
+    bonus_categories = relationship("CardBonusCategory", back_populates="card", cascade="all, delete-orphan")
