@@ -7,8 +7,8 @@ from decimal import Decimal
 # Python Enums for type safety
 class BankEnum(str, PyEnum):
     DBS = "DBS"
-    CITI = "Citi"
-    Standard_Chartered = "Standard Chartered"
+    CITI = "CITI"
+    Standard_Chartered = "Standard_Chartered"
 
 class BenefitTypeEnum(str, PyEnum):
     MILES = "Miles"
