@@ -39,3 +39,7 @@ data/
 .env.local
 venv/
 .venv/
+
+# SQLite DB (local only)
+app.db
+*.db
