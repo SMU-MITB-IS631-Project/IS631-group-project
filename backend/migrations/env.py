@@ -12,7 +12,7 @@ from app.models.user_profile import UserProfile  # Import UserProfile model
 from app.models.user_owned_cards import UserOwnedCard  # Import UserOwnedCard model
 from app.models.user_spending import UserSpending  # Import UserSpending model
 from app.models.card_bonus_category import CardBonusCategory  # Import CardBonusCategory model
-
+from app.models.card_catalogue import CardCatalogue  # Import CardCatalogue model
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
@@ -72,7 +72,10 @@ def run_migrations_online():
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            compare_server_default=True,
         )
 
         with context.begin_transaction():

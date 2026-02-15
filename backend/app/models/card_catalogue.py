@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, Enum, CheckConstraint, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Numeric, Enum as SAEnum, CheckConstraint, UniqueConstraint
 from app.db.db import Base
 from pydantic import BaseModel, ConfigDict, field_validator
 from enum import Enum as PyEnum
@@ -8,6 +8,7 @@ from decimal import Decimal
 class BankEnum(str, PyEnum):
     DBS = "DBS"
     CITI = "Citi"
+    Standard_Chartered = "Standard Chartered"
 
 class BenefitTypeEnum(str, PyEnum):
     MILES = "Miles"
@@ -23,11 +24,11 @@ class CardCatalogue(Base):
     __tablename__ = "card_catalogue"
     
     card_id = Column(Integer, primary_key=True, index=True, unique=True)
-    bank = Column(Enum(BankEnum), nullable=False)
+    bank = Column(SAEnum(BankEnum), nullable=False)
     card_name = Column(String(255), nullable=False)
-    benefit_type = Column(Enum(BenefitTypeEnum), nullable=False)
+    benefit_type = Column(SAEnum(BenefitTypeEnum), nullable=False)
     base_benefit_rate = Column(Numeric(10, 4), nullable=False)
-    status = Column(Enum(StatusEnum), nullable=False)
+    status = Column(SAEnum(StatusEnum), nullable=False)
     
     # Table-level constraints
     __table_args__ = (
