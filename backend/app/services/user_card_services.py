@@ -19,9 +19,11 @@ class ServiceError(Exception):
 
 
 class UserCardManagementService:
+    _cards_master_cache: Optional[List[Dict[str, Any]]] = None
+
     def __init__(self, user_id: Optional[str]) -> None:
         self.user_id = user_id
-        self._cards_master_rows = self._load_cards_master_rows()
+        self._cards_master_rows = self._get_cards_master_rows()
         self._cards_master_ids = {row["card_id"] for row in self._cards_master_rows}
 
     def _backend_root(self) -> str:
@@ -33,30 +35,41 @@ class UserCardManagementService:
     def _audit_log_file(self) -> str:
         return os.path.join(self._backend_root(), "data", "user_card_audit_log.json")
 
-    def _load_cards_master_rows(self) -> List[Dict[str, Any]]:
+    @classmethod
+    def _get_cards_master_rows(cls) -> List[Dict[str, Any]]:
+        if cls._cards_master_cache is None:
+            cls._cards_master_cache = cls._load_cards_master_rows()
+        return cls._cards_master_cache
+
+    @classmethod
+    def _load_cards_master_rows(cls) -> List[Dict[str, Any]]:
         rows: List[Dict[str, Any]] = []
         try:
             with SessionLocal() as db:
                 cards = db.query(Card).all()
 
             for card in cards:
-                catalog_card_id = getattr(card, "card_id", None)
-                if not catalog_card_id:
-                    catalog_card_id = getattr(card, "code", None)
-                if not catalog_card_id and getattr(card, "id", None) is not None:
-                    catalog_card_id = str(getattr(card, "id"))
+                if hasattr(card, "card_id"):
+                    catalog_card_id = getattr(card, "card_id")
+                elif hasattr(card, "code"):
+                    catalog_card_id = getattr(card, "code")
+                else:
+                    catalog_card_id = getattr(card, "id", None)
 
-                if not catalog_card_id:
+                if catalog_card_id is None:
                     continue
 
                 row: Dict[str, Any] = {"card_id": str(catalog_card_id)}
-                reward_type = getattr(card, "reward_type", None)
+                reward_type = getattr(card, "reward_type") if hasattr(card, "reward_type") else None
                 if reward_type is not None:
                     row["reward_type"] = str(reward_type)
                 rows.append(row)
 
             if not rows:
-                logging.warning("Card catalog query succeeded but returned no valid card IDs.")
+                logging.warning(
+                    "Card catalog query returned no valid identifier values from cards table "
+                    "(checked card_id, code, then id)."
+                )
             return rows
         except Exception as e:
             logging.error(f"Failed to load card catalog from database: {e}")
