@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 
 from app.models.card_catalogue import CardCatalogue, CardCatalogueResponse
-from app.models.user_owned_cards import UserOwnedCard, UserOwnedCardResponse
 from app.services.catalog_service import CatalogService
 from app.dependencies.services import get_catalog_service
 
