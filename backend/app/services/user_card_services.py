@@ -48,6 +48,7 @@ class UserCardManagementService:
             and (now - cls._cards_master_cache_loaded_at) < cls._cards_master_cache_ttl_seconds
         )
         if cache_is_fresh:
+            assert cls._cards_master_cache is not None
             return cls._cards_master_cache
 
         with cls._cards_master_cache_lock:
@@ -57,6 +58,7 @@ class UserCardManagementService:
                 and (now - cls._cards_master_cache_loaded_at) < cls._cards_master_cache_ttl_seconds
             )
             if cache_is_fresh:
+                assert cls._cards_master_cache is not None
                 return cls._cards_master_cache
 
             loaded_rows = cls._load_cards_master_rows()
