@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, Depends
 
 from app.models.card_catalogue import CardCatalogue, CardCatalogueResponse
 from app.services.catalog_service import CatalogService
