@@ -197,7 +197,7 @@ class UserCardManagementService:
         }
         for default_id in defaults:
             if default_id not in self._cards_master_ids:
-                logging.warning(f"Default reward rule for card_id '{default_id}' has no corresponding entry in card catalog")
+                logging.warning(f"Default reward rule for card_id '{default_id}' has no corresponding entry in card_catalogue table")
         
         return {
             "reward_type": reward_type,
