@@ -1,5 +1,7 @@
 import logging
 import os
+import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -20,6 +22,9 @@ class ServiceError(Exception):
 
 class UserCardManagementService:
     _cards_master_cache: Optional[List[Dict[str, Any]]] = None
+    _cards_master_cache_loaded_at: float = 0.0
+    _cards_master_cache_ttl_seconds: int = 300
+    _cards_master_cache_lock = threading.Lock()
 
     def __init__(self, user_id: Optional[str]) -> None:
         self.user_id = user_id
@@ -37,9 +42,32 @@ class UserCardManagementService:
 
     @classmethod
     def _get_cards_master_rows(cls) -> List[Dict[str, Any]]:
-        if cls._cards_master_cache is None:
+        now = time.monotonic()
+        cache_is_fresh = (
+            cls._cards_master_cache is not None
+            and (now - cls._cards_master_cache_loaded_at) < cls._cards_master_cache_ttl_seconds
+        )
+        if cache_is_fresh:
+            return cls._cards_master_cache
+
+        with cls._cards_master_cache_lock:
+            now = time.monotonic()
+            cache_is_fresh = (
+                cls._cards_master_cache is not None
+                and (now - cls._cards_master_cache_loaded_at) < cls._cards_master_cache_ttl_seconds
+            )
+            if cache_is_fresh:
+                return cls._cards_master_cache
+
             cls._cards_master_cache = cls._load_cards_master_rows()
-        return cls._cards_master_cache
+            cls._cards_master_cache_loaded_at = now
+            return cls._cards_master_cache
+
+    @classmethod
+    def _invalidate_cards_master_cache(cls) -> None:
+        with cls._cards_master_cache_lock:
+            cls._cards_master_cache = None
+            cls._cards_master_cache_loaded_at = 0.0
 
     @classmethod
     def _load_cards_master_rows(cls) -> List[Dict[str, Any]]:
