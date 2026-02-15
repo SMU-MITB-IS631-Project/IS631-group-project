@@ -1,4 +1,6 @@
 from sqlalchemy import Column, Integer, String, Numeric, Enum as SAEnum, CheckConstraint, UniqueConstraint
+from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship
 from app.db.db import Base
 from pydantic import BaseModel, ConfigDict, field_validator
 from enum import Enum as PyEnum
@@ -34,6 +36,38 @@ class CardCatalogue(Base):
     __table_args__ = (
         UniqueConstraint('bank', 'card_name', name='uq_bank_card_name'),
         CheckConstraint('base_benefit_rate >= 0', name='ck_base_benefit_rate_non_negative'),
+    )
+
+    bonus_categories = relationship(
+        "CardBonusCategory",
+        back_populates="card_catalogue",
+        cascade="all, delete-orphan",
+    )
+    user_owned_cards = relationship(
+        "UserOwnedCard",
+        back_populates="card_catalogue",
+        cascade="all, delete-orphan",
+    )
+    transactions = relationship(
+        "UserTransaction",
+        back_populates="card_catalogue",
+        cascade="all, delete-orphan",
+    )
+
+    bonus_categories = relationship(
+        "CardBonusCategory",
+        back_populates="card_catalogue",
+        cascade="all, delete-orphan",
+    )
+    user_owned_cards = relationship(
+        "UserOwnedCard",
+        back_populates="card_catalogue",
+        cascade="all, delete-orphan",
+    )
+    transactions = relationship(
+        "UserTransaction",
+        back_populates="card_catalogue",
+        cascade="all, delete-orphan",
     )
 
 # Pydantic Models for Request/Response

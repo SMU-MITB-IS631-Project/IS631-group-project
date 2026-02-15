@@ -18,7 +18,7 @@ class CardBonusCategory(Base):
     __tablename__ = "card_bonus_category"
 
     card_bonuscat_id = Column(Integer, primary_key=True, index=True)
-    card_id = Column(Integer, ForeignKey("cards.id", ondelete="CASCADE"), nullable=False)
+    card_id = Column(Integer, ForeignKey("card_catalogue.card_id", ondelete="CASCADE"), nullable=False)
     bonus_category = Column(SAEnum(BonusCategory), nullable=False)
     bonus_benefit_rate = Column(Numeric(10, 4), nullable=False)
     bonus_cap_in_dollar = Column(Integer, nullable=False, default=99999999)
@@ -28,7 +28,7 @@ class CardBonusCategory(Base):
         UniqueConstraint("card_id", "bonus_category", name="uq_card_bonus_category_per_card"),
     )
 
-    card = relationship("Card", back_populates="bonus_categories")
+    card_catalogue = relationship("CardCatalogue", back_populates="bonus_categories")
 
 
 class CardBonusCategoryBase(BaseModel):

@@ -1,8 +1,8 @@
-"""create card_catalogue table
+"""merge heads
 
-Revision ID: 6223ac20df34
-Revises: c9e4a2a7d1b0
-Create Date: 2026-02-15 17:28:53.742337
+Revision ID: 7b883af92e3b
+Revises: 6223ac20df34, f57061b2a41c
+Create Date: 2026-02-15 19:13:47.777849
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '6223ac20df34'
-down_revision: Union[str, None] = 'c9e4a2a7d1b0'
+revision: str = '7b883af92e3b'
+down_revision: Union[str, None] = ('6223ac20df34', 'f57061b2a41c')
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

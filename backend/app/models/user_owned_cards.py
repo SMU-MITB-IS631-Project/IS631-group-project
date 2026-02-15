@@ -24,14 +24,14 @@ class UserOwnedCard(Base):
     __tablename__ = "user_owned_cards"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("user_profile.id", ondelete="CASCADE"), nullable=False)
-    card_id = Column(Integer, ForeignKey("cards.id", ondelete="CASCADE"), nullable=False) # name of cards table to be confirmed after the cards model is created
+    card_id = Column(Integer, ForeignKey("card_catalogue.card_id", ondelete="CASCADE"), nullable=False)
     card_expiry_date = Column(DateTime, default=lambda: datetime(9999,1,1), nullable=False)
     billing_cycle_refresh_date = Column(DateTime, default=get_billing_cycle_date, nullable=False)
     status = Column(SAEnum(UserOwnedCardStatus), nullable=False, default=UserOwnedCardStatus.Active)
 
     # Relationship with UserProfile
     user_profile = relationship("UserProfile", back_populates="user_owned_cards")
-    cards = relationship("Card", back_populates="user_owned_cards")  # Assuming a Card model exists
+    card_catalogue = relationship("CardCatalogue", back_populates="user_owned_cards")
 
 # Pydantic Models for Request/Response Validation
 class UserOwnedCardBase(BaseModel):

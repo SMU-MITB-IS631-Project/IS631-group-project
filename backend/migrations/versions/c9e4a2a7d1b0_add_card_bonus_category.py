@@ -27,7 +27,7 @@ def upgrade() -> None:
         sa.Column('bonus_benefit_rate', sa.Numeric(precision=10, scale=4), nullable=False),
         sa.Column('bonus_cap_in_dollar', sa.Integer(), server_default=sa.text('99999999'), nullable=False),
         sa.Column('bonus_minimum_spend_in_dollar', sa.Integer(), server_default=sa.text('0'), nullable=False),
-        sa.ForeignKeyConstraint(['card_id'], ['cards.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['card_id'], ['card_catalogue.card_id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('card_bonuscat_id'),
         sa.UniqueConstraint('card_id', 'bonus_category', name='uq_card_bonus_category_per_card')
     )
