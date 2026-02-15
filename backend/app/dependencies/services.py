@@ -6,6 +6,3 @@ from sqlalchemy.orm import Session
 
 def get_catalog_service(db: Session = Depends(get_db)) -> CatalogService:
     return CatalogService(db)
-
-def get_user_card_management_service(db: Session = Depends(get_db)) -> UserCardManagementService:
-    return UserCardManagementService(db)
