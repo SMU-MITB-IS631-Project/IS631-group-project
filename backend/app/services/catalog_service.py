@@ -1,6 +1,5 @@
 from sqlalchemy.orm import Session
 from app.models.card_catalogue import CardCatalogue
-from app.models.user_owned_cards import UserOwnedCard
 
 class CatalogService:
     def __init__(self, db: Session):
