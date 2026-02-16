@@ -51,8 +51,8 @@ class UserCardManagementService:
         raise ServiceError(
             400,
             "VALIDATION_ERROR",
-            f"card_id '{card_id}' does not exist in cards master.",
-            {"field": field},
+            f"Invalid card_id '{card_id}'. Must be an integer.",
+            {"field": field, "reason": "Invalid format or type."},
         )
 
     def _get_card_catalogue(self, card_id: int) -> Optional[CardCatalogue]:
