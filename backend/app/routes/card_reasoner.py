@@ -76,12 +76,24 @@ def explain_recommendation(request: ExplanationRequest) -> ExplanationResponse:
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid input: {str(e)}"
+            detail={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": f"Invalid input: {str(e)}",
+                    "details": {}
+                }
+            }
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate explanation: {str(e)}"
+            detail={
+                "error": {
+                    "code": "GENAI_ERROR",
+                    "message": "Failed to generate explanation",
+                    "details": {"error_type": type(e).__name__}
+                }
+            }
         )
 
 
@@ -100,10 +112,22 @@ async def explain_recommendation_async(request: ExplanationRequest) -> Explanati
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid input: {str(e)}"
+            detail={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": f"Invalid input: {str(e)}",
+                    "details": {}
+                }
+            }
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate explanation: {str(e)}"
+            detail={
+                "error": {
+                    "code": "GENAI_ERROR",
+                    "message": "Failed to generate explanation",
+                    "details": {"error_type": type(e).__name__}
+                }
+            }
         )

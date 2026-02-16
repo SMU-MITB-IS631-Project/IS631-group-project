@@ -91,8 +91,15 @@ python test_card_reasoner.py
 ### Setup
 
 1. **Set OpenAI API Key:**
-   ```bash
+
+   **Windows (PowerShell):**
+   ```powershell
    $env:OPENAI_API_KEY = "sk-..."
+   ```
+
+   **Unix/Linux/macOS (Bash):**
+   ```bash
+   export OPENAI_API_KEY="sk-..."
    ```
 
 2. **Start the API:**

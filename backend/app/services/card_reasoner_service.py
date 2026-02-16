@@ -14,6 +14,7 @@ import os
 import json
 import logging
 import asyncio
+import time
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from enum import Enum
@@ -38,8 +39,15 @@ class LLMConfig:
 
 # Initialize clients
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
-async_client = AsyncOpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+if not OPENAI_API_KEY:
+    logger.warning(
+        "OPENAI_API_KEY environment variable not set. "
+        "Card reasoner will use fallback template explanations. "
+        "Set OPENAI_API_KEY to enable AI-powered explanations."
+    )
+
+client = OpenAI(api_key=OPENAI_API_KEY, timeout=float(LLMConfig.TIMEOUT_SECONDS)) if OPENAI_API_KEY else None
+async_client = AsyncOpenAI(api_key=OPENAI_API_KEY, timeout=float(LLMConfig.TIMEOUT_SECONDS)) if OPENAI_API_KEY else None
 
 
 # ============================================================================
@@ -70,13 +78,15 @@ class TransactionInput(BaseModel):
 
 class CardDetail(BaseModel):
     """Credit card details with calculated values"""
-    Card_ID: int
-    Bank: str
-    Card_Name: str
-    Benefit_type: BenefitTypeEnum
-    base_benefit_rate: float = Field(..., ge=0)
-    applied_bonus_rate: float = Field(..., ge=0)
-    total_calculated_value: float = Field(..., ge=0)
+    Card_ID: int = Field(..., alias="card_id", description="Unique card identifier")
+    Bank: str = Field(..., description="Card issuing bank")
+    Card_Name: str = Field(..., alias="card_name", description="Card product name")
+    Benefit_type: BenefitTypeEnum = Field(..., alias="benefit_type")
+    base_benefit_rate: float = Field(..., ge=0, description="Base reward rate")
+    applied_bonus_rate: float = Field(..., ge=0, description="Category-specific bonus rate")
+    total_calculated_value: float = Field(..., ge=0, description="Total calculated reward value")
+    
+    model_config = {"populate_by_name": True}  # Allow both PascalCase and snake_case
 
 
 class ExplanationRequest(BaseModel):
@@ -205,8 +215,7 @@ def _call_openai_sync(system_prompt: str, user_prompt: str) -> tuple[str, Option
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=LLMConfig.TEMPERATURE,
-                max_tokens=LLMConfig.MAX_TOKENS,
-                timeout=float(LLMConfig.TIMEOUT_SECONDS)
+                max_tokens=LLMConfig.MAX_TOKENS
             )
             return response.choices[0].message.content.strip(), None
         except APITimeoutError as e:
@@ -215,9 +224,14 @@ def _call_openai_sync(system_prompt: str, user_prompt: str) -> tuple[str, Option
             if attempt == LLMConfig.MAX_RETRIES:
                 return _fallback_explanation(), error_msg
         except APIError as e:
-            error_msg = f"LLM API error: {str(e)}"
+            error_msg = f"LLM API error (attempt {attempt}/{LLMConfig.MAX_RETRIES}): {str(e)}"
             logger.warning(error_msg)
             return _fallback_explanation(), error_msg
+        except (ConnectionError, IOError) as e:
+            error_msg = f"Network error (attempt {attempt}/{LLMConfig.MAX_RETRIES}): {str(e)}"
+            logger.warning(error_msg)
+            if attempt == LLMConfig.MAX_RETRIES:
+                return _fallback_explanation(), error_msg
         except Exception as e:
             error_msg = f"Unexpected error during LLM call: {type(e).__name__}: {str(e)}"
             logger.exception(error_msg)
@@ -258,9 +272,14 @@ async def _call_openai_async(system_prompt: str, user_prompt: str) -> tuple[str,
             if attempt == LLMConfig.MAX_RETRIES:
                 return _fallback_explanation(), error_msg
         except APIError as e:
-            error_msg = f"LLM API error: {str(e)}"
+            error_msg = f"LLM API error (attempt {attempt}/{LLMConfig.MAX_RETRIES}): {str(e)}"
             logger.warning(error_msg)
             return _fallback_explanation(), error_msg
+        except (ConnectionError, IOError) as e:
+            error_msg = f"Network error (attempt {attempt}/{LLMConfig.MAX_RETRIES}): {str(e)}"
+            logger.warning(error_msg)
+            if attempt == LLMConfig.MAX_RETRIES:
+                return _fallback_explanation(), error_msg
         except Exception as e:
             error_msg = f"Unexpected error during async LLM call: {type(e).__name__}: {str(e)}"
             logger.exception(error_msg)
@@ -372,27 +391,64 @@ def save_audit_log(audit_entry: AuditLogEntry, custom_path: Optional[str] = None
     
     Args:
         audit_entry: AuditLogEntry to save
-        custom_path: Optional custom path for log file
+        custom_path: Optional custom path for log file (should be absolute path)
         
     Returns:
         True if successful, False otherwise
     """
     try:
-        log_file = custom_path or "data/card_explanation_audit.json"
-        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        # Use absolute path to prevent path traversal vulnerabilities
+        if custom_path:
+            # Ensure absolute path and normalize it
+            log_file = os.path.abspath(custom_path)
+        else:
+            base_dir = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+            log_file = os.path.join(base_dir, "data", "card_explanation_audit.json")
         
-        logs = []
-        if os.path.exists(log_file):
-            with open(log_file, "r") as f:
-                logs = json.load(f)
+        # Create directory if needed
+        log_dir = os.path.dirname(log_file)
+        os.makedirs(log_dir, exist_ok=True)
         
-        logs.append(audit_entry.model_dump())
+        # Use file locking approach to prevent race conditions
+        # Note: For production, consider using database instead of JSON file
+        lock_file = log_file + ".lock"
+        max_lock_wait = 5  # seconds
+        lock_start = datetime.now()
         
-        with open(log_file, "w") as f:
-            json.dump(logs, f, indent=2, default=str)
+        # Wait for lock (simple retry mechanism)
+        while os.path.exists(lock_file):
+            if (datetime.now() - lock_start).total_seconds() > max_lock_wait:
+                logger.warning(f"Could not acquire lock for {log_file}, skipping write")
+                return False
+            time.sleep(0.1)  # Brief sleep before retry
         
-        logger.debug(f"Audit log saved: {audit_entry.event_type} for {audit_entry.recommended_card_name}")
-        return True
+        # Create lock file
+        try:
+            with open(lock_file, "w") as f:
+                f.write("locked")
+            
+            # Read existing logs
+            logs = []
+            if os.path.exists(log_file):
+                with open(log_file, "r") as f:
+                    logs = json.load(f)
+            
+            # Append new entry
+            logs.append(audit_entry.model_dump())
+            
+            # Write updated logs
+            with open(log_file, "w") as f:
+                json.dump(logs, f, indent=2, default=str)
+            
+            logger.debug(f"Audit log saved: {audit_entry.event_type} for {audit_entry.recommended_card_name}")
+            return True
+        finally:
+            # Remove lock file
+            if os.path.exists(lock_file):
+                try:
+                    os.remove(lock_file)
+                except OSError:
+                    pass  # Ignore if already removed
     except Exception as e:
         logger.exception(f"Failed to save audit log to {custom_path}: {e}")
         return False
