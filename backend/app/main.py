@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
-from app.routes import transactions_router, wallet_router, catalog_router, user_card_router
+from app.routes import transactions_router, wallet_router, catalog_router, user_card_router, card_reasoner_router
 from app.services import init_sample_data
 
 
@@ -60,6 +60,7 @@ app.include_router(transactions_router)
 app.include_router(catalog_router)
 app.include_router(wallet_router)
 app.include_router(user_card_router)
+app.include_router(card_reasoner_router)
 
 
 if __name__ == "__main__":
