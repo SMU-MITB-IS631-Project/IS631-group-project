@@ -15,10 +15,12 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 import logging
 
-from fastapi import APIRouter, Request, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
+from sqlalchemy.orm import Session
 
+from app.dependencies.db import get_db
 from app.services.user_card_services import ServiceError, UserCardManagementService
 
 logger = logging.getLogger(__name__)
@@ -110,14 +112,8 @@ def _get_user_id_from_request(request: Request) -> Optional[str]:
     return user_id.strip() if user_id else None
 
 
-def _service_from_request(request: Request) -> UserCardManagementService:
-    user_id = _get_user_id_from_request(request)
-    return UserCardManagementService(user_id=user_id)
-
-
-def _service_for_profile(request: Request) -> UserCardManagementService:
-    user_id = _get_user_id_from_request(request) or "u_001"
-    return UserCardManagementService(user_id=user_id)
+def _service_from_request(db: Session) -> UserCardManagementService:
+    return UserCardManagementService(db)
 
 
 def _unauthorized_response() -> JSONResponse:
@@ -135,15 +131,15 @@ router = APIRouter(
 
 
 @router.get("/user_cards", response_model=UserCardsResponse, tags=["user-cards"])
-def get_user_cards(request: Request):
+def get_user_cards(request: Request, db: Session = Depends(get_db)):
     """View user-owned active cards with reward-rules metadata."""
     user_id = _get_user_id_from_request(request)
     if not user_id:
         return _unauthorized_response()
 
     try:
-        service = _service_from_request(request)
-        return {"user_cards": service.list_user_cards()}
+        service = _service_from_request(db)
+        return {"user_cards": service.list_user_cards(user_id)}
     except ServiceError as exc:
         return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
     except Exception:
@@ -151,9 +147,9 @@ def get_user_cards(request: Request):
 
 
 @router.get("/wallet", response_model=WalletResponse, tags=["wallet"])
-def get_wallet_alias(request: Request):
+def get_wallet_alias(request: Request, db: Session = Depends(get_db)):
     """Backward-compatible alias to preserve existing wallet endpoint."""
-    result = get_user_cards(request)
+    result = get_user_cards(request, db)
     if isinstance(result, JSONResponse):
         return result
     wallet_only = [
@@ -169,10 +165,11 @@ def get_wallet_alias(request: Request):
 
 
 @router.get("/profile", response_model=ProfileResponse, tags=["profile"])
-def get_profile(request: Request):
+def get_profile(request: Request, db: Session = Depends(get_db)):
     """Contract endpoint: return current user profile with wallet cards."""
     try:
-        profile = _service_for_profile(request).get_profile()
+        user_id = _get_user_id_from_request(request) or "u_001"
+        profile = _service_from_request(db).get_profile(user_id)
         return {"profile": profile}
     except ServiceError as exc:
         return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
@@ -181,10 +178,11 @@ def get_profile(request: Request):
 
 
 @router.post("/profile", response_model=ProfileResponse, tags=["profile"])
-def save_profile(payload: ProfileRequest, request: Request):
+def save_profile(payload: ProfileRequest, request: Request, db: Session = Depends(get_db)):
     """Contract endpoint: create/update profile and wallet."""
     try:
-        profile = _service_for_profile(request).save_profile(payload.profile.model_dump())
+        user_id = _get_user_id_from_request(request) or "u_001"
+        profile = _service_from_request(db).save_profile(user_id, payload.profile.model_dump())
         return {"profile": profile}
     except ServiceError as exc:
         return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
@@ -193,15 +191,15 @@ def save_profile(payload: ProfileRequest, request: Request):
 
 
 @router.post("/user_cards", status_code=status.HTTP_201_CREATED, response_model=WalletCardResponse, tags=["user-cards"])
-def add_user_card(payload: WalletCardCreate, request: Request):
+def add_user_card(payload: WalletCardCreate, request: Request, db: Session = Depends(get_db)):
     """Add a user-owned card."""
     try:
         user_id = _get_user_id_from_request(request)
         if not user_id:
             return _unauthorized_response()
 
-        service = _service_from_request(request)
-        saved = service.add_user_card(payload.wallet_card.model_dump())
+        service = _service_from_request(db)
+        saved = service.add_user_card(user_id, payload.wallet_card.model_dump())
         
         return {"wallet_card": {
             "card_id": saved.get("card_id"),
@@ -217,21 +215,21 @@ def add_user_card(payload: WalletCardCreate, request: Request):
 
 
 @router.post("/wallet", status_code=status.HTTP_201_CREATED, response_model=WalletCardResponse, tags=["wallet"])
-def add_wallet_alias(payload: WalletCardCreate, request: Request):
+def add_wallet_alias(payload: WalletCardCreate, request: Request, db: Session = Depends(get_db)):
     """Backward-compatible alias for add card endpoint."""
-    return add_user_card(payload, request)
+    return add_user_card(payload, request, db)
 
 
 @router.put("/user_cards/{card_id}", response_model=WalletCardResponse, tags=["user-cards"])
-def put_user_card(card_id: str, payload: UserCardPut, request: Request):
+def put_user_card(card_id: str, payload: UserCardPut, request: Request, db: Session = Depends(get_db)):
     """Edit user-owned card details (full replacement of editable fields)."""
     user_id = _get_user_id_from_request(request)
     if not user_id:
         return _unauthorized_response()
 
     try:
-        service = _service_from_request(request)
-        saved = service.replace_user_card(card_id, payload.user_card.model_dump())
+        service = _service_from_request(db)
+        saved = service.replace_user_card(user_id, card_id, payload.user_card.model_dump())
         return {
             "wallet_card": {
                 "card_id": saved.get("card_id"),
@@ -248,7 +246,7 @@ def put_user_card(card_id: str, payload: UserCardPut, request: Request):
 
 
 @router.patch("/wallet/{card_id}", response_model=WalletCardResponse, tags=["wallet"])
-def patch_wallet_alias(card_id: str, payload: WalletCardUpdate, request: Request):
+def patch_wallet_alias(card_id: str, payload: WalletCardUpdate, request: Request, db: Session = Depends(get_db)):
     """Backward-compatible partial update endpoint."""
     user_id = _get_user_id_from_request(request)
     if not user_id:
@@ -258,7 +256,7 @@ def patch_wallet_alias(card_id: str, payload: WalletCardUpdate, request: Request
         return _error_response(status_code=400, code="VALIDATION_ERROR", message="No fields to update.", details={})
 
     try:
-        current_cards = _service_from_request(request).list_user_cards()
+        current_cards = _service_from_request(db).list_user_cards(user_id)
         current = next((c for c in current_cards if c.get("id") == card_id), None)
         if not current:
             return _error_response(status_code=404, code="NOT_FOUND", message=f"user_card_id '{card_id}' not found.", details={})
@@ -268,7 +266,7 @@ def patch_wallet_alias(card_id: str, payload: WalletCardUpdate, request: Request
             "annual_fee_billing_date": updates.get("annual_fee_billing_date", current.get("annual_fee_billing_date")),
             "cycle_spend_sgd": updates.get("cycle_spend_sgd", current.get("cycle_spend_sgd", 0)),
         }
-        saved = _service_from_request(request).replace_user_card(card_id, merged)
+        saved = _service_from_request(db).replace_user_card(user_id, card_id, merged)
         return {
             "wallet_card": {
                 "card_id": saved.get("card_id"),
@@ -285,14 +283,14 @@ def patch_wallet_alias(card_id: str, payload: WalletCardUpdate, request: Request
 
 
 @router.delete("/user_cards/{card_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["user-cards"])
-def delete_user_card(card_id: str, request: Request):
+def delete_user_card(card_id: str, request: Request, db: Session = Depends(get_db)):
     """Delete (soft-delete) a user-owned card and write an audit event."""
     user_id = _get_user_id_from_request(request)
     if not user_id:
         return _unauthorized_response()
 
     try:
-        _service_from_request(request).delete_user_card(card_id)
+        _service_from_request(db).delete_user_card(user_id, card_id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except ServiceError as exc:
         return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
@@ -302,6 +300,6 @@ def delete_user_card(card_id: str, request: Request):
 
 
 @router.delete("/wallet/{card_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["wallet"])
-def delete_wallet_alias(card_id: str, request: Request):
+def delete_wallet_alias(card_id: str, request: Request, db: Session = Depends(get_db)):
     """Backward-compatible alias for delete endpoint."""
-    return delete_user_card(card_id, request)
+    return delete_user_card(card_id, request, db)
