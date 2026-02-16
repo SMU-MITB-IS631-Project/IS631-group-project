@@ -150,8 +150,8 @@ class UserCardManagementService:
 
         if not username:
             raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": "username", "reason": "Required."})
-        if preference not in {"miles", "cashback"}:
-            raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": "preference", "reason": "Must be miles or cashback."})
+        if preference not in {"miles", "cashback", "no preference"}:
+            raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": "preference", "reason": "Must be miles, cashback, or no preference."})
         if not isinstance(wallet, list) or len(wallet) < 1:
             raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": "wallet", "reason": "Must have at least one card."})
 
