@@ -12,13 +12,29 @@ High-impact design decisions:
 
 import os
 import json
+import logging
 import asyncio
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from enum import Enum
 
-from pydantic import BaseModel, Field, validator
-from openai import AsyncOpenAI, OpenAI
+from pydantic import BaseModel, Field, field_validator
+from openai import AsyncOpenAI, OpenAI, APIError, APITimeoutError
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# CONFIGURATION - Centralized settings
+# ============================================================================
+
+class LLMConfig:
+    """LLM configuration with sensible defaults"""
+    MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+    TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
+    MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "150"))
+    TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT", "5"))
+    MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "1"))
 
 # Initialize clients
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -40,14 +56,16 @@ class BenefitTypeEnum(str, Enum):
 class TransactionInput(BaseModel):
     """Validated transaction input"""
     merchant_name: str = Field(..., example="ZARA")
-    amount: float = Field(..., gt=0, example=120.00)
+    amount: float = Field(..., gt=0, le=1_000_000, example=120.00)
     category: str = Field(..., example="Fashion")
     
-    @validator("amount")
-    def validate_amount(cls, v):
-        if v < 0 or v > 1_000_000:
-            raise ValueError("Amount must be between 0 and 1,000,000")
-        return v
+    @field_validator("merchant_name")
+    @classmethod
+    def validate_merchant_name(cls, v: str) -> str:
+        """Merchant name must be non-empty after stripping"""
+        if not v.strip():
+            raise ValueError("Merchant name cannot be empty")
+        return v.strip()
 
 
 class CardDetail(BaseModel):
@@ -168,59 +186,87 @@ Explain in 2-3 sentences why this card was chosen. Be specific about the rewards
 # LLM INTEGRATION - Sync & async ready
 # ============================================================================
 
-def _call_openai_sync(system_prompt: str, user_prompt: str) -> str:
+def _call_openai_sync(system_prompt: str, user_prompt: str) -> tuple[str, Optional[str]]:
     """
-    Call OpenAI synchronously.
-    Fallback to template if API fails.
+    Call OpenAI synchronously with retry logic.
+    Returns: (explanation, error_message_or_none)
     """
     if not client:
-        return _fallback_explanation()
+        error_msg = "OpenAI API key not configured"
+        logger.warning(error_msg)
+        return _fallback_explanation(), error_msg
     
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",  # Cost-optimized, good quality
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.7,
-            max_tokens=150,
-            timeout=5.0
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"[WARN] LLM call failed: {e}")
-        return _fallback_explanation()
-
-
-async def _call_openai_async(system_prompt: str, user_prompt: str) -> str:
-    """
-    Call OpenAI asynchronously.
-    Non-blocking for high concurrency.
-    """
-    if not async_client:
-        return _fallback_explanation()
-    
-    try:
-        response = await asyncio.wait_for(
-            async_client.chat.completions.create(
-                model="gpt-4o-mini",
+    for attempt in range(1, LLMConfig.MAX_RETRIES + 1):
+        try:
+            response = client.chat.completions.create(
+                model=LLMConfig.MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.7,
-                max_tokens=150
-            ),
-            timeout=5.0
-        )
-        return response.choices[0].message.content.strip()
-    except asyncio.TimeoutError:
-        print("[WARN] LLM call timed out")
-        return _fallback_explanation()
-    except Exception as e:
-        print(f"[WARN] LLM call failed: {e}")
-        return _fallback_explanation()
+                temperature=LLMConfig.TEMPERATURE,
+                max_tokens=LLMConfig.MAX_TOKENS,
+                timeout=float(LLMConfig.TIMEOUT_SECONDS)
+            )
+            return response.choices[0].message.content.strip(), None
+        except APITimeoutError as e:
+            error_msg = f"LLM timeout (attempt {attempt}/{LLMConfig.MAX_RETRIES}): {str(e)}"
+            logger.warning(error_msg)
+            if attempt == LLMConfig.MAX_RETRIES:
+                return _fallback_explanation(), error_msg
+        except APIError as e:
+            error_msg = f"LLM API error: {str(e)}"
+            logger.warning(error_msg)
+            return _fallback_explanation(), error_msg
+        except Exception as e:
+            error_msg = f"Unexpected error during LLM call: {type(e).__name__}: {str(e)}"
+            logger.exception(error_msg)
+            return _fallback_explanation(), error_msg
+    
+    return _fallback_explanation(), "Max retries exceeded"
+
+
+async def _call_openai_async(system_prompt: str, user_prompt: str) -> tuple[str, Optional[str]]:
+    """
+    Call OpenAI asynchronously with retry logic.
+    Non-blocking for high concurrency.
+    Returns: (explanation, error_message_or_none)
+    """
+    if not async_client:
+        error_msg = "OpenAI API key not configured"
+        logger.warning(error_msg)
+        return _fallback_explanation(), error_msg
+    
+    for attempt in range(1, LLMConfig.MAX_RETRIES + 1):
+        try:
+            response = await asyncio.wait_for(
+                async_client.chat.completions.create(
+                    model=LLMConfig.MODEL,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=LLMConfig.TEMPERATURE,
+                    max_tokens=LLMConfig.MAX_TOKENS
+                ),
+                timeout=float(LLMConfig.TIMEOUT_SECONDS)
+            )
+            return response.choices[0].message.content.strip(), None
+        except asyncio.TimeoutError as e:
+            error_msg = f"LLM timeout (attempt {attempt}/{LLMConfig.MAX_RETRIES})"
+            logger.warning(error_msg)
+            if attempt == LLMConfig.MAX_RETRIES:
+                return _fallback_explanation(), error_msg
+        except APIError as e:
+            error_msg = f"LLM API error: {str(e)}"
+            logger.warning(error_msg)
+            return _fallback_explanation(), error_msg
+        except Exception as e:
+            error_msg = f"Unexpected error during async LLM call: {type(e).__name__}: {str(e)}"
+            logger.exception(error_msg)
+            return _fallback_explanation(), error_msg
+    
+    return _fallback_explanation(), "Max retries exceeded"
 
 
 def _fallback_explanation() -> str:
@@ -249,6 +295,7 @@ def generate_explanation(request: ExplanationRequest) -> ExplanationResponse:
     - Modular (easy to test, iterate)
     - Graceful error handling (LLM failure → fallback)
     - Audit logging (compliance, analytics)
+    - Error tracking for debugging
     """
     
     # Validate inputs
@@ -259,18 +306,19 @@ def generate_explanation(request: ExplanationRequest) -> ExplanationResponse:
         request.comparison_cards
     )
     
-    # Get explanation from LLM
-    explanation = _call_openai_sync(system_prompt, user_prompt)
+    # Get explanation from LLM with error tracking
+    explanation, error = _call_openai_sync(system_prompt, user_prompt)
     
-    # Create audit log
+    # Create audit log with error details if applicable
     audit_log = AuditLogEntry(
         timestamp=datetime.utcnow().isoformat(),
-        model_used="gpt-4o-mini",
+        model_used=LLMConfig.MODEL,
         merchant_name=request.transaction.merchant_name,
         category=request.transaction.category,
         recommended_card_id=request.recommended_card.Card_ID,
         recommended_card_name=request.recommended_card.Card_Name,
-        num_comparisons=len(request.comparison_cards)
+        num_comparisons=len(request.comparison_cards),
+        error=error
     )
     
     return ExplanationResponse(
@@ -282,7 +330,7 @@ def generate_explanation(request: ExplanationRequest) -> ExplanationResponse:
 async def generate_explanation_async(request: ExplanationRequest) -> ExplanationResponse:
     """
     Async variant for non-blocking execution in FastAPI routes.
-    Same logic, non-blocking I/O.
+    Same logic, non-blocking I/O, error tracking.
     """
     
     system_prompt = build_system_prompt()
@@ -292,16 +340,18 @@ async def generate_explanation_async(request: ExplanationRequest) -> Explanation
         request.comparison_cards
     )
     
-    explanation = await _call_openai_async(system_prompt, user_prompt)
+    # Get explanation with error tracking
+    explanation, error = await _call_openai_async(system_prompt, user_prompt)
     
     audit_log = AuditLogEntry(
         timestamp=datetime.utcnow().isoformat(),
-        model_used="gpt-4o-mini",
+        model_used=LLMConfig.MODEL,
         merchant_name=request.transaction.merchant_name,
         category=request.transaction.category,
         recommended_card_id=request.recommended_card.Card_ID,
         recommended_card_name=request.recommended_card.Card_Name,
-        num_comparisons=len(request.comparison_cards)
+        num_comparisons=len(request.comparison_cards),
+        error=error
     )
     
     return ExplanationResponse(
@@ -314,11 +364,18 @@ async def generate_explanation_async(request: ExplanationRequest) -> Explanation
 # LOGGING - Persist audit events (optional enhancement)
 # ============================================================================
 
-def save_audit_log(audit_entry: AuditLogEntry, custom_path: Optional[str] = None) -> None:
+def save_audit_log(audit_entry: AuditLogEntry, custom_path: Optional[str] = None) -> bool:
     """
     Save audit log entry to JSON file for compliance/analytics.
     
     Optional: Can be extended to write to database or event streaming.
+    
+    Args:
+        audit_entry: AuditLogEntry to save
+        custom_path: Optional custom path for log file
+        
+    Returns:
+        True if successful, False otherwise
     """
     try:
         log_file = custom_path or "data/card_explanation_audit.json"
@@ -332,6 +389,10 @@ def save_audit_log(audit_entry: AuditLogEntry, custom_path: Optional[str] = None
         logs.append(audit_entry.model_dump())
         
         with open(log_file, "w") as f:
-            json.dump(logs, f, indent=2)
+            json.dump(logs, f, indent=2, default=str)
+        
+        logger.debug(f"Audit log saved: {audit_entry.event_type} for {audit_entry.recommended_card_name}")
+        return True
     except Exception as e:
-        print(f"[WARN] Failed to save audit log: {e}")
+        logger.exception(f"Failed to save audit log to {custom_path}: {e}")
+        return False
