@@ -1,19 +1,16 @@
 #routes user_profile.py
-from fastapi import APIRouter, HTTPException, status, Response
-from typing import Dict, Any
+from fastapi import APIRouter, HTTPException, status
+from typing import Dict, Any, List
 
 from app.models.user_profile import (
-    UserProfile,
-    BenefitsPreference,
     UserProfileResponse,
     UserProfileCreate,
-    UserProfileBase,
     UserProfileUpdate
 )
 from app.services.user_profile import (
     get_users,
-    get_next_available_user_id,
-    create_user
+    create_user,
+    get_next_available_user_id
 )
 
 router = APIRouter(
@@ -22,13 +19,13 @@ router = APIRouter(
 )
 
 
-@router.get("", response_model=UserProfileResponse)
-def get_user_profiles() -> Dict[str, Any]:
+@router.get("", response_model=List[UserProfileResponse])
+def get_user_profiles() -> List[Dict[str, Any]]:
     """
     Returns a list of all the profiles in the database
 
     Returns:
-    - user_profile: Fields of the first matching user profile
+    - user_profiles: Fields of all user profiles
 
     Raises:
     - 404: No profiles found
@@ -47,20 +44,21 @@ def get_user_profiles() -> Dict[str, Any]:
             }
         )
 
-    user = next(iter(users.values()))
-
-    return {
-        "id": user["id"],
-        "username": user["username"],
-        "name": user.get("name"),
-        "email": user.get("email"),
-        "benefits_preference": user.get("benefits_preference"),
-        "created_date": user["created_date"],
-    }
+    return [
+        {
+            "id": user["id"],
+            "username": user["username"],
+            "name": user.get("name"),
+            "email": user.get("email"),
+            "benefits_preference": user.get("benefits_preference"),
+            "created_date": user["created_date"],
+        }
+        for user in users.values()
+    ]
 
 
 @router.get("/{user_id}", response_model=UserProfileResponse)
-def get_user_profile_by_id_route(user_id: int) -> Dict[str, Any]:
+def get_user_profile_by_id(user_id: int) -> Dict[str, Any]:
     """
     Return the corresponding user profile that matches the id.
 
@@ -116,19 +114,6 @@ def create_user_profile(payload: UserProfileCreate) -> Dict[str, Any]:
     """
     users = get_users()
 
-    # Uniqueness checks
-    if any(u["username"] == payload.username for u in users.values()):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": {
-                    "code": "CONFLICT",
-                    "message": "Username already exists.",
-                    "details": {"username": payload.username}
-                }
-            }
-        )
-
     if payload.email and any(u.get("email") == payload.email for u in users.values()):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -140,16 +125,14 @@ def create_user_profile(payload: UserProfileCreate) -> Dict[str, Any]:
                 }
             }
         )
-
-    user_id = get_next_available_user_id(users)
+    
+    next_user_id = get_next_available_user_id()
 
     new_user = create_user(
-        user_id=user_id,
-        username=payload.username,
-        password=payload.password,
+        username=next_user_id,
+        password_hash=payload.password,
         name=payload.name,
-        email=payload.email,
-        benefits_preference=payload.benefits_preference
+        email=payload.email
     )
 
     return {
