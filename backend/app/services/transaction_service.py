@@ -68,6 +68,7 @@ class TransactionService:
             "amount_sgd": float(txn.amount_sgd),
             "card_id": str(txn.card_id),
             "channel": txn.channel.value,
+            "category": txn.category.value if txn.category else None,
             "is_overseas": txn.is_overseas,
             "user_id": self._format_user_id(cast(int, txn.user_id)),
         }
