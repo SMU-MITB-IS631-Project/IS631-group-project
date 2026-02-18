@@ -113,8 +113,8 @@ def list_transactions(
 @router.get("/{user_id}")
 def get_user_transactions_by_id(
     user_id: str,
+    request: Request,
     sort: str = "date_desc",
-    request: Request = None,
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
@@ -132,7 +132,7 @@ def get_user_transactions_by_id(
     Security:
     - Only returns transactions for the specified user
     """
-    header_user_id = request.headers.get("x-user-id") if request else None
+    header_user_id = request.headers.get("x-user-id")
     if not header_user_id:
         return _unauthorized_response()
     
