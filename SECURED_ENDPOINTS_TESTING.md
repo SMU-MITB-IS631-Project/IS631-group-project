@@ -2,23 +2,26 @@
 
 These endpoints require the `x-user-id` header. Use the PowerShell commands below to test them from the terminal, or use the Postman collection.
 
+## ⚠️ Security Notice
+
+**This is prototype-level authentication for development and testing purposes only.**
+
+The current implementation uses a simple `x-user-id` header that clients control directly. This means:
+- ❌ No real authentication - anyone can impersonate any user by changing the header
+- ❌ Not suitable for production environments
+- ✅ Acceptable for school projects, prototypes, and local development
+
+**For production use**, this should be replaced with:
+- JWT tokens with proper signature verification
+- OAuth 2.0 / OIDC authentication
+- Session-based authentication with secure cookies
+- Server-side user identity validation from authenticated tokens
+
 ## Testing Options
 
 ### Option 1: PowerShell Terminal (Quick Testing)
 
 Use the commands below for quick testing from terminal.
-
-### Option 2: Postman (Recommended for Team Testing)
-
-1. **Import the collection**: Open Postman and import `POSTMAN_COLLECTION.json` from the project root
-2. **Select an endpoint**: Navigate through the folders (Transactions, User Cards, etc.)
-3. **Review the request**: Check the Headers tab (x-user-id is pre-configured) and Body tab (for POST/PUT requests)
-4. **Click Send**: Test the endpoint and view the response
-
-All endpoints are pre-configured with:
-- Base URL: `http://localhost:8000`
-- Headers: `x-user-id` set to `u_001`
-- Request bodies: Sample payloads ready to use
 
 ## Base URL
 
@@ -106,3 +109,17 @@ Invoke-RestMethod -Uri "http://localhost:8000/api/v1/wallet" -Headers @{"x-user-
 
 - `Invoke-RestMethod` prints JSON directly in the terminal.
 - If you want raw headers and status codes, use `Invoke-WebRequest` instead.
+
+
+### Option 2: Postman (Recommended for Team Testing)
+
+1. **Import the collection**: Open Postman and import `POSTMAN_COLLECTION.json` from the project root
+2. **Select an endpoint**: Navigate through the folders (Transactions, User Cards, etc.)
+3. **Review the request**: Check the Headers tab (x-user-id is pre-configured) and Body tab (for POST/PUT requests)
+4. **Click Send**: Test the endpoint and view the response
+
+All endpoints are pre-configured with:
+- Base URL: `http://localhost:8000`
+- Headers: `x-user-id` set to `u_001`
+- Request bodies: Sample payloads ready to use
+
