@@ -277,7 +277,9 @@ class RecommendationService:
         apply_cap: bool,
     ) -> tuple[Decimal, Decimal, bool]:
         if amount_sgd <= 0:
-            return Decimal("0"), Decimal("0"), False
+            raise ValueError(
+                f"amount_sgd must be greater than 0 in _estimate_reward, got {amount_sgd!r}"
+            )
 
         if reward_unit == "cashback":
             fraction = self._cashback_fraction(effective_rate)
