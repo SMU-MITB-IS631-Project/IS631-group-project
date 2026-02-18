@@ -30,10 +30,7 @@ export default function Recommend() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   useEffect(() => {
-    loadCardsMaster().then(cards => {
-      console.log('Loaded cardsMaster:', cards);
-      setCardsMaster(cards);
-    });
+    loadCardsMaster().then(setCardsMaster);
     const p = loadUserProfile();
     if (!p) { navigate('/register'); return; }
     setProfile(p);
@@ -41,8 +38,6 @@ export default function Recommend() {
 
   async function handleGetRecommendation(e) {
     e.preventDefault();
-    console.log('Form submitted:', { item, amount, cardsMaster: cardsMaster.length, profile });
-    console.log('User profile wallet:', profile?.wallet);
     
     if (!item.trim()) {
       setAlertMessage('Please enter an item');
@@ -73,12 +68,8 @@ export default function Recommend() {
     setIsLoading(true);
     try {
       const txn = { item: item.trim(), amount_sgd: parseFloat(amount), channel, is_overseas: false };
-      console.log('Transaction object:', txn);
       const transactions = await loadTransactions();
-      console.log('Loaded transactions:', transactions);
       const rec = getRecommendation({ userProfile: profile, txn, transactions, cardsMaster });
-      console.log('Recommendation result:', rec);
-      console.log('Ranked cards count:', rec.ranked_cards?.length || 0);
       setResult(rec);
       setCursor(0);
       setExhausted(false);
@@ -105,7 +96,6 @@ export default function Recommend() {
   }
 
   async function handleLog(cardId) {
-    console.log('[handleLog] Called with cardId:', cardId);
     setIsLoading(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
@@ -118,9 +108,7 @@ export default function Recommend() {
         category,
         is_overseas: false,
       };
-      console.log('[handleLog] Transaction object:', txn);
       const result = await appendTransaction(txn);
-      console.log('[handleLog] Transaction saved, result:', result);
       // Reset form
       setItem('');
       setAmount('');

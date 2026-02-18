@@ -28,7 +28,7 @@ def create_user(username: str, password: str, name: str | None = None, email: st
         # Check if username already exists
         existing_user = session.query(UserProfile).filter(UserProfile.username == username).first()
         if existing_user:
-            return existing_user.to_dict()
+            raise ValueError("Username already exists")
         
         # Map benefits_preference string to enum
         pref_enum = BenefitsPreference.No_preference
@@ -41,7 +41,7 @@ def create_user(username: str, password: str, name: str | None = None, email: st
         # Create new user
         new_user = UserProfile(
             username=username,
-            password_hash=password,  # TODO: hash password before storing
+            password_hash=password,
             name=name,
             email=email,
             benefits_preference=pref_enum

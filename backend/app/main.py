@@ -84,7 +84,7 @@ async def general_exception_handler(request, exc: Exception):  # type: ignore[ov
         content={
             "error": {
                 "code": "INTERNAL_SERVER_ERROR",
-                "message": str(exc),
+                "message": "Internal server error.",
                 "details": {}
             }
         }

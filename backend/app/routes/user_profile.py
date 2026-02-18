@@ -97,13 +97,25 @@ def create_user_profile(payload: UserProfileCreate) -> Dict[str, Any]:
             }
         )
     
-    new_user = create_user(
-        username=payload.username,
-        password=payload.password,
-        name=payload.name,
-        email=payload.email,
-        benefits_preference=payload.benefits_preference.value if payload.benefits_preference else None
-    )
+    try:
+        new_user = create_user(
+            username=payload.username,
+            password=payload.password,
+            name=payload.name,
+            email=payload.email,
+            benefits_preference=payload.benefits_preference.value if payload.benefits_preference else None
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": {
+                    "code": "CONFLICT",
+                    "message": str(exc),
+                    "details": {"username": payload.username}
+                }
+            }
+        )
 
     return {
         "id": new_user["id"],
