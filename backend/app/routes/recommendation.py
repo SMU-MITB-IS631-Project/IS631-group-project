@@ -119,7 +119,7 @@ def get_recommendation(
             bonus_rules=[
                 {
                     "bonus_category": r.bonus_category,
-                    "bonus_benefit_rate": r.bonus_benefit_rate,
+                    "bonus_benefit_rate": as_json_number(r.bonus_benefit_rate, reward_unit=unit),
                     "bonus_cap_in_dollar": r.bonus_cap_in_dollar,
                     "bonus_minimum_spend_in_dollar": r.bonus_minimum_spend_in_dollar,
                 }
