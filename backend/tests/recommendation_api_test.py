@@ -95,6 +95,35 @@ class RecommendationApiTests(unittest.TestCase):
         self.assertEqual(data["recommended"]["reward_breakdown"]["reward_after_cap"], 100)
         self.assertGreaterEqual(len(data.get("ranked_cards", [])), 1)
 
+    def test_specific_category_bonus_takes_precedence_over_all(self):
+        # Add a category-specific bonus for Food on the same card with a higher rate
+        with self.Session() as db:
+            db.add(
+                CardBonusCategory(
+                    card_bonuscat_id=101,
+                    card_id=10,
+                    bonus_category=BonusCategory.Food,
+                    bonus_benefit_rate=Decimal("3.0"),
+                    bonus_cap_in_dollar=99999999,
+                    bonus_minimum_spend_in_dollar=0,
+                )
+            )
+            db.commit()
+
+        resp = self.client.get(
+            "/api/v1/recommendation",
+            params={"user_id": 1, "category": "Food", "amount_sgd": "50"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIsNotNone(data.get("recommended"))
+        self.assertEqual(data["recommended"]["card_id"], 10)
+        self.assertEqual(data["recommended"]["reward_unit"], "miles")
+        # Highest applicable bonus rate should be used: Food bonus 3.0 mpd => 50 * 3.0 = 150 miles
+        self.assertEqual(data["recommended"]["estimated_reward_value"], 150)
+        self.assertIn("reward_breakdown", data["recommended"])
+        self.assertEqual(data["recommended"]["reward_breakdown"]["reward_after_cap"], 150)
+        self.assertGreaterEqual(len(data.get("ranked_cards", [])), 1)
     def test_invalid_amount_returns_400(self):
         resp = self.client.get(
             "/api/v1/recommendation",
