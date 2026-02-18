@@ -15,6 +15,15 @@ def get_users() -> Dict[str, Any]:
     finally:
         session.close()
 
+def get_user_profile_by_id(user_id: int) -> Dict[str, Any] | None:
+    """Fetch a user profile by ID. Returns None if not found."""
+    session = SessionLocal()
+    try:
+        user = session.query(UserProfile).filter(UserProfile.id == user_id).first()
+        return user.to_dict() if user else None
+    finally:
+        session.close()
+
 def get_next_available_user_id() -> int:
     """Get the next available user_id, which is +1 from the latest user_id in the user_profile tab in app.db"""    
     session = SessionLocal()
