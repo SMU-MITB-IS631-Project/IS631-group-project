@@ -71,7 +71,6 @@ def get_user_profile_by_id_route(user_id: int) -> Dict[str, Any]:
     - user_profile: Fields of the matching user profile
 
     Raises:
-    - 400: Invalid user_id (non-integer)
     - 404: Profile not found
     """
     users = get_users()
