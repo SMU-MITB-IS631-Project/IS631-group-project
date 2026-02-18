@@ -75,14 +75,14 @@ def get_recommendation(
             },
         )
 
-    if amount_sgd is None or amount_sgd <= 0:
+    if amount_sgd is not None and amount_sgd <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "error": {
                     "code": "VALIDATION_ERROR",
-                    "message": "amount_sgd is required and must be > 0.",
-                    "details": {"amount_sgd": str(amount_sgd) if amount_sgd is not None else None},
+                    "message": "amount_sgd must be > 0 when provided.",
+                    "details": {"amount_sgd": str(amount_sgd)},
                 }
             },
         )
