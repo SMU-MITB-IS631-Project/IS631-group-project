@@ -18,7 +18,6 @@ __all__ = [
     "WalletCardUpdate",
     "WalletResponse",
     "WalletCardResponse",
-    "UserProfile",
     "UserProfileCreate", 
     "UserProfileUpdate", 
     "UserProfileResponse"
