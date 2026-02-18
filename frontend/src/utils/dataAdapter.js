@@ -2,6 +2,13 @@ import { parseCSV } from './csv';
 
 const PROFILE_KEY = 'cardtrack_user_profile';
 const TXN_KEY = 'cardtrack_transactions';
+const API_BASE_URL = 'http://localhost:8000';
+
+// --- User Context ---
+// TODO: Replace with actual user authentication/context
+function getCurrentUserId() {
+  return '1'; // Hardcoded for now, should come from auth context
+}
 
 // --- CSV Loader ---
 
@@ -24,20 +31,72 @@ export function saveUserProfile(profile) {
 
 // --- Transactions ---
 
-export function loadTransactions() {
-  const raw = localStorage.getItem(TXN_KEY);
-  return raw ? JSON.parse(raw) : [];
+export async function loadTransactions() {
+  try {
+    const userId = getCurrentUserId();
+    const response = await fetch(`${API_BASE_URL}/api/v1/transactions`, {
+      method: 'GET',
+      headers: {
+        'x-user-id': userId,
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to load transactions: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return data.transactions || [];
+  } catch (error) {
+    console.error('Error loading transactions:', error);
+    // Fallback to localStorage if API fails
+    const raw = localStorage.getItem(TXN_KEY);
+    return raw ? JSON.parse(raw) : [];
+  }
 }
 
 export function saveTransactions(txns) {
   localStorage.setItem(TXN_KEY, JSON.stringify(txns));
 }
 
-export function appendTransaction(txn) {
-  const txns = loadTransactions();
-  txns.push(txn);
-  saveTransactions(txns);
-  return txns;
+export async function appendTransaction(txn) {
+  try {
+    const userId = getCurrentUserId();
+    const response = await fetch(`${API_BASE_URL}/api/v1/transactions`, {
+      method: 'POST',
+      headers: {
+        'x-user-id': userId,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        transaction: {
+          card_id: parseInt(txn.card_id),
+          amount_sgd: parseFloat(txn.amount_sgd),
+          item: txn.item,
+          channel: txn.channel,
+          category: txn.category || null,
+          is_overseas: txn.is_overseas || false,
+          date: txn.date,
+        },
+      }),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to create transaction: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    // Return the newly created transaction
+    return data.transaction;
+  } catch (error) {
+    console.error('Error creating transaction:', error);
+    // Fallback to localStorage if API fails
+    const txns = await loadTransactions();
+    txns.push(txn);
+    saveTransactions(txns);
+    return txn;
+  }
 }
 
 // --- Month Utilities ---

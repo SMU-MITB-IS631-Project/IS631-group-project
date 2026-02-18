@@ -32,13 +32,13 @@ export default function Dashboard() {
 
   // Reload transactions when returning to this page
   useEffect(() => {
-    setTransactions(loadTransactions());
+    loadTransactions().then(setTransactions);
   }, []);
 
   // Also listen for focus to refresh data
   useEffect(() => {
     function handleFocus() {
-      setTransactions(loadTransactions());
+      loadTransactions().then(setTransactions);
     }
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);

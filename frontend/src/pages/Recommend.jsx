@@ -22,6 +22,7 @@ export default function Recommend() {
   const [exhausted, setExhausted] = useState(false);
   const [selectedFallback, setSelectedFallback] = useState('');
   const [showAllReasons, setShowAllReasons] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     loadCardsMaster().then(setCardsMaster);
@@ -30,18 +31,26 @@ export default function Recommend() {
     setProfile(p);
   }, []);
 
-  function handleGetRecommendation(e) {
+  async function handleGetRecommendation(e) {
     e.preventDefault();
     if (!item.trim() || !amount) return;
 
-    const txn = { item: item.trim(), amount_sgd: parseFloat(amount), channel, is_overseas: false };
-    const transactions = loadTransactions();
-    const rec = getRecommendation({ userProfile: profile, txn, transactions, cardsMaster });
-    setResult(rec);
-    setCursor(0);
-    setExhausted(false);
-    setShowAllReasons(false);
-    setSelectedFallback('');
+    setIsLoading(true);
+    try {
+      const txn = { item: item.trim(), amount_sgd: parseFloat(amount), channel, is_overseas: false };
+      const transactions = await loadTransactions();
+      const rec = getRecommendation({ userProfile: profile, txn, transactions, cardsMaster });
+      setResult(rec);
+      setCursor(0);
+      setExhausted(false);
+      setShowAllReasons(false);
+      setSelectedFallback('');
+    } catch (error) {
+      console.error('Error getting recommendation:', error);
+      alert('Failed to load transaction history. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   function handleNextCard() {
@@ -55,20 +64,26 @@ export default function Recommend() {
     }
   }
 
-  function handleLog(cardId) {
-    const txnId = `t_${String(Date.now()).slice(-6)}`;
-    const today = new Date().toISOString().slice(0, 10);
-    const txn = {
-      id: txnId,
-      date: today,
-      item: item.trim(),
-      amount_sgd: parseFloat(amount),
-      card_id: cardId,
-      channel,
-      is_overseas: false,
-    };
-    appendTransaction(txn);
-    navigate('/dashboard');
+  async function handleLog(cardId) {
+    setIsLoading(true);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const txn = {
+        date: today,
+        item: item.trim(),
+        amount_sgd: parseFloat(amount),
+        card_id: cardId,
+        channel,
+        is_overseas: false,
+      };
+      await appendTransaction(txn);
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Error logging transaction:', error);
+      alert('Failed to save transaction. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   const currentCard = result && !exhausted ? result.ranked_cards[cursor] : null;
@@ -121,9 +136,10 @@ export default function Recommend() {
           </div>
           <button
             type="submit"
-            className="w-full h-12 bg-primary hover:bg-primary-dark text-white font-semibold rounded-[14px] transition-colors text-sm mt-2"
+            disabled={isLoading}
+            className="w-full h-12 bg-primary hover:bg-primary-dark text-white font-semibold rounded-[14px] transition-colors text-sm mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Get Recommendation
+            {isLoading ? 'Loading...' : 'Get Recommendation'}
           </button>
         </form>
       </CardSurface>
@@ -186,14 +202,16 @@ export default function Recommend() {
             <button
               type="button"
               onClick={() => handleLog(currentCard.card_id)}
-              className="w-full h-12 bg-primary hover:bg-primary-dark text-white font-semibold rounded-[14px] transition-colors text-sm"
+              disabled={isLoading}
+              className="w-full h-12 bg-primary hover:bg-primary-dark text-white font-semibold rounded-[14px] transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Log this card for transaction
+              {isLoading ? 'Logging...' : 'Log this card for transaction'}
             </button>
             <button
               type="button"
               onClick={handleNextCard}
-              className="w-full h-11 border border-border hover:border-primary text-text font-medium rounded-[14px] transition-colors text-sm"
+              disabled={isLoading}
+              className="w-full h-11 border border-border hover:border-primary text-text font-medium rounded-[14px] transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               I want to select another card
             </button>
@@ -231,9 +249,10 @@ export default function Recommend() {
             <button
               type="button"
               onClick={() => handleLog(selectedFallback)}
-              className="w-full h-12 bg-primary hover:bg-primary-dark text-white font-semibold rounded-[14px] transition-colors text-sm"
+              disabled={isLoading}
+              className="w-full h-12 bg-primary hover:bg-primary-dark text-white font-semibold rounded-[14px] transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Log selected card
+              {isLoading ? 'Logging...' : 'Log selected card'}
             </button>
           )}
         </CardSurface>
