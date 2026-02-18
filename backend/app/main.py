@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     # Startup
     init_sample_data()
     yield
-    # Shutdown (if needed)
+    # Shutdown
 
 
 app = FastAPI(
