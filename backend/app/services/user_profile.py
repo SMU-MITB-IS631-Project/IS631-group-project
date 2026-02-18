@@ -34,7 +34,7 @@ def get_next_available_user_id() -> int:
     finally:
         session.close()
 
-def create_user(username: int, password_hash: str, name: str | None = None, email: str | None = None) -> Dict[str, Any]:
+def create_user(username: str, password_hash: str, name: str | None = None, email: str | None = None) -> Dict[str, Any]:
     """Create a new user in the database. Returns user data as dictionary."""
     session = SessionLocal()
     try:
