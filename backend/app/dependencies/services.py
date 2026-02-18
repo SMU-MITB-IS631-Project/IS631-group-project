@@ -1,7 +1,7 @@
 from fastapi import Depends
 from app.services.catalog_service import CatalogService
 from app.services.user_card_services import UserCardManagementService
-from app.services.user_card_services import UserProfile
+from app.models.user_profile import UserProfile
 from app.dependencies.db import get_db
 from sqlalchemy.orm import Session
 
