@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
-from app.routes import transactions_router, wallet_router, catalog_router, user_card_router, card_reasoner_router
+from app.routes import transactions_router, wallet_router, catalog_router, user_card_router, card_reasoner_router, user_profile_router
 from app.services import init_sample_data
 
 
@@ -31,12 +31,17 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware - allow frontend to call this API
+# CORS middleware - MUST be added first before other middlewares
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -55,12 +60,32 @@ async def validation_exception_handler(request, exc: RequestValidationError):  #
         }
     )
 
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request, exc: Exception):  # type: ignore[override]
+    """Handle general exceptions - log and return 500 error"""
+    import traceback
+    traceback.print_exc()
+    print(f"Error: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": {
+                "code": "INTERNAL_SERVER_ERROR",
+                "message": str(exc),
+                "details": {}
+            }
+        }
+    )
+
+
 # Register routers
 app.include_router(transactions_router)
 app.include_router(catalog_router)
 app.include_router(wallet_router)
 app.include_router(user_card_router)
 app.include_router(card_reasoner_router)
+app.include_router(user_profile_router)
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ export default function Recommend() {
   const [item, setItem] = useState('');
   const [amount, setAmount] = useState('');
   const [channel, setChannel] = useState('online');
+  const [category, setCategory] = useState('food');
 
   // Recommendation state
   const [result, setResult] = useState(null);
@@ -23,9 +24,16 @@ export default function Recommend() {
   const [selectedFallback, setSelectedFallback] = useState('');
   const [showAllReasons, setShowAllReasons] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   useEffect(() => {
-    loadCardsMaster().then(setCardsMaster);
+    loadCardsMaster().then(cards => {
+      console.log('Loaded cardsMaster:', cards);
+      setCardsMaster(cards);
+    });
     const p = loadUserProfile();
     if (!p) { navigate('/register'); return; }
     setProfile(p);
@@ -33,13 +41,44 @@ export default function Recommend() {
 
   async function handleGetRecommendation(e) {
     e.preventDefault();
-    if (!item.trim() || !amount) return;
+    console.log('Form submitted:', { item, amount, cardsMaster: cardsMaster.length, profile });
+    console.log('User profile wallet:', profile?.wallet);
+    
+    if (!item.trim()) {
+      setAlertMessage('Please enter an item');
+      setShowAlertModal(true);
+      return;
+    }
+    if (!amount) {
+      setAlertMessage('Please enter an amount');
+      setShowAlertModal(true);
+      return;
+    }
+    if (cardsMaster.length === 0) {
+      setAlertMessage('Cards data is still loading. Please wait.');
+      setShowAlertModal(true);
+      return;
+    }
+    if (!profile) {
+      setAlertMessage('Profile data is missing. Please refresh the page.');
+      setShowAlertModal(true);
+      return;
+    }
+    if (!profile?.wallet || profile.wallet.length === 0) {
+      setAlertMessage('No cards in wallet. Please add cards first.');
+      setShowAlertModal(true);
+      return;
+    }
 
     setIsLoading(true);
     try {
       const txn = { item: item.trim(), amount_sgd: parseFloat(amount), channel, is_overseas: false };
+      console.log('Transaction object:', txn);
       const transactions = await loadTransactions();
+      console.log('Loaded transactions:', transactions);
       const rec = getRecommendation({ userProfile: profile, txn, transactions, cardsMaster });
+      console.log('Recommendation result:', rec);
+      console.log('Ranked cards count:', rec.ranked_cards?.length || 0);
       setResult(rec);
       setCursor(0);
       setExhausted(false);
@@ -47,7 +86,8 @@ export default function Recommend() {
       setSelectedFallback('');
     } catch (error) {
       console.error('Error getting recommendation:', error);
-      alert('Failed to load transaction history. Please try again.');
+      setAlertMessage('Failed to get recommendation: ' + error.message);
+      setShowAlertModal(true);
     } finally {
       setIsLoading(false);
     }
@@ -65,6 +105,7 @@ export default function Recommend() {
   }
 
   async function handleLog(cardId) {
+    console.log('[handleLog] Called with cardId:', cardId);
     setIsLoading(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
@@ -74,29 +115,122 @@ export default function Recommend() {
         amount_sgd: parseFloat(amount),
         card_id: cardId,
         channel,
+        category,
         is_overseas: false,
       };
-      await appendTransaction(txn);
-      navigate('/dashboard');
+      console.log('[handleLog] Transaction object:', txn);
+      const result = await appendTransaction(txn);
+      console.log('[handleLog] Transaction saved, result:', result);
+      // Reset form
+      setItem('');
+      setAmount('');
+      setChannel('online');
+      setCategory('food');
+      setResult(null);
+      // Show success modal before redirecting
+      setShowSuccessModal(true);
     } catch (error) {
-      console.error('Error logging transaction:', error);
-      alert('Failed to save transaction. Please try again.');
+      console.error('[handleLog] Error logging transaction:', error);
+      setAlertMessage('Failed to save transaction. Please try again.');
+      setShowAlertModal(true);
     } finally {
       setIsLoading(false);
     }
+  }
+
+  function handleConfirmLogout() {
+    localStorage.clear();
+    setShowLogoutModal(false);
+    navigate('/');
+  }
+
+  function handleConfirmSuccess() {
+    setShowSuccessModal(false);
+    navigate('/dashboard');
   }
 
   const currentCard = result && !exhausted ? result.ranked_cards[cursor] : null;
   const currentCardMaster = currentCard ? cardsMaster.find(c => c.card_id === currentCard.card_id) : null;
 
   return (
-    <div className="pb-6 px-4 pt-6">
-      {/* Header */}
-      <div className="mb-6 px-[14px]">
-        <h1 className="text-[22px] font-semibold tracking-tight text-primary-dark">New Transaction</h1>
-        <p className="text-sm text-muted mt-1 leading-snug">Enter details to get the best card.</p>
+    <div className="pb-6 px-4 pt-6 relative">
+      {/* Avatar - Top Left */}
+      <div className="absolute top-6 left-6 w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-lg">
+        <img src="https://tse4.mm.bing.net/th/id/OIP.mWxq1EykV6nxFaftjOdFyQHaHa?rs=1&pid=ImgDetMain&o=7&rm=3" alt="Avatar" className="w-full h-full object-cover" />
       </div>
 
+      {/* Logout Button - Top Right */}
+      <button
+        type="button"
+        onClick={() => setShowLogoutModal(true)}
+        className="absolute top-6 right-6 w-10 h-10 rounded-full border border-border hover:border-red-400 text-muted hover:text-red-500 font-medium transition-all bg-white hover:bg-red-50 flex items-center justify-center"
+        title="Logout"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </button>
+
+      {/* Header */}
+      <div className="mb-6 px-[14px] pt-20">
+        <h1 className="text-[22px] font-semibold tracking-tight text-white">New Transaction</h1>
+        <p className="text-sm text-white mt-1 leading-snug">Enter details to get the best card recommendation.</p>
+      </div>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="w-full max-w-[280px] p-6 bg-gradient-to-b from-gray-50 to-gray-100 rounded-[18px] shadow-[0_10px_32px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.5)]">
+            <h2 className="text-lg font-semibold text-primary-dark mb-2">Logout?</h2>
+            <p className="text-sm text-muted mb-6">Are you sure you want to logout?</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLogoutModal(false)}
+                className="flex-1 h-10 border border-border text-text font-medium rounded-lg hover:bg-white/60 transition-all text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmLogout}
+                className="flex-1 h-10 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-all text-sm"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Alert Modal */}
+      {showAlertModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="w-full max-w-[280px] p-6 bg-gradient-to-b from-gray-50 to-gray-100 rounded-[18px] shadow-[0_10px_32px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.5)]">
+            <h2 className="text-lg font-semibold text-primary-dark mb-3">{alertMessage}</h2>
+            <button
+              onClick={() => setShowAlertModal(false)}
+              className="w-full h-10 bg-primary text-white font-medium rounded-lg hover:bg-primary-dark transition-all text-sm"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="w-full max-w-[280px] p-6 bg-gradient-to-b from-gray-50 to-gray-100 rounded-[18px] shadow-[0_10px_32px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.5)]">
+            <h2 className="text-lg font-semibold text-success mb-2">Transaction Saved! ✓</h2>
+            <p className="text-sm text-muted mb-6">Your transaction has been saved successfully.</p>
+            <button
+              onClick={handleConfirmSuccess}
+              className="w-full h-10 bg-success text-white font-medium rounded-lg hover:bg-green-700 transition-all text-sm"
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
       {/* Card A: Transaction Form */}
       <CardSurface className="mb-4">
         <h2 className="text-[15px] font-semibold text-text mb-3">Transaction</h2>
@@ -108,7 +242,7 @@ export default function Recommend() {
               value={item}
               onChange={e => setItem(e.target.value)}
               placeholder="GrabFood, Shopee"
-              className="w-full h-11 px-3 bg-white border border-border rounded-[14px] text-sm outline-none focus:border-primary transition-colors"
+              className="w-full h-11 px-3 bg-card border-2 border-primary rounded-[14px] text-sm text-text outline-none focus:border-primary transition-colors"
             />
           </div>
           <div>
@@ -120,7 +254,7 @@ export default function Recommend() {
               placeholder="0.00"
               step="0.01"
               min="0"
-              className="w-full h-12 px-3 bg-white border border-border rounded-[14px] text-lg font-semibold outline-none focus:border-primary transition-colors"
+              className="w-full h-12 px-3 bg-card border-2 border-primary rounded-[14px] text-lg font-semibold text-text outline-none focus:border-primary transition-colors"
             />
           </div>
           <div>
@@ -133,6 +267,21 @@ export default function Recommend() {
               value={channel}
               onChange={setChannel}
             />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted mb-1 block">Category</label>
+            <select
+              value={category}
+              onChange={e => setCategory(e.target.value)}
+              className="w-full h-11 px-3 bg-card border-2 border-primary rounded-[14px] text-sm text-text outline-none focus:border-primary transition-colors appearance-none"
+            >
+              <option value="food">Food</option>
+              <option value="travel">Travel</option>
+              <option value="shopping">Shopping</option>
+              <option value="bills">Bills</option>
+              <option value="entertainment">Entertainment</option>
+              <option value="others">Others</option>
+            </select>
           </div>
           <button
             type="submit"
