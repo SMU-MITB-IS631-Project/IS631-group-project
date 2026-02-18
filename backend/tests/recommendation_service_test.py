@@ -108,12 +108,16 @@ class RecommendationServiceTests(unittest.TestCase):
 
     def test_no_category_uses_base_rates(self):
         with self.Session() as db:
-            best, _ = RecommendationService(db).recommend(user_id=1)
+            best, ranked = RecommendationService(db).recommend(user_id=1)
             self.assertIsNotNone(best)
             self.assertEqual(best.card_id, 20)
             self.assertEqual(best.reward_unit, "miles")
             # No spend passed => legacy behavior: reward calculation is 0
             self.assertEqual(best.estimated_reward_value, Decimal("0"))
+            # Ensure that a Food-specific bonus (5.0 mpd on card 10) is not applied when no category is specified.
+            food_card_entry = next((r for r in ranked if r.card_id == 10), None)
+            self.assertIsNotNone(food_card_entry)
+            self.assertNotEqual(food_card_entry.effective_benefit_rate, Decimal("5.0"))
 
     def test_cashback_cap_is_applied(self):
         with self.Session() as db:
