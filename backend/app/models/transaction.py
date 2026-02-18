@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, Numeric, String, DateTime, Date, Boolean, Enum as SAEnum, ForeignKey
 from app.db.db import Base
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import relationship
 from datetime import datetime, date
 from enum import Enum as PyEnum
@@ -40,14 +40,14 @@ class UserTransaction(Base):
 # Create Pydantic models for Transaction
 class TransactionCreate(BaseModel):
     """Transaction creation request (from API contract)"""
-    model_config = ConfigDict(from_attributes=True)
-    user_id: int
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    user_id: int | None = None
     card_id: int
     amount_sgd: Decimal
     item: str
     channel: TransactionChannel  # "online" or "offline"
     is_overseas: bool = False
-    transaction_date: date | None = None  # YYYY-MM-DD, defaults to today if omitted
+    transaction_date: date | None = Field(default=None, alias="date")  # YYYY-MM-DD, defaults to today if omitted
     category: TransactionCategory | None = None
 
     @field_validator("item")
