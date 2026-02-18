@@ -1,5 +1,6 @@
 from .transaction import UserTransaction as Transaction, TransactionCreate, TransactionRequest
 from .wallet import WalletCard, WalletCardCreate, WalletCardUpdate, WalletResponse, WalletCardResponse
+from .user_profile import UserProfile, UserProfileCreate, UserProfileUpdate, UserProfileResponse
 
 __all__ = [
     "Transaction", 
@@ -9,5 +10,9 @@ __all__ = [
     "WalletCardCreate",
     "WalletCardUpdate",
     "WalletResponse",
-    "WalletCardResponse"
+    "WalletCardResponse",
+    "UserProfile",
+    "UserProfileCreate", 
+    "UserProfileUpdate", 
+    "UserProfileResponse"
 ]

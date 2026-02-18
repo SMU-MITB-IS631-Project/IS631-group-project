@@ -23,18 +23,60 @@ router = APIRouter(
 
 
 @router.get("", response_model=UserProfileResponse)
-def get_user_profile() -> Dict[str, Any]:
+def get_user_profiles() -> Dict[str, Any]:
     """
-    Return the current user's profile.
-    
-    Returns:
-    - user_profile: List of fields personal particulars in the user's profile
+    Returns a list of all the profiles in the database
 
+    Returns:
+    - user_profile: Fields of the first matching user profile
+
+    Raises:
+    - 404: No profiles found
     """
-    user_id = 1  # TODO: Get from auth token
+    users = get_users()
+
+    if not users:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": "No profiles found.",
+                    "details": {}
+                }
+            }
+        )
+
+    user = next(iter(users.values()))
+
+    return {
+        "id": user["id"],
+        "username": user["username"],
+        "name": user.get("name"),
+        "email": user.get("email"),
+        "benefits_preference": user.get("benefits_preference"),
+        "created_date": user["created_date"],
+    }
+
+
+@router.get("/{user_id}", response_model=UserProfileResponse)
+def get_user_profile_by_id_route(user_id: int) -> Dict[str, Any]:
+    """
+    Return the corresponding user profile that matches the id.
+
+    Path Parameters:
+    - user_id: The user ID to fetch
+
+    Returns:
+    - user_profile: Fields of the matching user profile
+
+    Raises:
+    - 400: Invalid user_id (non-integer)
+    - 404: Profile not found
+    """
     users = get_users()
     user = users.get(user_id)
-    
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -42,7 +84,7 @@ def get_user_profile() -> Dict[str, Any]:
                 "error": {
                     "code": "NOT_FOUND",
                     "message": "Profile not found.",
-                    "details": {}
+                    "details": {"user_id": user_id}
                 }
             }
         )
@@ -55,7 +97,6 @@ def get_user_profile() -> Dict[str, Any]:
         "benefits_preference": user.get("benefits_preference"),
         "created_date": user["created_date"],
     }
-
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=UserProfileResponse)
 def create_user_profile(payload: UserProfileCreate) -> Dict[str, Any]:
@@ -121,7 +162,7 @@ def create_user_profile(payload: UserProfileCreate) -> Dict[str, Any]:
         "created_date": new_user["created_date"],
     }
 
-# ...existing code...
+
 @router.patch("/{user_id}", response_model=UserProfileResponse)
 def update_user_profile(user_id: str, payload: UserProfileUpdate) -> Dict[str, Any]:
     """

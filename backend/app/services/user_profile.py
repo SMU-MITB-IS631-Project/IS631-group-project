@@ -15,6 +15,15 @@ def get_users() -> Dict[str, Any]:
     finally:
         session.close()
 
+def get_user_profile_by_id(user_id: int) -> Dict[str, Any] | None:
+    """Fetch a user profile by ID. Returns None if not found."""
+    session = SessionLocal()
+    try:
+        user = session.query(UserProfile).filter(UserProfile.id == user_id).first()
+        return user.to_dict() if user else None
+    finally:
+        session.close()
+
 def get_next_available_user_id() -> int:
     """Get the next available user_id, which is +1 from the latest user_id in the user_profile tab in app.db"""    
     session = SessionLocal()
@@ -25,7 +34,7 @@ def get_next_available_user_id() -> int:
     finally:
         session.close()
 
-def create_user(username: str, password_hash: str, name: str | None = None, email: str | None = None) -> Dict[str, Any]:
+def create_user(username: int, password_hash: str, name: str | None = None, email: str | None = None) -> Dict[str, Any]:
     """Create a new user in the database. Returns user data as dictionary."""
     session = SessionLocal()
     try:
