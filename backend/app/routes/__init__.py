@@ -3,6 +3,7 @@ from .catalog import router as catalog_router
 from .wallet import router as wallet_router
 from .user_card_management import router as user_card_router
 from .recommendation import router as recommendation_router
+from .card_reasoner import router as card_reasoner_router
 
 __all__ = [
     "transactions_router",
@@ -10,4 +11,5 @@ __all__ = [
     "catalog_router",
     "user_card_router",
     "recommendation_router",
+    "card_reasoner_router"
 ]
