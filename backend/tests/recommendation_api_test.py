@@ -21,7 +21,7 @@ from app.models.user_profile import UserProfile, BenefitsPreference  # noqa: E40
 from app.models.card_catalogue import CardCatalogue, BankEnum, BenefitTypeEnum, StatusEnum  # noqa: E402
 from app.models.card_bonus_category import CardBonusCategory, BonusCategory  # noqa: E402
 from app.models.user_owned_cards import UserOwnedCard, UserOwnedCardStatus  # noqa: E402
-from app.models.transaction import UserTransaction  # noqa: F401,E402
+from app.models.transaction import UserTransaction  # noqa: F401,E402  # Imported to ensure SQLAlchemy relationships/metadata are registered
 
 
 class RecommendationApiTests(unittest.TestCase):
