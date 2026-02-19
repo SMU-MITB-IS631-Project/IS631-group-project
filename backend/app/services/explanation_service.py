@@ -45,12 +45,50 @@ logger = logging.getLogger(__name__)
 class LLMConfig:
     """Centralized LLM settings with environment variable overrides"""
     MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
-    TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
-    MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "150"))
-    TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT", "5"))
-    MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "1"))
 
+    # Parse temperature with validation and fallback
+    _default_temperature = 0.7
+    try:
+        TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", str(_default_temperature)))
+    except (TypeError, ValueError):
+        logger.warning(
+            "Invalid LLM_TEMPERATURE value; falling back to default %s",
+            _default_temperature,
+        )
+        TEMPERATURE = _default_temperature
 
+    # Parse max tokens with validation and fallback
+    _default_max_tokens = 150
+    try:
+        MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", str(_default_max_tokens)))
+    except (TypeError, ValueError):
+        logger.warning(
+            "Invalid LLM_MAX_TOKENS value; falling back to default %s",
+            _default_max_tokens,
+        )
+        MAX_TOKENS = _default_max_tokens
+
+    # Parse timeout with validation and fallback
+    _default_timeout = 5
+    try:
+        TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT", str(_default_timeout)))
+    except (TypeError, ValueError):
+        logger.warning(
+            "Invalid LLM_TIMEOUT value; falling back to default %s seconds",
+            _default_timeout,
+        )
+        TIMEOUT_SECONDS = _default_timeout
+
+    # Parse max retries with validation and fallback
+    _default_max_retries = 1
+    try:
+        MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", str(_default_max_retries)))
+    except (TypeError, ValueError):
+        logger.warning(
+            "Invalid LLM_MAX_RETRIES value; falling back to default %s",
+            _default_max_retries,
+        )
+        MAX_RETRIES = _default_max_retries
 # Initialize OpenAI client (only if API key present)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai_client = None
