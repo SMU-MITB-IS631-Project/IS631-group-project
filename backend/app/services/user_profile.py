@@ -3,8 +3,18 @@ import os
 from typing import Dict, Any, List
 from app.db.db import SessionLocal
 from app.models.user_profile import UserProfile, BenefitsPreference
+from passlib.context import CryptContext
+
 
 from app.services.data_service import USERS_FILE, _load_json, _save_json
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
 
 def get_users() -> Dict[str, Any]:
     """Load users data from the app.db database."""    
@@ -25,7 +35,7 @@ def get_next_available_user_id() -> int:
     finally:
         session.close()
 
-def create_user(username: str, password_hash: str, name: str | None = None, email: str | None = None) -> Dict[str, Any]:
+def create_user(username: str, password: str, name: str | None = None, email: str | None = None) -> Dict[str, Any]:
     """Create a new user in the database. Returns user data as dictionary."""
     session = SessionLocal()
     try:
@@ -34,10 +44,17 @@ def create_user(username: str, password_hash: str, name: str | None = None, emai
         if existing_user:
             return existing_user.to_dict()
         
+        # get the id for this user
+        generated_id = get_next_available_user_id()
+        
+        # Hash the password before storing
+        hashed_password = hash_password(password)
+        
         # Create new user
         new_user = UserProfile(
+            id = generated_id,
             username=username,
-            password_hash=password_hash,
+            password=hashed_password,
             name=name,
             email=email,
             benefits_preference=BenefitsPreference.No_preference
@@ -48,3 +65,7 @@ def create_user(username: str, password_hash: str, name: str | None = None, emai
     finally:
         session.close()
 
+def login_user():
+    """
+    Check if the user keyed in the right credentials
+    """

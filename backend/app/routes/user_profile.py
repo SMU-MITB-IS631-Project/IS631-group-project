@@ -1,6 +1,8 @@
 #routes user_profile.py
 from fastapi import APIRouter, HTTPException, status, Response
 from typing import Dict, Any
+from app.services.user_profile import verify_password
+from app.db.db import SessionLocal
 
 from app.models.user_profile import (
     UserProfile,
@@ -8,7 +10,9 @@ from app.models.user_profile import (
     UserProfileResponse,
     UserProfileCreate,
     UserProfileBase,
-    UserProfileUpdate
+    UserProfileUpdate,
+    LoginPayload,
+    LoginResponse
 )
 from app.services.user_profile import (
     get_users,
@@ -121,7 +125,6 @@ def create_user_profile(payload: UserProfileCreate) -> Dict[str, Any]:
         "created_date": new_user["created_date"],
     }
 
-# ...existing code...
 @router.patch("/{user_id}", response_model=UserProfileResponse)
 def update_user_profile(user_id: str, payload: UserProfileUpdate) -> Dict[str, Any]:
     """
@@ -215,4 +218,39 @@ def update_user_profile(user_id: str, payload: UserProfileUpdate) -> Dict[str, A
         "created_date": user["created_date"],
     }
 
+@router.post("/login", response_model=LoginResponse)
+def user_profile_login(payload: LoginPayload):
+    """
+    Input: username and password
 
+    Logic: 
+    If username does not exist, return error
+    If username exists, check hashed password
+    If password incorrect, return error
+    If username and password correct, return authorised/success
+    """
+    username = payload.username
+    password = payload.password
+
+    if not username or not password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username and password are required."
+        )
+
+    session = SessionLocal()
+    try:
+        user = session.query(UserProfile).filter(UserProfile.username == username).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid username or password."
+            )
+        if not verify_password(password, user.password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid username or password."
+            )
+        return {"message": "Login successful", "user_id": user.id}
+    finally:
+        session.close()
