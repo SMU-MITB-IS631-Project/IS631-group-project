@@ -1,18 +1,14 @@
 #routes user_profile.py
-from fastapi import APIRouter, HTTPException, status, Response
+from fastapi import APIRouter, HTTPException, status
 from typing import Dict, Any
 
 from app.models.user_profile import (
-    UserProfile,
-    BenefitsPreference,
     UserProfileResponse,
     UserProfileCreate,
-    UserProfileBase,
     UserProfileUpdate
 )
 from app.services.user_profile import (
     get_users,
-    get_next_available_user_id,
     create_user
 )
 
@@ -100,17 +96,26 @@ def create_user_profile(payload: UserProfileCreate) -> Dict[str, Any]:
                 }
             }
         )
-
-    user_id = get_next_available_user_id(users)
-
-    new_user = create_user(
-        user_id=user_id,
-        username=payload.username,
-        password=payload.password,
-        name=payload.name,
-        email=payload.email,
-        benefits_preference=payload.benefits_preference
-    )
+    
+    try:
+        new_user = create_user(
+            username=payload.username,
+            password=payload.password,
+            name=payload.name,
+            email=payload.email,
+            benefits_preference=payload.benefits_preference.value if payload.benefits_preference else None
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": {
+                    "code": "CONFLICT",
+                    "message": str(exc),
+                    "details": {"username": payload.username}
+                }
+            }
+        )
 
     return {
         "id": new_user["id"],
@@ -216,3 +221,58 @@ def update_user_profile(user_id: str, payload: UserProfileUpdate) -> Dict[str, A
     }
 
 
+@router.post("/login", response_model=UserProfileResponse, tags=["user_profile"])
+def login_user(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Login endpoint to check if user exists by username.
+    
+    Request body:
+    - username: str
+    
+    Returns:
+    - User profile if user exists
+    - 404 error if user doesn't exist
+    """
+    username = payload.get("username", "").strip()
+    
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "Username is required.",
+                    "details": {}
+                }
+            }
+        )
+    
+    users = get_users()
+    
+    # Find user by username
+    user = None
+    for u in users.values():
+        if u.get("username") == username:
+            user = u
+            break
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": "User not found.",
+                    "details": {"username": username}
+                }
+            }
+        )
+    
+    return {
+        "id": user["id"],
+        "username": user["username"],
+        "name": user.get("name"),
+        "email": user.get("email"),
+        "benefits_preference": user.get("benefits_preference"),
+        "created_date": user["created_date"],
+    }

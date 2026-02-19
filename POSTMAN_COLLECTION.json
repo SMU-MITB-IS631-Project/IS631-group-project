@@ -1,0 +1,353 @@
+{
+  "info": {
+    "name": "CardTrack API",
+    "_postman_id": "b9b9c5d2-1d7e-4d0a-a53c-3d59f9f0c5a1",
+    "description": "Postman collection for CardTrack API endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "baseUrl", "value": "http://localhost:8000"},
+    {"key": "userId", "value": "u_001"},
+    {"key": "numericUserId", "value": "1"},
+    {"key": "cardId", "value": "1"},
+    {"key": "userCardId", "value": "1"}
+  ],
+  "item": [
+    {
+      "name": "Transactions (secured)",
+      "item": [
+        {
+          "name": "List transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "x-user-id", "value": "{{userId}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "transactions"]
+            }
+          }
+        },
+        {
+          "name": "List transactions by user",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "x-user-id", "value": "{{userId}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions/{{numericUserId}}?sort=date_desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "transactions", "{{numericUserId}}"],
+              "query": [
+                {"key": "sort", "value": "date_desc"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "x-user-id", "value": "{{userId}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction\": {\n    \"card_id\": {{cardId}},\n    \"amount_sgd\": 15.5,\n    \"item\": \"Cinema Ticket\",\n    \"channel\": \"offline\",\n    \"category\": \"entertainment\",\n    \"is_overseas\": false,\n    \"date\": \"2026-02-18\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "transactions"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User Cards (secured)",
+      "item": [
+        {
+          "name": "Get user cards",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "x-user-id", "value": "{{userId}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user_cards",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user_cards"]
+            }
+          }
+        },
+        {
+          "name": "Add user card",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "x-user-id", "value": "{{userId}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"wallet_card\": {\n    \"card_id\": \"{{cardId}}\",\n    \"refresh_day_of_month\": 15,\n    \"annual_fee_billing_date\": \"2026-06-28\",\n    \"cycle_spend_sgd\": 700\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user_cards",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user_cards"]
+            }
+          }
+        },
+        {
+          "name": "Replace user card",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "x-user-id", "value": "{{userId}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_card\": {\n    \"card_id\": \"{{cardId}}\",\n    \"refresh_day_of_month\": 20,\n    \"annual_fee_billing_date\": \"2026-07-15\",\n    \"cycle_spend_sgd\": 500\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user_cards/{{userCardId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user_cards", "{{userCardId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete user card",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {"key": "x-user-id", "value": "{{userId}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user_cards/{{userCardId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user_cards", "{{userCardId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Profile (secured)",
+      "item": [
+        {
+          "name": "Get profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "x-user-id", "value": "{{userId}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Save profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "x-user-id", "value": "{{userId}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profile\": {\n    \"user_id\": \"{{userId}}\",\n    \"username\": \"demo\",\n    \"preference\": \"miles\",\n    \"wallet\": [\n      {\n        \"card_id\": \"{{cardId}}\",\n        \"refresh_day_of_month\": 15,\n        \"annual_fee_billing_date\": \"2026-06-28\",\n        \"cycle_spend_sgd\": 700\n      }\n    ]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "profile"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Catalog",
+      "item": [
+        {
+          "name": "Get catalog",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/catalog/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "catalog", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Card Reasoner",
+      "item": [
+        {
+          "name": "Explain (sync)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction\": {\n    \"merchant_name\": \"ZARA\",\n    \"amount\": 120.0,\n    \"category\": \"Fashion\"\n  },\n  \"recommended_card\": {\n    \"Card_ID\": 3,\n    \"Bank\": \"DBS\",\n    \"Card_Name\": \"DBS Live Fresh\",\n    \"Benefit_type\": \"Cashback\",\n    \"base_benefit_rate\": 0.01,\n    \"applied_bonus_rate\": 0.035,\n    \"total_calculated_value\": 4.32\n  },\n  \"comparison_cards\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/card-reasoner/explain",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "card-reasoner", "explain"]
+            }
+          }
+        },
+        {
+          "name": "Explain (async)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction\": {\n    \"merchant_name\": \"ZARA\",\n    \"amount\": 120.0,\n    \"category\": \"Fashion\"\n  },\n  \"recommended_card\": {\n    \"Card_ID\": 3,\n    \"Bank\": \"DBS\",\n    \"Card_Name\": \"DBS Live Fresh\",\n    \"Benefit_type\": \"Cashback\",\n    \"base_benefit_rate\": 0.01,\n    \"applied_bonus_rate\": 0.035,\n    \"total_calculated_value\": 4.32\n  },\n  \"comparison_cards\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/card-reasoner/explain-async",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "card-reasoner", "explain-async"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Legacy Wallet (json file)",
+      "item": [
+        {
+          "name": "Get wallet",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/wallet",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "wallet"]
+            }
+          }
+        },
+        {
+          "name": "Add wallet card",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"wallet_card\": {\n    \"card_id\": \"ww\",\n    \"refresh_day_of_month\": 15,\n    \"annual_fee_billing_date\": \"2026-06-28\",\n    \"cycle_spend_sgd\": 700\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/wallet",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "wallet"]
+            }
+          }
+        },
+        {
+          "name": "Update wallet card",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_day_of_month\": 20\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/wallet/{{cardId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "wallet", "{{cardId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete wallet card",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/wallet/{{cardId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "wallet", "{{cardId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Legacy User Profile (json file)",
+      "item": [
+        {
+          "name": "Get user profile",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user_profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user_profile"]
+            }
+          }
+        },
+        {
+          "name": "Create user profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"demo\",\n  \"password\": \"change_me\",\n  \"name\": \"Demo User\",\n  \"email\": \"demo@example.com\",\n  \"benefits_preference\": \"miles\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user_profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user_profile"]
+            }
+          }
+        },
+        {
+          "name": "Update user profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo User Updated\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user_profile/{{numericUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user_profile", "{{numericUserId}}"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
