@@ -86,35 +86,38 @@ def demo_fashion_purchase():
     print("="*80)
     
     session = create_test_database()
-    service = ExplanationService(session)
-    
-    # Build context from database
-    print("\n📊 Building context from database...")
-    context = service.build_context_from_db(
-        card_id=101,
-        category="Fashion",
-        transaction_amount=Decimal("120.00"),
-        merchant_name="ZARA"
-    )
-    
-    print(f"   Card: {context.bank} {context.card_name}")
-    print(f"   Category: {context.category}")
-    print(f"   Base Rate: {float(context.base_rate * 100):.2f}%")
-    print(f"   Bonus Rate: {float(context.bonus_rate * 100) if context.bonus_rate else 'N/A'}%")
-    print(f"   Bonus Eligible: {context.is_bonus_eligible}")
-    print(f"   Total Reward: SGD {float(context.total_reward_value) if context.total_reward_value else 0:.2f}")
-    
-    # Generate explanation
-    print("\n💬 Generating explanation...")
-    request = ExplanationRequest(recommendation=context)
-    response = service.generate_explanation(request)
-    
-    print(f"\n✅ Explanation Generated:")
-    print(f"   {response.explanation}")
-    print(f"\n📋 Metadata:")
-    print(f"   Model Used: {response.model_used}")
-    print(f"   Is Fallback: {response.is_fallback}")
-    print(f"   Generation Time: {response.generation_time_ms}ms")
+    try:
+        service = ExplanationService(session)
+        
+        # Build context from database
+        print("\n📊 Building context from database...")
+        context = service.build_context_from_db(
+            card_id=101,
+            category="Fashion",
+            transaction_amount=Decimal("120.00"),
+            merchant_name="ZARA"
+        )
+        
+        print(f"   Card: {context.bank} {context.card_name}")
+        print(f"   Category: {context.category}")
+        print(f"   Base Rate: {float(context.base_rate * 100):.2f}%")
+        print(f"   Bonus Rate: {float(context.bonus_rate * 100) if context.bonus_rate else 'N/A'}%")
+        print(f"   Bonus Eligible: {context.is_bonus_eligible}")
+        print(f"   Total Reward: SGD {float(context.total_reward_value) if context.total_reward_value else 0:.2f}")
+        
+        # Generate explanation
+        print("\n💬 Generating explanation...")
+        request = ExplanationRequest(recommendation=context)
+        response = service.generate_explanation(request)
+        
+        print(f"\n✅ Explanation Generated:")
+        print(f"   {response.explanation}")
+        print(f"\n📋 Metadata:")
+        print(f"   Model Used: {response.model_used}")
+        print(f"   Is Fallback: {response.is_fallback}")
+        print(f"   Generation Time: {response.generation_time_ms}ms")
+    finally:
+        session.close()
 
 
 def demo_food_purchase():
