@@ -5,7 +5,7 @@ from typing import Dict, Any, List
 from app.services.data_service import USERS_FILE, _load_json, _save_json
 
 
-DEFAULT_USER_ID = "u_001"
+DEFAULT_USER_ID = 1
 
 
 def _load_cards_master_ids() -> List[str]:

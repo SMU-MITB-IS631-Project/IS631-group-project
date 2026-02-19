@@ -6,6 +6,7 @@ from app.models.user_owned_cards import (
     UserOwnedCardCreate,
     UserOwnedCardUpdate,
     UserOwnedCardResponse,
+    UserOwnedCarWrappedResponse,
 )
 
 from app.services.wallet_service import (
@@ -25,7 +26,7 @@ router = APIRouter(
 )
 
 
-@router.get("", response_model=UserOwnedCardResponse)
+@router.get("", response_model=UserOwnedCarWrappedResponse)
 def get_wallet(x_user_id: Optional[str] = Header(default=str(DEFAULT_USER_ID))):
     """
     Return the current user's wallet.
@@ -57,7 +58,7 @@ def get_wallet(x_user_id: Optional[str] = Header(default=str(DEFAULT_USER_ID))):
     return {"wallet": wallet_cards}
 
 
-@router.post("", status_code=status.HTTP_201_CREATED, response_model=UserOwnedCardResponse)
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=Dict[str, UserOwnedCardResponse])
 def add_wallet_card(payload: UserOwnedCardCreate):
     """
     Add a new card to the user's wallet.
@@ -106,7 +107,7 @@ def add_wallet_card(payload: UserOwnedCardCreate):
     return {"wallet_card": UserOwnedCardResponse(**card_data)}
 
 
-@router.patch("/{card_id}", response_model=UserOwnedCardResponse)
+@router.patch("/{card_id}", response_model=Dict[str, UserOwnedCardResponse])
 def update_wallet_card(card_id: str, payload: UserOwnedCardUpdate):
     """
     Update fields of an existing wallet card.
