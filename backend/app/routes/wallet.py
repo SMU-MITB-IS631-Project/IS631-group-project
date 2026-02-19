@@ -1,5 +1,5 @@
-from fastapi import APIRouter, HTTPException, status, Response
-from typing import Dict, Any
+from fastapi import APIRouter, HTTPException, status, Response, Header
+from typing import Dict, Any, Optional
 
 from app.models.wallet import (
     WalletCard,
@@ -26,7 +26,7 @@ router = APIRouter(
 
 
 @router.get("", response_model=WalletResponse)
-def get_wallet() -> Dict[str, Any]:
+def get_wallet(x_user_id: Optional[str] = Header(default=DEFAULT_USER_ID)) -> Dict[str, Any]:
     """
     Return the current user's wallet.
     
@@ -34,9 +34,9 @@ def get_wallet() -> Dict[str, Any]:
     - wallet: List of credit cards in user's wallet
     
     Security:
-    - Returns wallet for authenticated user (user_id from token)
+    - Returns wallet for authenticated user (user_id from x-user-id header)
     """
-    user_id = DEFAULT_USER_ID  # TODO: Get from auth token
+    user_id = x_user_id or DEFAULT_USER_ID
     users = get_users()
     user = users.get(user_id)
     

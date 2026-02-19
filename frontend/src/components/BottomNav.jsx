@@ -6,8 +6,8 @@ const preProfileTabs = [
 ];
 
 const postProfileTabs = [
-  { path: '/recommend', label: 'Recommend', icon: RecommendIcon },
   { path: '/dashboard', label: 'Dashboard', icon: DashboardIcon },
+  { path: '/recommend', label: 'Recommend', icon: RecommendIcon },
 ];
 
 export default function BottomNav() {
@@ -18,21 +18,25 @@ export default function BottomNav() {
   const tabs = hasProfile ? postProfileTabs : preProfileTabs;
 
   return (
-    <nav className="sticky bottom-0 left-0 right-0 bg-white border-t border-border z-50 shrink-0">
-      <div className="flex">
-        {tabs.map(tab => {
+    <nav className="sticky bottom-0 left-0 right-0 bg-gradient-to-b from-gray-50 to-gray-100 border-t-2 border-black z-50 shrink-0 relative overflow-hidden shadow-[0_-8px_24px_rgba(0,0,0,0.2),inset_0_2px_0_rgba(255,255,255,0.8),inset_0_-2px_0_rgba(0,0,0,0.1)]">
+      {/* Glossy shine overlay - more prominent */}
+      <div style={{background: 'linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.4) 40%, rgba(255,255,255,0) 100%)', opacity: 0.8}} className="absolute inset-0 pointer-events-none" />
+      <div className="flex relative z-10">
+        {tabs.map((tab, idx) => {
           const active = location.pathname === tab.path;
           return (
-            <button
-              key={tab.path}
-              onClick={() => navigate(tab.path)}
-              className={`flex-1 flex flex-col items-center py-2.5 gap-0.5 transition-colors ${
-                active ? 'text-primary' : 'text-muted'
-              }`}
-            >
-              <tab.icon active={active} />
-              <span className="text-[11px] font-medium">{tab.label}</span>
-            </button>
+            <div key={tab.path} className="flex-1 flex flex-col items-center py-2.5">
+              {idx > 0 && <div className="absolute left-1/2 top-1 bottom-1 w-0.5 bg-black/20" style={{height: '80%', top: '10%'}} />}
+              <button
+                onClick={() => navigate(tab.path)}
+                className={`flex-1 w-full flex flex-col items-center justify-center gap-0.5 transition-colors ${
+                  active ? 'text-primary' : 'text-muted'
+                }`}
+              >
+                <tab.icon active={active} />
+                <span className="text-[11px] font-medium">{tab.label}</span>
+              </button>
+            </div>
           );
         })}
       </div>
