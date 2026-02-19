@@ -135,8 +135,10 @@ class ExplanationService:
         total_reward = transaction_amount * effective_rate
         
         # Cap the reward if bonus cap exists
-        if bonus_data.get("bonus_cap_sgd") and total_reward > bonus_data["bonus_cap_sgd"]:
-            total_reward = Decimal(str(bonus_data["bonus_cap_sgd"]))
+        if bonus_data.get("bonus_cap_sgd"):
+            bonus_cap_sgd_decimal = Decimal(str(bonus_data["bonus_cap_sgd"]))
+            if total_reward > bonus_cap_sgd_decimal:
+                total_reward = bonus_cap_sgd_decimal
         
         # Step 4: Build context (type: ignore for SQLAlchemy ORM attribute access)
         return RecommendationContext(
