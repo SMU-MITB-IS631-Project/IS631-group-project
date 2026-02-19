@@ -6,9 +6,9 @@ from datetime import datetime, timedelta
 from enum import Enum as PyEnum
 
 class UserOwnedCardStatus(PyEnum):
-    Active = "Active"
-    Inactive = "Suspended"
-    Closed = "Expired"
+    active = "Active"
+    inactive = "Suspended"
+    closed = "Expired"
 
 def get_billing_cycle_date():
     # return last day of current month
@@ -27,7 +27,7 @@ class UserOwnedCard(Base):
     card_id = Column(Integer, ForeignKey("card_catalogue.card_id", ondelete="CASCADE"), nullable=False)
     card_expiry_date = Column(DateTime, default=lambda: datetime(9999,1,1), nullable=False)
     billing_cycle_refresh_date = Column(DateTime, default=get_billing_cycle_date, nullable=False)
-    status = Column(SAEnum(UserOwnedCardStatus), nullable=False, default=UserOwnedCardStatus.Active)
+    status = Column(SAEnum(UserOwnedCardStatus), nullable=False, default=UserOwnedCardStatus.active)
 
     # Relationship with UserProfile
     user_profile = relationship("UserProfile", back_populates="user_owned_cards")
@@ -40,7 +40,7 @@ class UserOwnedCardBase(BaseModel):
     card_id: int
     card_expiry_date: datetime = datetime(9999,1,1)
     billing_cycle_refresh_date: datetime = Field(default_factory=get_billing_cycle_date)
-    status: UserOwnedCardStatus = UserOwnedCardStatus.Active
+    status: UserOwnedCardStatus = UserOwnedCardStatus.active
 
 class UserOwnedCardCreate(UserOwnedCardBase):
     pass

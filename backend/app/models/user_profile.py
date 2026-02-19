@@ -6,9 +6,9 @@ from datetime import datetime
 from enum import Enum as PyEnum
 
 class BenefitsPreference(PyEnum):
-    Miles = "miles"
-    Cashback = "cashback"
-    No_preference = "no preference"
+    miles = "Miles"
+    cashback = "Cashback"
+    no_preference = "No preference"
 
 class UserProfile(Base):
     __tablename__ = "user_profile"
@@ -17,7 +17,7 @@ class UserProfile(Base):
     password_hash = Column(String, nullable=False)
     name = Column(String, nullable=True)
     email = Column(String, nullable=True, unique=True)
-    benefits_preference = Column(SAEnum(BenefitsPreference), nullable=False, default=BenefitsPreference.No_preference)
+    benefits_preference = Column(SAEnum(BenefitsPreference), nullable=False, default=BenefitsPreference.no_preference)
     created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 # Relationships with user-owned cards and transactions
@@ -42,7 +42,7 @@ class UserProfileBase(BaseModel):
     username: str
     name: str | None = None
     email: str | None = None
-    benefits_preference: BenefitsPreference = BenefitsPreference.No_preference
+    benefits_preference: BenefitsPreference = BenefitsPreference.no_preference
 
 # password in a separate model for creation because if it is in the base model, it will be exposed in responses
 class UserProfileCreate(UserProfileBase):
