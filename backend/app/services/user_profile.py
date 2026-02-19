@@ -38,12 +38,16 @@ def create_user(username: str, password: str, name: str | None = None, email: st
             except ValueError:
                 pref_enum = BenefitsPreference.No_preference
         
+        # Normalize empty strings to None for optional fields (prevents UNIQUE constraint violations)
+        normalized_name = name.strip() if name and name.strip() else None
+        normalized_email = email.strip() if email and email.strip() else None
+        
         # Create new user
         new_user = UserProfile(
             username=username,
             password_hash=password,
-            name=name,
-            email=email,
+            name=normalized_name,
+            email=normalized_email,
             benefits_preference=pref_enum
         )
         session.add(new_user)
