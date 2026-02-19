@@ -1,6 +1,4 @@
-import csv
-import os
-from typing import Dict, Any, List
+from typing import Dict, Any
 from app.db.db import SessionLocal
 from app.models.user_profile import UserProfile, BenefitsPreference
 from passlib.context import CryptContext
@@ -35,14 +33,26 @@ def get_next_available_user_id() -> int:
     finally:
         session.close()
 
-def create_user(username: str, password: str, name: str | None = None, email: str | None = None) -> Dict[str, Any]:
+def create_user(username: str, password: str, name: str | None = None, email: str | None = None, benefits_preference: str | None = None) -> Dict[str, Any]:
     """Create a new user in the database. Returns user data as dictionary."""
     session = SessionLocal()
     try:
         # Check if username already exists
         existing_user = session.query(UserProfile).filter(UserProfile.username == username).first()
         if existing_user:
-            return existing_user.to_dict()
+            raise ValueError("Username already exists")
+        
+        # Map benefits_preference string to enum
+        pref_enum = BenefitsPreference.No_preference
+        if benefits_preference:
+            try:
+                pref_enum = BenefitsPreference(benefits_preference)
+            except ValueError:
+                pref_enum = BenefitsPreference.No_preference
+        
+        # Normalize empty strings to None for optional fields (prevents UNIQUE constraint violations)
+        normalized_name = name.strip() if name and name.strip() else None
+        normalized_email = email.strip() if email and email.strip() else None
         
         # get the id for this user
         generated_id = get_next_available_user_id()
@@ -55,9 +65,9 @@ def create_user(username: str, password: str, name: str | None = None, email: st
             id = generated_id,
             username=username,
             password=hashed_password,
-            name=name,
-            email=email,
-            benefits_preference=BenefitsPreference.No_preference
+            name=normalized_name,
+            email=normalized_email,
+            benefits_preference=pref_enum
         )
         session.add(new_user)
         session.commit()

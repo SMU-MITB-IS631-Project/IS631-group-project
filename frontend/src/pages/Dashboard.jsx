@@ -22,6 +22,7 @@ export default function Dashboard() {
   const [profile, setProfile] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [monthKey, setMonthKey] = useState(getCurrentMonthKey());
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     const p = loadUserProfile();
@@ -32,13 +33,13 @@ export default function Dashboard() {
 
   // Reload transactions when returning to this page
   useEffect(() => {
-    setTransactions(loadTransactions());
+    loadTransactions().then(setTransactions);
   }, []);
 
   // Also listen for focus to refresh data
   useEffect(() => {
     function handleFocus() {
-      setTransactions(loadTransactions());
+      loadTransactions().then(setTransactions);
     }
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
@@ -53,15 +54,63 @@ export default function Dashboard() {
 
   const hasBaseline = profile?.wallet?.some(wc => (wc.cycle_spend_sgd || 0) > 0);
 
+  function handleConfirmLogout() {
+    localStorage.clear();
+    setShowLogoutModal(false);
+    navigate('/');
+  }
+
   return (
-    <div className="pb-6 px-4 pt-6">
-      {/* Header */}
-      <div className="mb-4 px-[14px]">
-        <h1 className="text-[22px] font-semibold tracking-tight text-primary-dark">Dashboard</h1>
+    <div className="pb-6 px-4 pt-6 relative">
+      {/* Avatar - Top Left */}
+      <div className="absolute top-6 left-6 w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-lg">
+        <img src="https://tse4.mm.bing.net/th/id/OIP.mWxq1EykV6nxFaftjOdFyQHaHa?rs=1&pid=ImgDetMain&o=7&rm=3" alt="Avatar" className="w-full h-full object-cover" />
       </div>
 
+      {/* Logout Button - Top Right */}
+      <button
+        type="button"
+        onClick={() => setShowLogoutModal(true)}
+        className="absolute top-6 right-6 w-10 h-10 rounded-full border border-border hover:border-red-400 text-muted hover:text-red-500 font-medium transition-all bg-white hover:bg-red-50 flex items-center justify-center"
+        title="Logout"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </button>
+
+      {/* Header */}
+      <div className="mb-4 px-[14px] pt-20">
+        <h1 className="text-[22px] font-semibold tracking-tight text-white">Dashboard</h1>
+      </div>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="w-full max-w-[280px] p-6 bg-gradient-to-b from-gray-50 to-gray-100 rounded-[18px] shadow-[0_10px_32px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.5)]">
+            <h2 className="text-lg font-semibold text-primary-dark mb-2">Logout?</h2>
+            <p className="text-sm text-muted mb-6">Are you sure you want to logout?</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLogoutModal(false)}
+                className="flex-1 h-10 border border-border text-text font-medium rounded-lg hover:bg-white/60 transition-all text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmLogout}
+                className="flex-1 h-10 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-all text-sm"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Month Selector */}
-      <div className="flex items-center justify-center gap-4 mb-5">
+      <div className="flex items-center justify-center gap-4 mb-5 mt-6">
         {showArrows && (
           <button
             type="button"
