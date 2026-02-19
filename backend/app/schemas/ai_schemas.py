@@ -25,20 +25,6 @@ class BenefitType(str, Enum):
     BOTH = "BOTH"
 
 
-class TransactionCategory(str, Enum):
-    """Transaction categories for bonus matching"""
-    Food = "Food"
-    Transport = "Transport"
-    Entertainment = "Entertainment"
-    Fashion = "Fashion"
-    All = "All"
-    # Additional transaction categories
-    Travel = "Travel"
-    Shopping = "Shopping"
-    Bills = "Bills"
-    Others = "Others"
-
-
 class RecommendationContext(BaseModel):
     """
     Core DTO containing all ground truth data for explanation generation.
