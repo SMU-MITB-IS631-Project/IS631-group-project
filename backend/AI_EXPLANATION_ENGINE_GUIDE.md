@@ -294,11 +294,13 @@ LLM_TIMEOUT=5               # Quick fallback on delay
 
 ## 🏆 SCRUM-258 Completion Checklist
 
+> Note: Any test file paths referenced in this guide (for example `backend/tests/test_explanation_service.py`) are illustrative. The repository does not currently include a `backend/tests/` directory; you will need to create the `backend/tests/` folder and corresponding test modules before running `pytest`.
+
 - [x] `.env.example` with LLM configuration
 - [x] `requirements.txt` updated with pytest dependencies
 - [x] `ai_schemas.py` with RecommendationContext DTO
 - [x] `explanation_service.py` with DB queries and LLM orchestration
-- [x] TDD test suite with 3 core tests + edge cases
+- [x] TDD test suite with 3 core tests + edge cases **(to be implemented in `backend/tests/` as described above)**
 - [x] API endpoint `POST /api/v1/card-reasoner/explain-db`
 - [x] Graceful fallback for missing API key
 - [x] Anti-hallucination validation
