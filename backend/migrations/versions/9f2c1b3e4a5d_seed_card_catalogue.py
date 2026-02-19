@@ -32,7 +32,7 @@ def upgrade() -> None:
         VALUES
           (1, 'Standard_Chartered', 'Standard Chartered Simply Cash', 'Cashback', 0.015000, 'valid'),
           (2, 'DBS', 'DBS Woman''s World Card', 'Miles', 1.200000, 'valid'),
-          (3, 'UOB', 'UOB PRIMI Miles Card', 'Miles', 1.200000, 'valid'),
+          (3, 'UOB', 'UOB PRVI Miles Card', 'Miles', 1.200000, 'valid'),
           (4, 'UOB', 'UOB One Card', 'Cashback', 0.003000, 'valid');
         """
     )
