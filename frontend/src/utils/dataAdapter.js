@@ -138,9 +138,10 @@ async function fetchUserCards(userId) {
     card_id: convertBackendCardId(card.card_id),
     refresh_day_of_month: card.refresh_day_of_month,
     annual_fee_billing_date: card.annual_fee_billing_date,
-    cycle_spend_sgd: card.cycle_spend_sgd || 0,
   }));
 }
+
+
 
 async function postRegistrationTransactions(userId, walletCards) {
   const payloads = (walletCards || [])
@@ -181,7 +182,6 @@ async function postUserCards(userId, walletCards) {
         card_id: String(convertCardId(w.card_id)),
         refresh_day_of_month: parseInt(w.refresh_day_of_month, 10) || 1,
         annual_fee_billing_date: w.annual_fee_billing_date,
-        cycle_spend_sgd: parseFloat(w.cycle_spend_sgd) || 0,
       },
     }));
 
@@ -229,13 +229,19 @@ export async function registerUser(username, password, name, email, preference, 
     setCurrentUserId(data.id);
     
     // Save profile to localStorage for session persistence
+    // Filter out cycle_spend_sgd since it's stored as transactions, not wallet
+    const walletForStorage = (wallet || []).map(w => ({
+      card_id: w.card_id,
+      refresh_day_of_month: w.refresh_day_of_month,
+      annual_fee_billing_date: w.annual_fee_billing_date,
+    }));
     const profile = {
       user_id: data.id,
       username: data.username,
       name: data.name,
       email: data.email,
       preference: data.benefits_preference || 'miles',
-      wallet: wallet || [],
+      wallet: walletForStorage,
       created_date: data.created_date,
     };
     
@@ -295,13 +301,19 @@ export async function loginUser(username, password) {
     }
 
     // Save the profile to localStorage for session persistence
+    // Filter out cycle_spend_sgd since it's stored as transactions, not wallet
+    const walletForStorage = (wallet || []).map(w => ({
+      card_id: w.card_id,
+      refresh_day_of_month: w.refresh_day_of_month,
+      annual_fee_billing_date: w.annual_fee_billing_date,
+    }));
     const profile = {
       user_id: data.id,
       username: data.username,
       name: data.name,
       email: data.email,
       preference: data.benefits_preference || 'miles',
-      wallet,
+      wallet: walletForStorage,
       created_date: data.created_date,
     };
     
@@ -434,15 +446,11 @@ export function filterTransactionsByMonth(transactions, monthKey) {
 
 export function getMonthSummary(transactions, cardsMaster, wallet = []) {
   const txnTotal = transactions.reduce((sum, t) => sum + (t.amount_sgd || 0), 0);
-  const baselineTotal = wallet.reduce((sum, wc) => sum + (wc.cycle_spend_sgd || 0), 0);
-  const total = txnTotal + baselineTotal;
+  const total = txnTotal;
   const count = transactions.length;
 
-  // Top card by spend (txn spend + baseline per card)
+  // Top card by spend (txn spend only)
   const cardSpend = {};
-  wallet.forEach(wc => {
-    cardSpend[wc.card_id] = (cardSpend[wc.card_id] || 0) + (wc.cycle_spend_sgd || 0);
-  });
   transactions.forEach(t => {
     cardSpend[t.card_id] = (cardSpend[t.card_id] || 0) + (t.amount_sgd || 0);
   });
@@ -464,9 +472,9 @@ export function getAvailableMonths(transactions) {
   return Array.from(keys).sort();
 }
 
-export function getCardSpendForMonth(transactions, cardId, cycleSpend = 0) {
+export function getCardSpendForMonth(transactions, cardId) {
   const txnSpend = transactions
     .filter(t => t.card_id === cardId)
     .reduce((sum, t) => sum + (t.amount_sgd || 0), 0);
-  return txnSpend + cycleSpend;
+  return txnSpend;
 }

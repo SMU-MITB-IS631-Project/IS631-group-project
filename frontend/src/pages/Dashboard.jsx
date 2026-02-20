@@ -53,8 +53,6 @@ export default function Dashboard() {
 
   const topCardMaster = cardsMaster.find(c => c.card_id === summary.topCardId);
 
-  const hasBaseline = profile?.wallet?.some(wc => (wc.cycle_spend_sgd || 0) > 0);
-
   function handleConfirmLogout() {
     localStorage.clear();
     setShowLogoutModal(false);
@@ -163,30 +161,6 @@ export default function Dashboard() {
 
       {/* Transactions List */}
       <CardSurface className="mb-4">
-        {hasBaseline && (
-          <h2 className="text-xs font-semibold text-muted mb-3 uppercase tracking-wide">Prior Spend</h2>
-        )}
-
-        {/* Baseline rows (display-only, from wallet cycle_spend_sgd) */}
-        {profile?.wallet?.filter(wc => (wc.cycle_spend_sgd || 0) > 0).map(wc => {
-          const card = cardsMaster.find(c => c.card_id === wc.card_id);
-          return (
-            <div key={`baseline-${wc.card_id}`} className="flex items-center justify-between gap-3 mb-3 opacity-70">
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-text truncate">
-                  {card?.card_name || wc.card_id}
-                </div>
-              </div>
-              <div className="text-sm font-semibold text-text shrink-0 tabular-nums">
-                ${(wc.cycle_spend_sgd || 0).toFixed(2)}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Stronger divider between baseline and transactions */}
-        {hasBaseline && <hr className="border-gray-300/70 my-3" />}
-
         <h2 className="text-xs font-semibold text-muted mb-3 uppercase tracking-wide">Transactions</h2>
 
         {displayTxns.length === 0 ? (
@@ -223,7 +197,7 @@ export default function Dashboard() {
           <div className="space-y-3">
             {profile.wallet.map(wc => {
               const card = cardsMaster.find(c => c.card_id === wc.card_id);
-              const spend = getCardSpendForMonth(monthTxns, wc.card_id, wc.cycle_spend_sgd || 0);
+              const spend = getCardSpendForMonth(monthTxns, wc.card_id);
               return (
                 <div key={wc.card_id} className="flex items-center gap-3">
                   <CardThumbnail imagePath={card?.image_path} name={card?.card_name} size="md" />
