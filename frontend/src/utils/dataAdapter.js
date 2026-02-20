@@ -345,11 +345,13 @@ export async function loadTransactions() {
     const data = await response.json();
     const transactions = data.transactions || [];
     
-    // Convert backend integer card_ids to frontend string card_ids
-    return transactions.map(txn => ({
-      ...txn,
-      card_id: convertBackendCardId(txn.card_id)
-    }));
+    // Filter out deleted_with_card transactions and convert card IDs
+    return transactions
+      .filter(txn => txn.status !== 'deleted_with_card')
+      .map(txn => ({
+        ...txn,
+        card_id: convertBackendCardId(txn.card_id)
+      }));
   } catch (error) {
     console.error('Error loading transactions:', error);
     // Fallback to localStorage if API fails

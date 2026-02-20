@@ -1,17 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from typing import Dict, Any, Optional
+from pydantic import BaseModel
 
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
-from app.models.transaction import TransactionRequest
+from app.models.transaction import TransactionRequest, TransactionStatus
 from app.services.transaction_service import ServiceError, TransactionService
 
 router = APIRouter(
     prefix="/api/v1/transactions",
     tags=["transactions"]
 )
+
+
+class TransactionStatusUpdate(BaseModel):
+    """Update transaction status"""
+    status: str  # "active" or "deleted_with_card"
 
 
 def _unauthorized_response() -> JSONResponse:
@@ -157,3 +163,54 @@ def get_user_transactions_by_id(
                 }
             },
         )
+
+
+@router.put("/{transaction_id}")
+def update_transaction_status(
+    transaction_id: int,
+    status_update: TransactionStatusUpdate,
+    http_request: Request,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Update a transaction's status (e.g., mark as deleted_with_card).
+    
+    Path Parameters:
+    - transaction_id: The transaction ID to update
+    
+    Request body:
+    {
+        "status": "deleted_with_card"
+    }
+    """
+    user_id = http_request.headers.get("x-user-id")
+    if not user_id:
+        return _unauthorized_response()
+    
+    try:
+        service = TransactionService(db)
+        transaction = service.update_transaction_status(user_id, transaction_id, status_update.status)
+        return {"transaction": transaction}
+    except ServiceError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "details": exc.details,
+                }
+            },
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": str(exc),
+                    "details": {}
+                }
+            }
+        )
+

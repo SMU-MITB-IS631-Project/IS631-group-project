@@ -23,6 +23,7 @@ export default function Dashboard() {
   const [transactions, setTransactions] = useState([]);
   const [monthKey, setMonthKey] = useState(getCurrentMonthKey());
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [deleteCardModal, setDeleteCardModal] = useState({ show: false, cardId: null, cardName: null });
 
   useEffect(() => {
     const p = loadUserProfile();
@@ -57,6 +58,34 @@ export default function Dashboard() {
     localStorage.clear();
     setShowLogoutModal(false);
     navigate('/');
+  }
+
+  async function handleDeleteCard(cardId) {
+    try {
+      const userId = localStorage.getItem('cardtrack_user_id');
+      if (!userId) {
+        console.error('No user ID found');
+        return;
+      }
+
+      const response = await fetch(`http://localhost:8000/api/v1/user_cards/${cardId}`, {
+        method: 'DELETE',
+        headers: {
+          'x-user-id': userId,
+        },
+      });
+
+      if (response.ok || response.status === 204) {
+        // Card deleted successfully, refresh profile
+        const updatedProfile = loadUserProfile();
+        setProfile(updatedProfile);
+        setDeleteCardModal({ show: false, cardId: null, cardName: null });
+      } else {
+        console.error('Failed to delete card:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Error deleting card:', error);
+    }
   }
 
   return (
@@ -104,6 +133,30 @@ export default function Dashboard() {
                 className="flex-1 h-10 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-all text-sm"
               >
                 Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Card Confirmation Modal */}
+      {deleteCardModal.show && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="w-full max-w-[280px] p-6 bg-gradient-to-b from-gray-50 to-gray-100 rounded-[18px] shadow-[0_10px_32px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.5)]">
+            <h2 className="text-lg font-semibold text-primary-dark mb-2">Delete Card?</h2>
+            <p className="text-sm text-muted mb-6">{profile?.username || 'User'}, are you sure you want to delete <span className="font-medium">{deleteCardModal.cardName}</span>?</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteCardModal({ show: false, cardId: null, cardName: null })}
+                className="flex-1 h-10 border border-border text-text font-medium rounded-lg hover:bg-white/60 transition-all text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteCard(deleteCardModal.cardId)}
+                className="flex-1 h-10 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-all text-sm"
+              >
+                Delete
               </button>
             </div>
           </div>
@@ -200,7 +253,7 @@ export default function Dashboard() {
               const card = cardsMaster.find(c => c.card_id === wc.card_id);
               const spend = getCardSpendForMonth(monthTxns, wc.card_id);
               return (
-                <div key={wc.card_id} className="flex items-center gap-3">
+                <div key={wc.card_id} className="flex items-center gap-3 group">
                   <CardThumbnail imagePath={card?.image_path} name={card?.card_name} size="md" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-text truncate">{card?.card_name || wc.card_id}</div>
@@ -211,6 +264,21 @@ export default function Dashboard() {
                   <div className="text-sm font-semibold text-text">
                     ${spend.toFixed(2)}
                   </div>
+                  <button
+                    type="button"
+                    className="ml-2 p-2 rounded-lg text-muted hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
+                    title="Delete card"
+                    onClick={() => {
+                      setDeleteCardModal({ show: true, cardId: wc.card_id, cardName: card?.card_name || wc.card_id });
+                    }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      <line x1="10" y1="11" x2="10" y2="17"/>
+                      <line x1="14" y1="11" x2="14" y2="17"/>
+                    </svg>
+                  </button>
                 </div>
               );
             })}
