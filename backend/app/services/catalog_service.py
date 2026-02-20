@@ -1,4 +1,4 @@
-from sqlite3 import IntegrityError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.models.card_catalogue import CardCatalogue
 from app.models.user_profile import UserProfile
@@ -33,9 +33,11 @@ class CatalogService:
         try:
             self.db.add(user_owned_card)
             self.db.commit()
-        except IntegrityError:
+        except IntegrityError as exc:
             self.db.rollback()
-            raise
+            raise ValueError(
+                "Failed to add user-owned card due to a database constraint violation."
+            ) from exc
 
         self.db.refresh(user_owned_card)
         return user_owned_card
