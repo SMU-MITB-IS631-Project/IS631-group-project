@@ -6,7 +6,7 @@ from passlib.context import CryptContext
 
 from app.services.data_service import USERS_FILE, _load_json, _save_json
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -20,6 +20,14 @@ def get_users() -> Dict[str, Any]:
     try:
         users = session.query(UserProfile).all()
         return {user.id: user.to_dict() for user in users}
+    finally:
+        session.close()
+
+def get_user_by_username(username: str) -> UserProfile | None:
+    """Fetch a user by username from the database."""
+    session = SessionLocal()
+    try:
+        return session.query(UserProfile).filter(UserProfile.username == username).first()
     finally:
         session.close()
 
@@ -62,9 +70,9 @@ def create_user(username: str, password: str, name: str | None = None, email: st
         
         # Create new user
         new_user = UserProfile(
-            id = generated_id,
+            id=generated_id,
             username=username,
-            password=hashed_password,
+            password_hash=hashed_password,
             name=normalized_name,
             email=normalized_email,
             benefits_preference=pref_enum

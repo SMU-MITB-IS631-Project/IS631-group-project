@@ -47,12 +47,11 @@ export default function Dashboard() {
 
   const availableMonths = getAvailableMonths(transactions);
   const monthTxns = filterTransactionsByMonth(transactions, monthKey);
+  const displayTxns = monthTxns.filter(txn => (txn.item || '').trim().toLowerCase() !== 'registration');
   const summary = getMonthSummary(monthTxns, cardsMaster, profile?.wallet || []);
   const showArrows = availableMonths.length > 1;
 
   const topCardMaster = cardsMaster.find(c => c.card_id === summary.topCardId);
-
-  const hasBaseline = profile?.wallet?.some(wc => (wc.cycle_spend_sgd || 0) > 0);
 
   function handleConfirmLogout() {
     localStorage.clear();
@@ -83,6 +82,7 @@ export default function Dashboard() {
 
       {/* Header */}
       <div className="mb-4 px-[14px] pt-20">
+        <p className="text-sm text-white/80 mb-1">Hello, {profile?.username || 'User'}!</p>
         <h1 className="text-[22px] font-semibold tracking-tight text-white">Dashboard</h1>
       </div>
 
@@ -162,37 +162,13 @@ export default function Dashboard() {
 
       {/* Transactions List */}
       <CardSurface className="mb-4">
-        {hasBaseline && (
-          <h2 className="text-xs font-semibold text-muted mb-3 uppercase tracking-wide">Prior Spend</h2>
-        )}
-
-        {/* Baseline rows (display-only, from wallet cycle_spend_sgd) */}
-        {profile?.wallet?.filter(wc => (wc.cycle_spend_sgd || 0) > 0).map(wc => {
-          const card = cardsMaster.find(c => c.card_id === wc.card_id);
-          return (
-            <div key={`baseline-${wc.card_id}`} className="flex items-center justify-between gap-3 mb-3 opacity-70">
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-text truncate">
-                  {card?.card_name || wc.card_id}
-                </div>
-              </div>
-              <div className="text-sm font-semibold text-text shrink-0 tabular-nums">
-                ${(wc.cycle_spend_sgd || 0).toFixed(2)}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Stronger divider between baseline and transactions */}
-        {hasBaseline && <hr className="border-gray-300/70 my-3" />}
-
         <h2 className="text-xs font-semibold text-muted mb-3 uppercase tracking-wide">Transactions</h2>
 
-        {monthTxns.length === 0 ? (
+        {displayTxns.length === 0 ? (
           <p className="text-sm text-muted text-center py-4">No transactions yet. Log a transaction from Recommend.</p>
         ) : (
           <div className="divide-y divide-gray-200/60">
-            {monthTxns.map(txn => {
+            {displayTxns.map(txn => {
               const card = cardsMaster.find(c => c.card_id === txn.card_id);
               return (
                 <div key={txn.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
@@ -222,7 +198,7 @@ export default function Dashboard() {
           <div className="space-y-3">
             {profile.wallet.map(wc => {
               const card = cardsMaster.find(c => c.card_id === wc.card_id);
-              const spend = getCardSpendForMonth(monthTxns, wc.card_id, wc.cycle_spend_sgd || 0);
+              const spend = getCardSpendForMonth(monthTxns, wc.card_id);
               return (
                 <div key={wc.card_id} className="flex items-center gap-3">
                   <CardThumbnail imagePath={card?.image_path} name={card?.card_name} size="md" />

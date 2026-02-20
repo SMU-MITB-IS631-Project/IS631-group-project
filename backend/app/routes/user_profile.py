@@ -14,7 +14,8 @@ from app.models.user_profile import (
 )
 from app.services.user_profile import (
     get_users,
-    create_user
+    create_user,
+    get_user_by_username
 )
 
 router = APIRouter(
@@ -224,26 +225,6 @@ def update_user_profile(user_id: str, payload: UserProfileUpdate) -> Dict[str, A
         "created_date": user["created_date"],
     }
 
-@router.post("/login", response_model=LoginResponse)
-def user_profile_login(payload: LoginPayload):
-    """
-    Input: username and password
-
-    Logic: 
-    If username does not exist, return error
-    If username exists, check hashed password
-    If password incorrect, return error
-    If username and password correct, return authorised/success
-    """
-    username = payload.username
-    password = payload.password
-
-    if not username or not password:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username and password are required."
-        )
-
 @router.post("/login", response_model=UserProfileResponse, tags=["user_profile"])
 def login_user(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -285,14 +266,7 @@ def login_user(payload: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
     
-    users = get_users()
-    
-    # Find user by username
-    user = None
-    for u in users.values():
-        if u.get("username") == username:
-            user = u
-            break
+    user = get_user_by_username(username)
     
     if not user:
         raise HTTPException(
@@ -306,7 +280,7 @@ def login_user(payload: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
         
-    if not verify_password(password, user["password"]):
+    if not verify_password(password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -319,10 +293,10 @@ def login_user(payload: Dict[str, Any]) -> Dict[str, Any]:
         )
     
     return {
-        "id": user["id"],
-        "username": user["username"],
-        "name": user.get("name"),
-        "email": user.get("email"),
-        "benefits_preference": user.get("benefits_preference"),
-        "created_date": user["created_date"],
+        "id": user.id,
+        "username": user.username,
+        "name": user.name,
+        "email": user.email,
+        "benefits_preference": user.benefits_preference,
+        "created_date": user.created_date,
     }

@@ -24,6 +24,16 @@ class UserProfile(Base):
     user_owned_cards = relationship("UserOwnedCard", back_populates="user_profile", cascade="all, delete-orphan")
     user_transactions = relationship("UserTransaction", back_populates="user_profile", cascade="all, delete-orphan")
 
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "username": self.username,
+            "name": self.name,
+            "email": self.email,
+            "benefits_preference": self.benefits_preference.value if self.benefits_preference else None,
+            "created_date": self.created_date,
+        }
+
 # Pydantic Models for Request/Response Validation
 class UserProfileBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
