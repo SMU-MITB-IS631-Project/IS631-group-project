@@ -12,7 +12,7 @@ class CatalogService:
         """Retrieve all cards from the database."""
         return self.db.query(CardCatalogue).all()
     
-    def add_user_owned_card(self, user_id: int, card_id: int, card_expiry_date=None):
+    def add_user_owned_card(self, user_id: int, card_id: int, card_expiry_date=None, billing_cycle_refresh_date=None):
         """Add a card to a user's owned cards."""
         # Check if the user exists
         user = self.db.query(UserProfile).filter(UserProfile.id == user_id).first()
@@ -27,7 +27,8 @@ class CatalogService:
             user_id=user_id,
             card_id=card_id,
             status=UserOwnedCardStatus.Active,
-            card_expiry_date=card_expiry_date if card_expiry_date else None
+            card_expiry_date=card_expiry_date if card_expiry_date else None,
+            billing_cycle_refresh_date=billing_cycle_refresh_date if billing_cycle_refresh_date else None
         )
         try:
             self.db.add(user_owned_card)
