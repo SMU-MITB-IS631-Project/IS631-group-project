@@ -38,7 +38,7 @@ class ExplainFromDBRequest(BaseModel):
     Service queries all data from database using card_id + category.
     """
     card_id: int = Field(..., description="Card ID from card_catalogue")
-    category: str = Field(..., description="Transaction category")
+    category: str = Field(..., description="Transaction category. Allowed values: Food, Transport, Entertainment, Fashion, All.")
     transaction_amount: Decimal = Field(..., gt=0, description="Transaction amount in SGD")
     merchant_name: str | None = Field(None, description="Optional merchant name")
     user_id: int | None = Field(None, description="Optional user ID for audit")

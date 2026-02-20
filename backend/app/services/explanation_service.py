@@ -24,7 +24,7 @@ from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from openai import OpenAI, APIError, APITimeoutError
 
-from app.models.card_catalogue import CardCatalogue, BenefitTypeEnum
+from app.models.card_catalogue import CardCatalogue
 from app.models.card_bonus_category import CardBonusCategory, BonusCategory
 from app.schemas.ai_schemas import (
     RecommendationContext,

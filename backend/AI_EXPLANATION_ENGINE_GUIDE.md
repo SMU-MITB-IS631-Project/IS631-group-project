@@ -25,11 +25,11 @@ A production-grade, TDD-driven AI Explanation Engine that generates natural lang
   - `_generate_template_fallback()`: Factual explanations without LLM
 
 ### ✅ Step 3: TDD Setup
-- **Created**: `backend/tests/test_explanation_service.py`
-  - ✓ Test 1: Prompt contains correct bonus_rate from DB
-  - ✓ Test 2: Fallback on LLM error returns factual template
-  - ✓ Test 3: No rate hallucinations (validates against DB)
-  - Additional edge cases: missing cards, bonus prioritization, response structure
+- **Planned**: `backend/tests/test_explanation_service.py`
+  - Planned Test 1: Prompt contains correct bonus_rate from DB
+  - Planned Test 2: Fallback on LLM error returns factual template
+  - Planned Test 3: No rate hallucinations (validates against DB)
+  - Additional planned edge cases: missing cards, bonus prioritization, response structure
 
 ### ✅ Step 4: API Integration
 - **Updated**: `backend/app/routes/card_reasoner.py`

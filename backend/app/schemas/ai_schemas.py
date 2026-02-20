@@ -16,15 +16,7 @@ from typing import Optional, List
 from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator, ConfigDict
-
-
-class BenefitType(str, Enum):
-    """Card benefit types (matches CardCatalogue.benefit_type)"""
-    MILES = "MILES"
-    CASHBACK = "CASHBACK"
-    BOTH = "BOTH"
-
-
+from app.models.card_catalogue import BenefitTypeEnum as BenefitType
 class RecommendationContext(BaseModel):
     """
     Core DTO containing all ground truth data for explanation generation.
