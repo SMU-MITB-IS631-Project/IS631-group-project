@@ -1,4 +1,4 @@
-from sqlite3 import IntegrityError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.models.card_catalogue import CardCatalogue
 from app.models.user_profile import UserProfile
