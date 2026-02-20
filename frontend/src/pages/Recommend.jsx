@@ -208,11 +208,11 @@ export default function Recommend() {
       {showSuccessModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="w-full max-w-[280px] p-6 bg-gradient-to-b from-gray-50 to-gray-100 rounded-[18px] shadow-[0_10px_32px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.5)]">
-            <h2 className="text-lg font-semibold text-success mb-2">Transaction Saved! ✓</h2>
+            <h2 className="text-lg font-semibold text-primary mb-2">Transaction Saved! ✓</h2>
             <p className="text-sm text-muted mb-6">Your transaction has been saved successfully.</p>
             <button
               onClick={handleConfirmSuccess}
-              className="w-full h-10 bg-success text-white font-medium rounded-lg hover:bg-green-700 transition-all text-sm"
+              className="w-full h-10 bg-primary text-white font-medium rounded-lg hover:bg-primary-dark transition-all text-sm"
             >
               Continue
             </button>
