@@ -1,4 +1,5 @@
 card_id,card_name,issuer,reward_type,image_path
+sc,Standard Chartered Simply Cash,StandardChartered,cashback,/assets/cards/standard-chartered.png
 ww,DBS Woman's World Card,DBS,miles,/assets/cards/dbs_ww.png
 prvi,UOB PRVI Miles Card,UOB,miles,/assets/cards/privi_miles.png
 uobone,UOB One Card,UOB,cashback,/assets/cards/uobone.png
