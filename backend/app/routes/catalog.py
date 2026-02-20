@@ -36,7 +36,6 @@ def add_user_owned_card(
     billing_cycle_refresh_date: datetime | None = None,
     service: CatalogService = Depends(get_catalog_service),
 ):
-    user_id = http_request.headers.get("x-user-id")
     if not user_id:
         return _unauthorized_response()
     
