@@ -1,11 +1,16 @@
 #routes user_profile.py
 from fastapi import APIRouter, HTTPException, status
 from typing import Dict, Any
+from app.services.user_profile import verify_password
+from app.db.db import SessionLocal
 
 from app.models.user_profile import (
     UserProfileResponse,
     UserProfileCreate,
-    UserProfileUpdate
+    UserProfileBase,
+    UserProfileUpdate,
+    LoginPayload,
+    LoginResponse
 )
 from app.services.user_profile import (
     get_users,
@@ -126,7 +131,6 @@ def create_user_profile(payload: UserProfileCreate) -> Dict[str, Any]:
         "created_date": new_user["created_date"],
     }
 
-# ...existing code...
 @router.patch("/{user_id}", response_model=UserProfileResponse)
 def update_user_profile(user_id: str, payload: UserProfileUpdate) -> Dict[str, Any]:
     """
@@ -220,6 +224,25 @@ def update_user_profile(user_id: str, payload: UserProfileUpdate) -> Dict[str, A
         "created_date": user["created_date"],
     }
 
+@router.post("/login", response_model=LoginResponse)
+def user_profile_login(payload: LoginPayload):
+    """
+    Input: username and password
+
+    Logic: 
+    If username does not exist, return error
+    If username exists, check hashed password
+    If password incorrect, return error
+    If username and password correct, return authorised/success
+    """
+    username = payload.username
+    password = payload.password
+
+    if not username or not password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username and password are required."
+        )
 
 @router.post("/login", response_model=UserProfileResponse, tags=["user_profile"])
 def login_user(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -228,12 +251,15 @@ def login_user(payload: Dict[str, Any]) -> Dict[str, Any]:
     
     Request body:
     - username: str
+    - password: str
     
     Returns:
-    - User profile if user exists
+    - User profile if credentials are valid
     - 404 error if user doesn't exist
+    - 401 error if password is invalid
     """
     username = payload.get("username", "").strip()
+    password = payload.get("password", "")
     
     if not username:
         raise HTTPException(
@@ -242,6 +268,18 @@ def login_user(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "error": {
                     "code": "INVALID_REQUEST",
                     "message": "Username is required.",
+                    "details": {}
+                }
+            }
+        )
+        
+    if not password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "Password is required.",
                     "details": {}
                 }
             }
@@ -264,6 +302,18 @@ def login_user(payload: Dict[str, Any]) -> Dict[str, Any]:
                     "code": "NOT_FOUND",
                     "message": "User not found.",
                     "details": {"username": username}
+                }
+            }
+        )
+        
+    if not verify_password(password, user["password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Invalid username or password.",
+                    "details": {}
                 }
             }
         )
