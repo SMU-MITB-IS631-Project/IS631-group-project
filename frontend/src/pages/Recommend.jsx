@@ -163,6 +163,7 @@ export default function Recommend() {
 
       {/* Header */}
       <div className="mb-6 px-[14px] pt-20">
+        <p className="text-sm text-white/80 mb-1">Hello, {profile?.username || 'User'}!</p>
         <h1 className="text-[22px] font-semibold tracking-tight text-white">New Transaction</h1>
         <p className="text-sm text-white mt-1 leading-snug">Enter details to get the best card recommendation.</p>
       </div>

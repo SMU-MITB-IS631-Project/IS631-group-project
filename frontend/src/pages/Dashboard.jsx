@@ -82,6 +82,7 @@ export default function Dashboard() {
 
       {/* Header */}
       <div className="mb-4 px-[14px] pt-20">
+        <p className="text-sm text-white/80 mb-1">Hello, {profile?.username || 'User'}!</p>
         <h1 className="text-[22px] font-semibold tracking-tight text-white">Dashboard</h1>
       </div>
 
