@@ -445,13 +445,14 @@ export function filterTransactionsByMonth(transactions, monthKey) {
 }
 
 export function getMonthSummary(transactions, cardsMaster, wallet = []) {
-  const txnTotal = transactions.reduce((sum, t) => sum + (t.amount_sgd || 0), 0);
+  const displayTxns = transactions.filter(t => (t.item || '').trim().toLowerCase() !== 'registration');
+  const txnTotal = displayTxns.reduce((sum, t) => sum + (t.amount_sgd || 0), 0);
   const total = txnTotal;
-  const count = transactions.length;
+  const count = displayTxns.length;
 
   // Top card by spend (txn spend only)
   const cardSpend = {};
-  transactions.forEach(t => {
+  displayTxns.forEach(t => {
     cardSpend[t.card_id] = (cardSpend[t.card_id] || 0) + (t.amount_sgd || 0);
   });
 
