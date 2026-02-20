@@ -1,8 +1,13 @@
 import os
 import sys
 
+from dotenv import load_dotenv
+
 # Add backend directory to path
 sys.path.insert(0, os.path.dirname(__file__))
+
+# Load environment variables from backend/.env (if present)
+load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
