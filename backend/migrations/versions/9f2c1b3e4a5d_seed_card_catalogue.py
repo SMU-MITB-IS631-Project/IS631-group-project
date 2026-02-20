@@ -30,10 +30,10 @@ def upgrade() -> None:
         """
         INSERT INTO card_catalogue (card_id, bank, card_name, benefit_type, base_benefit_rate, status)
         VALUES
-          (1, 'Standard_Chartered', 'Standard Chartered Simply Cash', 'Cashback', 0.015000, 'valid'),
-          (2, 'DBS', 'DBS Woman''s World Card', 'Miles', 1.200000, 'valid'),
-          (3, 'UOB', 'UOB PRVI Miles Card', 'Miles', 1.200000, 'valid'),
-          (4, 'UOB', 'UOB One Card', 'Cashback', 0.003000, 'valid');
+          (1, 'Standard_Chartered', 'Standard Chartered Simply Cash', 'CASHBACK', 0.015000, 'VALID'),
+          (2, 'DBS', 'DBS Woman''s World Card', 'MILES', 1.200000, 'VALID'),
+          (3, 'UOB', 'UOB PRVI Miles Card', 'MILES', 1.200000, 'VALID'),
+          (4, 'UOB', 'UOB One Card', 'CASHBACK', 0.003000, 'VALID');
         """
     )
 
