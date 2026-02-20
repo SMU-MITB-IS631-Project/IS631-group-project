@@ -33,9 +33,11 @@ class CatalogService:
         try:
             self.db.add(user_owned_card)
             self.db.commit()
-        except IntegrityError:
+        except IntegrityError as exc:
             self.db.rollback()
-            raise
+            raise ValueError(
+                "Failed to add user-owned card due to a database constraint violation."
+            ) from exc
 
         self.db.refresh(user_owned_card)
         return user_owned_card
