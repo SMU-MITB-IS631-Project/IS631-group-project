@@ -15,3 +15,5 @@ pytest-mock==3.14.0
 pytest-asyncio==0.24.0
 
 passlib[bcrypt]
+passlib[bcrypt]
+bcrypt==3.2.2
