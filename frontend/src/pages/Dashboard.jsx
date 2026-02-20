@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import CardSurface from '../components/CardSurface';
 import { CardThumbnail } from '../components/CardAutocomplete';
 import {
-  loadCardsMaster, loadUserProfile, loadTransactions,
+  loadCardsMaster, loadUserProfileFromAPI, loadTransactions,
   getCurrentMonthKey, shiftMonth, formatMonthLabel,
   filterTransactionsByMonth, getMonthSummary, getCardSpendForMonth,
   getAvailableMonths,
@@ -23,13 +23,16 @@ export default function Dashboard() {
   const [transactions, setTransactions] = useState([]);
   const [monthKey, setMonthKey] = useState(getCurrentMonthKey());
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const [deleteCardModal, setDeleteCardModal] = useState({ show: false, cardId: null, cardName: null });
+  const [deleteCardModal, setDeleteCardModal] = useState({ show: false, cardId: null, cardName: null, isDeleting: false });
 
   useEffect(() => {
-    const p = loadUserProfile();
-    if (!p) { navigate('/register'); return; }
-    setProfile(p);
-    loadCardsMaster().then(setCardsMaster);
+    const loadData = async () => {
+      const p = await loadUserProfileFromAPI();
+      if (!p) { navigate('/register'); return; }
+      setProfile(p);
+      loadCardsMaster().then(setCardsMaster);
+    };
+    loadData();
   }, []);
 
   // Reload transactions when returning to this page
@@ -62,9 +65,13 @@ export default function Dashboard() {
 
   async function handleDeleteCard(cardId) {
     try {
+      // Set loading state
+      setDeleteCardModal(prev => ({ ...prev, isDeleting: true }));
+
       const userId = localStorage.getItem('cardtrack_user_id');
       if (!userId) {
         console.error('No user ID found');
+        setDeleteCardModal(prev => ({ ...prev, isDeleting: false }));
         return;
       }
 
@@ -76,15 +83,19 @@ export default function Dashboard() {
       });
 
       if (response.ok || response.status === 204) {
-        // Card deleted successfully, refresh profile
-        const updatedProfile = loadUserProfile();
+        // Card deleted successfully, refresh both profile and transactions
+        const updatedProfile = await loadUserProfileFromAPI();
+        const updatedTransactions = await loadTransactions();
         setProfile(updatedProfile);
-        setDeleteCardModal({ show: false, cardId: null, cardName: null });
+        setTransactions(updatedTransactions);
+        setDeleteCardModal({ show: false, cardId: null, cardName: null, isDeleting: false });
       } else {
         console.error('Failed to delete card:', response.statusText);
+        setDeleteCardModal(prev => ({ ...prev, isDeleting: false }));
       }
     } catch (error) {
       console.error('Error deleting card:', error);
+      setDeleteCardModal(prev => ({ ...prev, isDeleting: false }));
     }
   }
 
@@ -144,21 +155,32 @@ export default function Dashboard() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="w-full max-w-[280px] p-6 bg-gradient-to-b from-gray-50 to-gray-100 rounded-[18px] shadow-[0_10px_32px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.5)]">
             <h2 className="text-lg font-semibold text-primary-dark mb-2">Delete Card?</h2>
-            <p className="text-sm text-muted mb-6">{profile?.username || 'User'}, are you sure you want to delete <span className="font-medium">{deleteCardModal.cardName}</span>?</p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setDeleteCardModal({ show: false, cardId: null, cardName: null })}
-                className="flex-1 h-10 border border-border text-text font-medium rounded-lg hover:bg-white/60 transition-all text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleDeleteCard(deleteCardModal.cardId)}
-                className="flex-1 h-10 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-all text-sm"
-              >
-                Delete
-              </button>
-            </div>
+            {deleteCardModal.isDeleting ? (
+              <div className="flex flex-col items-center justify-center py-6">
+                <div className="relative w-8 h-8 mb-3">
+                  <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-purple-500 border-r-purple-500 animate-spin"></div>
+                </div>
+                <p className="text-sm text-muted">Deleting in progress...</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-muted mb-6">{profile?.username || 'User'}, are you sure you want to delete <span className="font-medium">{deleteCardModal.cardName}</span>?</p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setDeleteCardModal({ show: false, cardId: null, cardName: null, isDeleting: false })}
+                    className="flex-1 h-10 border border-border text-text font-medium rounded-lg hover:bg-white/60 transition-all text-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleDeleteCard(deleteCardModal.cardId)}
+                    className="flex-1 h-10 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-all text-sm"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -269,7 +291,7 @@ export default function Dashboard() {
                     className="ml-2 p-2 rounded-lg text-muted hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
                     title="Delete card"
                     onClick={() => {
-                      setDeleteCardModal({ show: true, cardId: wc.card_id, cardName: card?.card_name || wc.card_id });
+                      setDeleteCardModal({ show: true, cardId: wc.id, cardName: card?.card_name || wc.card_id });
                     }}
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

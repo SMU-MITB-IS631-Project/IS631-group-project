@@ -91,6 +91,7 @@ class UserCardManagementService:
 
     def _public_wallet_card(self, card: UserOwnedCard) -> Dict[str, Any]:
         return {
+            "id": card.id,
             "card_id": str(card.card_id),
             "refresh_day_of_month": card.billing_cycle_refresh_date.day,
             "annual_fee_billing_date": card.card_expiry_date.date().isoformat(),

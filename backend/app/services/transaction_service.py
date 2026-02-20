@@ -177,3 +177,28 @@ class TransactionService:
         self.db.commit()
         return count
 
+    def bulk_update_transaction_status(self, user_id: str, transaction_ids: List[int], status: str) -> int:
+        """Bulk update multiple transactions to the given status. Returns count of updated transactions."""
+        resolved_user_id = self._resolve_user_id(user_id)
+        
+        # Validate status
+        valid_statuses = [s.value for s in TransactionStatus]
+        if status not in valid_statuses:
+            raise ServiceError(
+                400,
+                "VALIDATION_ERROR",
+                f"Invalid status '{status}'. Must be one of: {', '.join(valid_statuses)}",
+                {"field": "status", "valid_values": valid_statuses},
+            )
+        
+        status_enum = TransactionStatus[status.replace("deleted_with_card", "DeletedWithCard").replace("active", "Active")]
+        
+        count = (
+            self.db.query(UserTransaction)
+            .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.id.in_(transaction_ids))
+            .update({"status": status_enum})
+        )
+        
+        self.db.commit()
+        return count
+
