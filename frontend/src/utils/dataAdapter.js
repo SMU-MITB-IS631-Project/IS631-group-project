@@ -2,12 +2,19 @@ import { parseCSV } from './csv';
 
 const PROFILE_KEY = 'cardtrack_user_profile';
 const TXN_KEY = 'cardtrack_transactions';
+const USER_ID_KEY = 'cardtrack_user_id';
 const API_BASE_URL = 'http://localhost:8000';
 
 // --- User Context ---
 // TODO: Replace with actual user authentication/context
 function getCurrentUserId() {
-  return '1'; // Hardcoded for now, should come from auth context
+  return localStorage.getItem(USER_ID_KEY) || '1';
+}
+
+function setCurrentUserId(userId) {
+  if (userId) {
+    localStorage.setItem(USER_ID_KEY, String(userId));
+  }
 }
 
 /**
@@ -18,10 +25,10 @@ function getCurrentUserId() {
  * to match the card_catalogue table. For now, all cards map to ID 1 for testing.
  */
 const CARD_ID_MAP = {
-  'ww': 1,           // DBS Woman's World Card -> Test Card 1 (temporary)
-  'prvi': 1,         // UOB PRVI Miles Card -> Test Card 1 (temporary)
-  'uobone': 1,       // UOB One Card -> Test Card 1 (temporary)
-  'tuvalu': 1,       // Any other cards -> Test Card 1 (temporary)
+  'sc': 1,           // Standard Chartered Simply Cash
+  'ww': 2,           // DBS Woman's World Card
+  'prvi': 3,         // UOB PRVI Miles Card
+  'uobone': 4,       // UOB One Card
 };
 
 // Reverse mapping: integer -> string (for converting backend responses to frontend format)
@@ -63,9 +70,13 @@ function convertCardId(frontendCardId) {
  * Falls back to 'ww' if the card ID is not found in the mapping.
  */
 function convertBackendCardId(backendCardId) {
-  // If already a string, return it
+  // If it's a numeric string, map it to the frontend string ID
   if (typeof backendCardId === 'string') {
-    return backendCardId;
+    if (!isNaN(backendCardId)) {
+      backendCardId = parseInt(backendCardId, 10);
+    } else {
+      return backendCardId;
+    }
   }
   
   // Look up in reverse mapping
@@ -91,11 +102,103 @@ export async function loadCardsMaster() {
 
 export function loadUserProfile() {
   const raw = localStorage.getItem(PROFILE_KEY);
-  return raw ? JSON.parse(raw) : null;
+  if (!raw) {
+    return null;
+  }
+
+  const profile = JSON.parse(raw);
+  if (Array.isArray(profile.wallet)) {
+    profile.wallet = profile.wallet.map(card => ({
+      ...card,
+      card_id: convertBackendCardId(card.card_id),
+    }));
+  }
+  return profile;
 }
 
 export function saveUserProfile(profile) {
   localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+}
+
+async function fetchUserCards(userId) {
+  const response = await fetch(`${API_BASE_URL}/api/v1/user_cards`, {
+    method: 'GET',
+    headers: {
+      'x-user-id': String(userId),
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to load user cards');
+  }
+
+  const data = await response.json();
+  return (data.user_cards || []).map(card => ({
+    card_id: convertBackendCardId(card.card_id),
+    refresh_day_of_month: card.refresh_day_of_month,
+    annual_fee_billing_date: card.annual_fee_billing_date,
+    cycle_spend_sgd: card.cycle_spend_sgd || 0,
+  }));
+}
+
+async function postRegistrationTransactions(userId, walletCards) {
+  const payloads = (walletCards || [])
+    .filter(w => (w.cycle_spend_sgd || 0) > 0)
+    .map(w => ({
+      transaction: {
+        card_id: convertCardId(w.card_id),
+        amount_sgd: parseFloat(w.cycle_spend_sgd),
+        item: 'registration',
+        channel: 'online',
+        category: 'others',
+        is_overseas: false,
+        date: new Date().toISOString().split('T')[0],
+      },
+    }));
+
+  if (payloads.length === 0) {
+    return;
+  }
+
+  await Promise.all(payloads.map(payload =>
+    fetch(`${API_BASE_URL}/api/v1/transactions`, {
+      method: 'POST',
+      headers: {
+        'x-user-id': String(userId),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+  ));
+}
+
+async function postUserCards(userId, walletCards) {
+  const payloads = (walletCards || [])
+    .filter(w => w.card_id)
+    .map(w => ({
+      wallet_card: {
+        card_id: String(convertCardId(w.card_id)),
+        refresh_day_of_month: parseInt(w.refresh_day_of_month, 10) || 1,
+        annual_fee_billing_date: w.annual_fee_billing_date,
+        cycle_spend_sgd: parseFloat(w.cycle_spend_sgd) || 0,
+      },
+    }));
+
+  if (payloads.length === 0) {
+    return;
+  }
+
+  await Promise.all(payloads.map(payload =>
+    fetch(`${API_BASE_URL}/api/v1/user_cards`, {
+      method: 'POST',
+      headers: {
+        'x-user-id': String(userId),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+  ));
 }
 
 /**
@@ -123,6 +226,7 @@ export async function registerUser(username, password, name, email, preference, 
     }
 
     const data = await response.json();
+    setCurrentUserId(data.id);
     
     // Save profile to localStorage for session persistence
     const profile = {
@@ -136,6 +240,18 @@ export async function registerUser(username, password, name, email, preference, 
     };
     
     saveUserProfile(profile);
+
+    try {
+      await postUserCards(data.id, wallet);
+    } catch (cardError) {
+      console.warn('Registration user_cards failed:', cardError);
+    }
+
+    try {
+      await postRegistrationTransactions(data.id, wallet);
+    } catch (txnError) {
+      console.warn('Registration transactions failed:', txnError);
+    }
     return profile;
   } catch (error) {
     console.error('Registration error:', error);
@@ -165,12 +281,18 @@ export async function loginUser(username, password) {
     }
 
     const data = await response.json();
+    setCurrentUserId(data.id);
     
-    const existingProfile = loadUserProfile();
-    const existingWallet =
-      existingProfile && existingProfile.username === data.username
+    let wallet = [];
+    try {
+      wallet = await fetchUserCards(data.id);
+    } catch (walletError) {
+      console.warn('Login user_cards failed:', walletError);
+      const existingProfile = loadUserProfile();
+      wallet = existingProfile && existingProfile.username === data.username
         ? (existingProfile.wallet || [])
         : [];
+    }
 
     // Save the profile to localStorage for session persistence
     const profile = {
@@ -179,7 +301,7 @@ export async function loginUser(username, password) {
       name: data.name,
       email: data.email,
       preference: data.benefits_preference || 'miles',
-      wallet: (data.wallet && data.wallet.length > 0) ? data.wallet : existingWallet,
+      wallet,
       created_date: data.created_date,
     };
     

@@ -47,6 +47,7 @@ export default function Dashboard() {
 
   const availableMonths = getAvailableMonths(transactions);
   const monthTxns = filterTransactionsByMonth(transactions, monthKey);
+  const displayTxns = monthTxns.filter(txn => (txn.item || '').trim().toLowerCase() !== 'registration');
   const summary = getMonthSummary(monthTxns, cardsMaster, profile?.wallet || []);
   const showArrows = availableMonths.length > 1;
 
@@ -188,11 +189,11 @@ export default function Dashboard() {
 
         <h2 className="text-xs font-semibold text-muted mb-3 uppercase tracking-wide">Transactions</h2>
 
-        {monthTxns.length === 0 ? (
+        {displayTxns.length === 0 ? (
           <p className="text-sm text-muted text-center py-4">No transactions yet. Log a transaction from Recommend.</p>
         ) : (
           <div className="divide-y divide-gray-200/60">
-            {monthTxns.map(txn => {
+            {displayTxns.map(txn => {
               const card = cardsMaster.find(c => c.card_id === txn.card_id);
               return (
                 <div key={txn.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
