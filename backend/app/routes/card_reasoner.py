@@ -7,10 +7,12 @@ Endpoints:
 """
 
 from decimal import Decimal
+import logging
 from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
+from app.models.card_bonus_category import BonusCategory
 from app.services.card_reasoner_service import (
     ExplanationRequest as LegacyExplanationRequest,
     ExplanationResponse as LegacyExplanationResponse,
@@ -21,6 +23,8 @@ from app.services.card_reasoner_service import (
 from app.services.explanation_service import ExplanationService
 from app.schemas.ai_schemas import ExplanationRequest, ExplanationResponse
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/v1/card-reasoner",
@@ -38,7 +42,7 @@ class ExplainFromDBRequest(BaseModel):
     Service queries all data from database using card_id + category.
     """
     card_id: int = Field(..., description="Card ID from card_catalogue")
-    category: str = Field(..., description="Transaction category. Allowed values: Food, Transport, Entertainment, Fashion, All.")
+    category: BonusCategory = Field(..., description="Transaction category. Allowed values: Food, Transport, Entertainment, Fashion, All.")
     transaction_amount: Decimal = Field(..., gt=0, description="Transaction amount in SGD")
     merchant_name: str | None = Field(None, description="Optional merchant name")
     user_id: int | None = Field(None, description="Optional user ID for audit")
@@ -209,7 +213,7 @@ def explain_from_database(
         # Build context from database (ground truth)
         context = service.build_context_from_db(
             card_id=request.card_id,
-            category=request.category,
+            category=request.category.name,
             transaction_amount=request.transaction_amount,
             merchant_name=request.merchant_name
         )
@@ -242,14 +246,15 @@ def explain_from_database(
             }
         )
     except Exception as e:
-        # Unexpected error
+        # Unexpected error - log details internally but return generic message
+        logger.error(f"Failed to generate explanation from database: {type(e).__name__}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error": {
                     "code": "INTERNAL_ERROR",
                     "message": "Failed to generate explanation from database",
-                    "details": {"error_type": type(e).__name__, "error_message": str(e)}
+                    "details": {}
                 }
             }
         )

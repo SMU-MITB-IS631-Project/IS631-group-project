@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 from typing import Any, Optional
 
@@ -14,6 +15,8 @@ from app.services.recommendation_service import RecommendationService
 from app.services.explanation_service import ExplanationService
 from app.schemas.ai_schemas import ExplanationRequest, ExplanationResponse
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["recommendation"])
 
@@ -271,14 +274,18 @@ def recommend_and_explain(
 
     comparison_ctxs = []
     for alt in ranked[1:3]:
-        comparison_ctxs.append(
-            exp_service.build_context_from_db(
-                card_id=alt.card_id,
-                category=category_str,
-                transaction_amount=payload.amount_sgd,
-                merchant_name=payload.merchant_name,
+        try:
+            comparison_ctxs.append(
+                exp_service.build_context_from_db(
+                    card_id=alt.card_id,
+                    category=category_str,
+                    transaction_amount=payload.amount_sgd,
+                    merchant_name=payload.merchant_name,
+                )
             )
-        )
+        except (ValueError, KeyError, AttributeError) as err:
+            # Skip cards that fail to build context rather than failing the entire request
+            logger.warning("Skipping comparison card %s: %s", alt.card_id, err)
 
     exp_request = ExplanationRequest(recommendation=primary_ctx, comparison_cards=comparison_ctxs)
     explanation = exp_service.generate_explanation(exp_request)

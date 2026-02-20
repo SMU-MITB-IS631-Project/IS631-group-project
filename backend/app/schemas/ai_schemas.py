@@ -17,6 +17,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from app.models.card_catalogue import BenefitTypeEnum as BenefitType
+
+
 class RecommendationContext(BaseModel):
     """
     Core DTO containing all ground truth data for explanation generation.
@@ -37,7 +39,7 @@ class RecommendationContext(BaseModel):
             transaction_amount=Decimal("120.00")
         )
     """
-    model_config = ConfigDict(use_enum_values=True)
+    model_config = ConfigDict()
     
     # Card Identity (from CardCatalogue)
     card_id: int = Field(..., description="Primary key from card_catalogue")
@@ -65,9 +67,9 @@ class RecommendationContext(BaseModel):
     @field_validator("base_rate", "bonus_rate")
     @classmethod
     def validate_rate_bounds(cls, v: Optional[Decimal]) -> Optional[Decimal]:
-        """Ensure rates are within realistic bounds (0-100%)"""
-        if v is not None and v > 1:
-            raise ValueError("Rate cannot exceed 100% (1.0). Check database values.")
+        """Ensure rates are within realistic bounds (0-100 in either fraction or percent form)"""
+        if v is not None and v > 100:
+            raise ValueError("Rate cannot exceed 100% (100). Check database values.")
         return v
     
     @field_validator("card_name", "bank")

@@ -83,7 +83,7 @@ python backend/demo_explanation_service.py
 
 ### 4. Run Tests
 ```bash
-# Run all tests
+# Run all explanation service tests
 pytest backend/tests/test_explanation_service.py -v
 
 # Run specific test
@@ -91,6 +91,9 @@ pytest backend/tests/test_explanation_service.py::test_prompt_contains_correct_b
 
 # Run with coverage
 pytest backend/tests/test_explanation_service.py --cov=app.services.explanation_service
+
+# Run all backend tests
+pytest backend/tests -v
 ```
 
 ### 5. Start API Server
@@ -294,13 +297,13 @@ LLM_TIMEOUT=5               # Quick fallback on delay
 
 ## 🏆 SCRUM-258 Completion Checklist
 
-> Note: Any test file paths referenced in this guide (for example `backend/tests/test_explanation_service.py`) are illustrative. The repository does not currently include a `backend/tests/` directory; you will need to create the `backend/tests/` folder and corresponding test modules before running `pytest`.
+ Note: The `backend/tests/` directory contains tests for recommendation and explanation services. The `backend/tests/test_explanation_service.py` file covers the core explanation engine functionality.
 
 - [x] `.env.example` with LLM configuration
 - [x] `requirements.txt` updated with pytest dependencies
 - [x] `ai_schemas.py` with RecommendationContext DTO
 - [x] `explanation_service.py` with DB queries and LLM orchestration
-- [x] TDD test suite with 3 core tests + edge cases **(to be implemented in `backend/tests/` as described above)**
+- [x] TDD test suite with core tests + edge cases **(`backend/tests/test_explanation_service.py`)**
 - [x] API endpoint `POST /api/v1/card-reasoner/explain-db`
 - [x] Graceful fallback for missing API key
 - [x] Anti-hallucination validation
@@ -311,6 +314,6 @@ LLM_TIMEOUT=5               # Quick fallback on delay
 ---
 
 **Author**: GitHub Copilot (Senior Backend Architect Mode)  
-**Date**: February 17, 2026  
+**Date**: February 20, 2026  
 **Branch**: `ai_api_v2`  
 **Story**: SCRUM-258 - AI Explanation Engine Foundation

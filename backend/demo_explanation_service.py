@@ -129,25 +129,28 @@ def demo_food_purchase():
     session = create_test_database()
     service = ExplanationService(session)
     
-    # Large purchase that will hit the cap
-    print("\n📊 Building context from database...")
-    context = service.build_context_from_db(
-        card_id=101,
-        category="Food",
-        transaction_amount=Decimal("2000.00"),  # Would give $100 at 5%, but cap is $50
-        merchant_name="FairPrice"
-    )
-    
-    print(f"   Transaction: SGD {float(context.transaction_amount):.2f}")
-    print(f"   Bonus Rate: {float(context.bonus_rate * 100) if context.bonus_rate else 0:.2f}%")
-    print(f"   Uncapped Reward: SGD {float(context.transaction_amount * context.bonus_rate) if context.bonus_rate else 0:.2f}")
-    print(f"   Cap: SGD {context.bonus_cap_sgd}")
-    print(f"   Actual Reward (capped): SGD {float(context.total_reward_value) if context.total_reward_value else 0:.2f}")
-    
-    request = ExplanationRequest(recommendation=context)
-    response = service.generate_explanation(request)
-    
-    print(f"\n💬 Explanation:\n   {response.explanation}")
+    try:
+        # Large purchase that will hit the cap
+        print("\n📊 Building context from database...")
+        context = service.build_context_from_db(
+            card_id=101,
+            category="Food",
+            transaction_amount=Decimal("2000.00"),  # Would give $100 at 5%, but cap is $50
+            merchant_name="FairPrice"
+        )
+        
+        print(f"   Transaction: SGD {float(context.transaction_amount):.2f}")
+        print(f"   Bonus Rate: {float(context.bonus_rate * 100) if context.bonus_rate else 0:.2f}%")
+        print(f"   Uncapped Reward: SGD {float(context.transaction_amount * context.bonus_rate) if context.bonus_rate else 0:.2f}")
+        print(f"   Cap: SGD {context.bonus_cap_sgd}")
+        print(f"   Actual Reward (capped): SGD {float(context.total_reward_value) if context.total_reward_value else 0:.2f}")
+        
+        request = ExplanationRequest(recommendation=context)
+        response = service.generate_explanation(request)
+        
+        print(f"\n💬 Explanation:\n   {response.explanation}")
+    finally:
+        session.close()
 
 
 def demo_no_bonus_category():
@@ -159,22 +162,25 @@ def demo_no_bonus_category():
     session = create_test_database()
     service = ExplanationService(session)
     
-    context = service.build_context_from_db(
-        card_id=101,
-        category="Bills",  # No bonus for Bills
-        transaction_amount=Decimal("150.00")
-    )
-    
-    print(f"\n📊 Context:")
-    print(f"   Category: {context.category}")
-    print(f"   Bonus Eligible: {context.is_bonus_eligible}")
-    print(f"   Applied Rate: {float(context.base_rate * 100):.2f}% (base rate)")
-    print(f"   Reward: SGD {float(context.total_reward_value) if context.total_reward_value else 0:.2f}")
-    
-    request = ExplanationRequest(recommendation=context)
-    response = service.generate_explanation(request)
-    
-    print(f"\n💬 Explanation:\n   {response.explanation}")
+    try:
+        context = service.build_context_from_db(
+            card_id=101,
+            category="Bills",  # No bonus for Bills
+            transaction_amount=Decimal("150.00")
+        )
+        
+        print(f"\n📊 Context:")
+        print(f"   Category: {context.category}")
+        print(f"   Bonus Eligible: {context.is_bonus_eligible}")
+        print(f"   Applied Rate: {float(context.base_rate * 100):.2f}% (base rate)")
+        print(f"   Reward: SGD {float(context.total_reward_value) if context.total_reward_value else 0:.2f}")
+        
+        request = ExplanationRequest(recommendation=context)
+        response = service.generate_explanation(request)
+        
+        print(f"\n💬 Explanation:\n   {response.explanation}")
+    finally:
+        session.close()
 
 
 def demo_invalid_card():
@@ -187,15 +193,18 @@ def demo_invalid_card():
     service = ExplanationService(session)
     
     try:
-        context = service.build_context_from_db(
-            card_id=999,  # Doesn't exist
-            category="Fashion",
-            transaction_amount=Decimal("100.00")
-        )
-    except ValueError as e:
-        print(f"\n❌ Expected Error Caught:")
-        print(f"   {str(e)}")
-        print(f"\n✅ Error handling works correctly!")
+        try:
+            context = service.build_context_from_db(
+                card_id=999,  # Doesn't exist
+                category="Fashion",
+                transaction_amount=Decimal("100.00")
+            )
+        except ValueError as e:
+            print(f"\n❌ Expected Error Caught:")
+            print(f"   {str(e)}")
+            print(f"\n✅ Error handling works correctly!")
+    finally:
+        session.close()
 
 
 def main():
@@ -217,7 +226,7 @@ def main():
     print("="*80)
     print("\n📚 Next Steps:")
     print("   1. Set OPENAI_API_KEY in .env to enable AI-powered explanations")
-    print("   2. Run tests: pytest backend/tests/test_explanation_service.py -v")
+    print("   2. Run tests: pytest backend/tests -v")
     print("   3. Start API: python backend/run.py")
     print("   4. Test endpoint: POST /api/v1/card-reasoner/explain-db")
     print("\n")

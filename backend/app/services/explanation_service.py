@@ -17,7 +17,7 @@ import os
 import time
 import logging
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional, Dict, Any
 
@@ -89,6 +89,8 @@ class LLMConfig:
             _default_max_retries,
         )
         MAX_RETRIES = _default_max_retries
+
+
 # Initialize OpenAI client (only if API key present)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai_client = None
@@ -108,6 +110,10 @@ else:
         "OPENAI_API_KEY not set. Explanation service will use template fallbacks. "
         "Set the environment variable to enable AI-powered explanations."
     )
+
+
+# Sentinel value used in DB for "no cap" on bonus rewards
+EFFECTIVELY_UNLIMITED_CAP = 99999999
 
 
 # =============================================================================
@@ -169,31 +175,45 @@ class ExplanationService:
         bonus_data = self._get_bonus_for_category(card_id, category)
         
         # Step 3: Compute reward value
-        bonus_min_spend_sgd = Decimal(str(bonus_data.get("bonus_min_spend_sgd", 0)))
-        if bonus_data["is_bonus_eligible"] and transaction_amount >= bonus_min_spend_sgd:
+        bonus_min_spend_sgd = Decimal(str(bonus_data.get("bonus_min_spend_sgd") or 0))
+        is_bonus_eligible = (
+            bonus_data["is_bonus_eligible"]
+            and transaction_amount >= bonus_min_spend_sgd
+        )
+        if is_bonus_eligible and bonus_data.get("bonus_rate"):
             effective_rate = bonus_data["bonus_rate"]
         else:
             effective_rate = Decimal(str(card.base_benefit_rate))
-        total_reward = transaction_amount * effective_rate
-        
-        # Cap the reward if bonus cap exists
-        if bonus_data.get("bonus_cap_sgd"):
-            bonus_cap_sgd_decimal = Decimal(str(bonus_data["bonus_cap_sgd"]))
-            if total_reward > bonus_cap_sgd_decimal:
-                total_reward = bonus_cap_sgd_decimal
+
+        # Normalize cashback fraction (supports both 0.015 and 1.5 representations)
+        benefit_type = card.benefit_type  # type: ignore[assignment]
+        if benefit_type == BenefitType.CASHBACK:
+            if effective_rate > Decimal("1"):
+                cashback_fraction = effective_rate / Decimal("100")
+            else:
+                cashback_fraction = effective_rate
+            total_reward = transaction_amount * cashback_fraction
+            # Apply cap only for cashback rewards
+            if bonus_data.get("bonus_cap_sgd") and bonus_data["bonus_cap_sgd"] < EFFECTIVELY_UNLIMITED_CAP:
+                bonus_cap_sgd_decimal = Decimal(str(bonus_data["bonus_cap_sgd"]))
+                if total_reward > bonus_cap_sgd_decimal:
+                    total_reward = bonus_cap_sgd_decimal
+        else:
+            # Miles: effective_rate is miles per dollar (mpd), no cap
+            total_reward = transaction_amount * effective_rate
         
         # Step 4: Build context (type: ignore for SQLAlchemy ORM attribute access)
         return RecommendationContext(
             card_id=card.card_id,  # type: ignore[arg-type]
             card_name=card.card_name,  # type: ignore[arg-type]
             bank=card.bank.value,
-            benefit_type=BenefitType(card.benefit_type.value),
+            benefit_type=benefit_type,
             category=category,
             transaction_amount=transaction_amount,
             merchant_name=merchant_name,
             base_rate=card.base_benefit_rate,  # type: ignore[arg-type]
             bonus_rate=bonus_data.get("bonus_rate"),
-            is_bonus_eligible=bonus_data["is_bonus_eligible"],
+            is_bonus_eligible=is_bonus_eligible,
             bonus_cap_sgd=bonus_data.get("bonus_cap_sgd"),
             bonus_min_spend_sgd=bonus_data.get("bonus_min_spend_sgd"),
             total_reward_value=total_reward  # type: ignore[arg-type]
@@ -307,31 +327,49 @@ class ExplanationService:
         Returns:
             Complete prompt string
         """
-        # Compute effective rate percentage
+        # Compute effective rate value for display/LLM
         effective_rate = context.bonus_rate if context.is_bonus_eligible and context.bonus_rate else context.base_rate
-        rate_pct = float(effective_rate * 100)
         
         # Build core explanation request
         benefit_label = "cashback" if context.benefit_type == BenefitType.CASHBACK else "miles"
         
-        prompt = f"""You are a Singapore credit card advisor. Explain why the {context.bank} {context.card_name} is the best choice for a ${float(context.transaction_amount):.2f} {context.category} purchase.
+        if context.benefit_type == BenefitType.CASHBACK:
+            # Cashback: support both fractional (<= 1.0) and percent (> 1.0) representations
+            rate_display_pct = float(effective_rate * 100) if effective_rate <= 1 else float(effective_rate)
+            rate_str = f"{rate_display_pct:.2f}%"
+        else:
+            # Miles: effective_rate is miles per dollar (mpd)
+            rate_display_pct = float(effective_rate)
+            rate_str = f"{rate_display_pct:.2f} mpd"
+        
+        prompt = f"""You are a Singapore credit card advisor. Explain why the {context.bank} {context.card_name} is the best choice for a SGD {float(context.transaction_amount):.2f} {context.category} purchase.
 
 Ground Truth Facts:
 - Card: {context.bank} {context.card_name}
 - Benefit Type: {benefit_label}
 - Category: {context.category}
-- Effective Rate: {rate_pct:.2f}% ({rate_pct/100:.4f})"""
+- Effective Rate: {rate_str}"""
 
         if context.is_bonus_eligible and context.bonus_rate:
-            prompt += f"""
-- Base Rate: {float(context.base_rate * 100):.2f}%
-- Bonus Rate: {float(context.bonus_rate * 100):.2f}% (bonus category applied)"""
+            if context.benefit_type == BenefitType.CASHBACK:
+                base_pct = float(context.base_rate * 100) if context.base_rate <= 1 else float(context.base_rate)
+                bonus_pct = float(context.bonus_rate * 100) if context.bonus_rate <= 1 else float(context.bonus_rate)
+                prompt += f"""
+- Base Rate: {base_pct:.2f}%
+- Bonus Rate: {bonus_pct:.2f}% (bonus category applied)"""
+            else:
+                prompt += f"""
+- Base Rate: {float(context.base_rate):.2f} mpd
+- Bonus Rate: {float(context.bonus_rate):.2f} mpd (bonus category applied)"""
         
         if context.bonus_cap_sgd:
             prompt += f"\n- Monthly Cap: SGD {context.bonus_cap_sgd}"
         
         if context.total_reward_value:
-            prompt += f"\n- Total Reward: SGD {float(context.total_reward_value):.2f}"
+            if context.benefit_type == BenefitType.CASHBACK:
+                prompt += f"\n- Total Reward: SGD {float(context.total_reward_value):.2f}"
+            else:
+                prompt += f"\n- Total Reward: {float(context.total_reward_value):.0f} miles"
         
         # Add comparison if available
         if comparison_cards:
@@ -339,7 +377,13 @@ Ground Truth Facts:
             for alt in comparison_cards[:2]:  # Limit to top 2 for brevity
                 alt_rate = alt.bonus_rate if alt.is_bonus_eligible and alt.bonus_rate else alt.base_rate
                 alt_reward = alt.transaction_amount * alt_rate
-                prompt += f"\n- {alt.bank} {alt.card_name}: {float(alt_rate * 100):.2f}% = SGD {float(alt_reward):.2f}"
+                if alt.benefit_type == BenefitType.CASHBACK:
+                    alt_rate_str = f"{float(alt_rate * 100) if alt_rate <= 1 else float(alt_rate):.2f}%"
+                    alt_reward_str = f"SGD {float(alt_reward):.2f}"
+                else:
+                    alt_rate_str = f"{float(alt_rate):.2f} mpd"
+                    alt_reward_str = f"{float(alt_reward):.0f} miles"
+                prompt += f"\n- {alt.bank} {alt.card_name}: {alt_rate_str} = {alt_reward_str}"
         
         prompt += "\n\nProvide a concise explanation (2-3 sentences) in simple English suitable for general consumers. Focus on the value difference."
         
@@ -376,6 +420,9 @@ Ground Truth Facts:
             )
             
             explanation = (response.choices[0].message.content or "").strip()
+            if not explanation:
+                logger.warning("LLM returned empty explanation, using template fallback")
+                return self._generate_template_fallback(context), "template_empty", True
             logger.info(f"LLM explanation generated successfully (model: {LLMConfig.MODEL})")
             return explanation, LLMConfig.MODEL, False
         
@@ -404,25 +451,33 @@ Ground Truth Facts:
             Template-generated explanation string
         """
         effective_rate = context.bonus_rate if context.is_bonus_eligible and context.bonus_rate else context.base_rate
-        rate_pct = float(effective_rate * 100)
         benefit_label = "cashback" if context.benefit_type == BenefitType.CASHBACK else "miles"
         reward_value = float(context.total_reward_value) if context.total_reward_value else 0.0
-        
+        spend_amount = f"SGD {float(context.transaction_amount):.2f}"
+
+        if context.benefit_type == BenefitType.CASHBACK:
+            rate_numeric = float(effective_rate * 100) if effective_rate <= 1 else float(effective_rate)
+            rate_display = f"{rate_numeric:.2f}% {benefit_label}"
+            reward_phrase = f"SGD {reward_value:.2f} in {benefit_label}"
+        else:
+            # Miles: rate is miles per dollar (mpd), not a percentage
+            rate_display = f"{float(effective_rate):.2f} miles per dollar"
+            reward_phrase = f"{reward_value:.0f} {benefit_label}"
+
         if context.is_bonus_eligible:
             explanation = (
-                f"The {context.bank} {context.card_name} offers {rate_pct:.2f}% {benefit_label} "
+                f"The {context.bank} {context.card_name} offers {rate_display} "
                 f"on {context.category} purchases (bonus category). "
-                f"For this ${float(context.transaction_amount):.2f} transaction, you'll earn "
-                f"SGD {reward_value:.2f} in {benefit_label}."
+                f"For this {spend_amount} transaction, you'll earn {reward_phrase}."
             )
         else:
             explanation = (
-                f"The {context.bank} {context.card_name} provides {rate_pct:.2f}% {benefit_label} "
-                f"on all purchases. For this ${float(context.transaction_amount):.2f} transaction, "
-                f"you'll receive SGD {reward_value:.2f} in {benefit_label}."
+                f"The {context.bank} {context.card_name} provides {rate_display} "
+                f"on all purchases. For this {spend_amount} transaction, "
+                f"you'll receive {reward_phrase}."
             )
         
-        if context.bonus_cap_sgd and context.bonus_cap_sgd < 99999999:
+        if context.bonus_cap_sgd and context.bonus_cap_sgd < EFFECTIVELY_UNLIMITED_CAP:
             explanation += f" (Subject to monthly cap of SGD {context.bonus_cap_sgd})"
         
         return explanation
@@ -449,7 +504,7 @@ Ground Truth Facts:
             prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()[:16]
         
         return AuditLogEntry(
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             event_type="explanation_generated",
             user_id=user_id,
             card_id=response.card_id,
