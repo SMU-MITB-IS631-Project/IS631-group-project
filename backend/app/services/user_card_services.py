@@ -294,18 +294,20 @@ class UserCardManagementService:
         if cast(int, card.user_id) != resolved_user_id:
             raise ServiceError(403, "FORBIDDEN", "Card does not belong to current user.", {})
 
-        card.status = UserOwnedCardStatus.Inactive  # type: ignore[assignment]
-        
-        # Mark all transactions for this card as deleted_with_card
         card_id = cast(int, card.card_id)
+        
+        # Mark all transactions for this card as deleted_with_card (preserve transaction history)
         self.db.query(UserTransaction).filter(
             UserTransaction.user_id == resolved_user_id,
             UserTransaction.card_id == card_id
         ).update({"status": TransactionStatus.DeletedWithCard})
         
+        # Hard delete the card from user_owned_cards
+        self.db.query(UserOwnedCard).filter(UserOwnedCard.id == int(user_card_id)).delete()
+        
         self.db.commit()
         logging.info(
-            "Soft-deleted user card id=%s for user_id=%s and marked associated transactions as deleted_with_card",
+            "Hard-deleted user card id=%s for user_id=%s and marked associated transactions as deleted_with_card",
             card.id,
             resolved_user_id,
         )
