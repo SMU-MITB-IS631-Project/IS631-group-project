@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 # SQLAlchemy Database URL (SQLite for simplicity)
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///../app.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./app.db")
 
 # Create engine with SQLite-specific connection args only for SQLite
 if DATABASE_URL.startswith("sqlite"):
