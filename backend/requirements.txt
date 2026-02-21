@@ -7,5 +7,12 @@ alembic==1.14.0
 pypdf==5.1.0
 langchain-community==0.3.14
 langchain-openai==0.2.14
-passlib[bcrypt]
+python-dotenv==1.0.1
+
+# Testing dependencies
+pytest==8.3.4
+pytest-mock==3.14.0
+pytest-asyncio==0.24.0
+
+passlib[bcrypt]==1.7.4
 bcrypt==3.2.2
