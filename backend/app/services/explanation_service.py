@@ -308,9 +308,14 @@ class ExplanationService:
         Returns:
             Complete prompt string
         """
-        # Compute effective rate percentage
+        # Compute effective rate value for display/LLM
         effective_rate = context.bonus_rate if context.is_bonus_eligible and context.bonus_rate else context.base_rate
-        rate_pct = float(effective_rate * 100)
+        if context.benefit_type == BenefitType.MILES:
+            # Miles cards: effective_rate is in miles per dollar (mpd); do not scale
+            rate_pct = float(effective_rate)
+        else:
+            # Cashback cards: support both fractional (<= 1.0) and percent (> 1.0) representations
+            rate_pct = float(effective_rate * 100) if effective_rate <= 1 else float(effective_rate)
         
         # Build core explanation request
         benefit_label = "cashback" if context.benefit_type == BenefitType.CASHBACK else "miles"
