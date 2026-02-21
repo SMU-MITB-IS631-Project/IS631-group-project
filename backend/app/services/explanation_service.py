@@ -314,8 +314,8 @@ class ExplanationService:
         
         # Build core explanation request
         benefit_label = "cashback" if context.benefit_type == BenefitType.CASHBACK else "miles"
-        
-        prompt = f"""You are a Singapore credit card advisor. Explain why the {context.bank} {context.card_name} is the best choice for a ${float(context.transaction_amount):.2f} {context.category} purchase.
+        bank_name = context.bank.replace("_", " ")
+        prompt = f"""You are a Singapore credit card advisor. Explain why the {bank_name} {context.card_name} is the best choice for a ${float(context.transaction_amount):.2f} {context.category} purchase.
 
 Ground Truth Facts:
 - Card: {context.bank} {context.card_name}
@@ -408,17 +408,17 @@ Ground Truth Facts:
         rate_pct = float(effective_rate * 100)
         benefit_label = "cashback" if context.benefit_type == BenefitType.CASHBACK else "miles"
         reward_value = float(context.total_reward_value) if context.total_reward_value else 0.0
-        
+        bank_name = context.bank.replace("_", " ")
         if context.is_bonus_eligible:
             explanation = (
-                f"The {context.bank} {context.card_name} offers {rate_pct:.2f}% {benefit_label} "
+                f"The {bank_name} {context.card_name} offers {rate_pct:.2f}% {benefit_label} "
                 f"on {context.category} purchases (bonus category). "
                 f"For this ${float(context.transaction_amount):.2f} transaction, you'll earn "
                 f"SGD {reward_value:.2f} in {benefit_label}."
             )
         else:
             explanation = (
-                f"The {context.bank} {context.card_name} provides {rate_pct:.2f}% {benefit_label} "
+                f"The {bank_name} {context.card_name} provides {rate_pct:.2f}% {benefit_label} "
                 f"on all purchases. For this ${float(context.transaction_amount):.2f} transaction, "
                 f"you'll receive SGD {reward_value:.2f} in {benefit_label}."
             )
