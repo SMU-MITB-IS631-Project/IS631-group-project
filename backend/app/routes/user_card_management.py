@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class WalletCard(BaseModel):
+    id: Optional[int] = None  # UserOwnedCard primary key, for deleting/updating
     card_id: str
     refresh_day_of_month: int = Field(..., ge=1, le=31)
     annual_fee_billing_date: str  # YYYY-MM-DD

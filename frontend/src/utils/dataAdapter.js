@@ -43,7 +43,7 @@ Object.entries(CARD_ID_MAP).forEach(([strId, intId]) => {
  * Convert frontend card ID (string) to backend card ID (integer).
  * Falls back to 1 if the card ID is not found in the mapping.
  */
-function convertCardId(frontendCardId) {
+export function convertCardId(frontendCardId) {
   // If already a number, return it
   if (typeof frontendCardId === 'number') {
     return frontendCardId;
@@ -116,6 +116,42 @@ export function loadUserProfile() {
   return profile;
 }
 
+export async function loadUserProfileFromAPI() {
+  try {
+    const userId = getCurrentUserId();
+    const response = await fetch(`${API_BASE_URL}/api/v1/profile`, {
+      method: 'GET',
+      headers: {
+        'x-user-id': userId,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to load profile from API');
+    }
+
+    const data = await response.json();
+    const profile = data.profile;
+    
+    // Convert card IDs and ensure id field from API
+    if (Array.isArray(profile.wallet)) {
+      profile.wallet = profile.wallet.map(card => ({
+        ...card,
+        card_id: convertBackendCardId(card.card_id),
+      }));
+    }
+
+    // Save to localStorage for caching
+    saveUserProfile(profile);
+    return profile;
+  } catch (error) {
+    console.error('Error loading profile from API:', error);
+    // Fallback to localStorage
+    return loadUserProfile();
+  }
+}
+
 export function saveUserProfile(profile) {
   localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
 }
@@ -135,6 +171,7 @@ async function fetchUserCards(userId) {
 
   const data = await response.json();
   return (data.user_cards || []).map(card => ({
+    id: card.id,
     card_id: convertBackendCardId(card.card_id),
     refresh_day_of_month: card.refresh_day_of_month,
     annual_fee_billing_date: card.annual_fee_billing_date,
@@ -143,7 +180,7 @@ async function fetchUserCards(userId) {
 
 
 
-async function postRegistrationTransactions(userId, walletCards) {
+export async function postRegistrationTransactions(userId, walletCards) {
   const payloads = (walletCards || [])
     .filter(w => (w.cycle_spend_sgd || 0) > 0)
     .map(w => ({
@@ -222,7 +259,7 @@ export async function registerUser(username, password, name, email, preference, 
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData?.error?.message || 'Registration failed');
+      throw new Error(errorData?.detail?.error?.message || errorData?.error?.message || 'Registration failed');
     }
 
     const data = await response.json();
@@ -345,11 +382,16 @@ export async function loadTransactions() {
     const data = await response.json();
     const transactions = data.transactions || [];
     
-    // Convert backend integer card_ids to frontend string card_ids
-    return transactions.map(txn => ({
-      ...txn,
-      card_id: convertBackendCardId(txn.card_id)
-    }));
+    // Filter out deleted_with_card transactions and convert card IDs
+    return transactions
+      .filter(txn => {
+        const status = (txn.status || '').toLowerCase();
+        return status !== 'deleted_with_card' && status !== 'deletedwithcard';
+      })
+      .map(txn => ({
+        ...txn,
+        card_id: convertBackendCardId(txn.card_id)
+      }));
   } catch (error) {
     console.error('Error loading transactions:', error);
     // Fallback to localStorage if API fails
@@ -441,11 +483,19 @@ export function shiftMonth(monthKey, delta) {
 }
 
 export function filterTransactionsByMonth(transactions, monthKey) {
-  return transactions.filter(t => getMonthKey(t.date) === monthKey);
+  return transactions.filter(t => {
+    const status = (t.status || '').toLowerCase();
+    const isDeleted = status === 'deleted_with_card' || status === 'deletedwithcard';
+    return getMonthKey(t.date) === monthKey && !isDeleted;
+  });
 }
 
 export function getMonthSummary(transactions, cardsMaster, wallet = []) {
-  const displayTxns = transactions.filter(t => (t.item || '').trim().toLowerCase() !== 'registration');
+  const displayTxns = transactions.filter(t => {
+    const status = (t.status || '').toLowerCase();
+    const isDeleted = status === 'deleted_with_card' || status === 'deletedwithcard';
+    return (t.item || '').trim().toLowerCase() !== 'registration' && !isDeleted;
+  });
   const txnTotal = displayTxns.reduce((sum, t) => sum + (t.amount_sgd || 0), 0);
   const total = txnTotal;
   const count = displayTxns.length;
@@ -475,7 +525,11 @@ export function getAvailableMonths(transactions) {
 
 export function getCardSpendForMonth(transactions, cardId) {
   const txnSpend = transactions
-    .filter(t => t.card_id === cardId)
+    .filter(t => {
+      const status = (t.status || '').toLowerCase();
+      const isDeleted = status === 'deleted_with_card' || status === 'deletedwithcard';
+      return t.card_id === cardId && !isDeleted;
+    })
     .reduce((sum, t) => sum + (t.amount_sgd || 0), 0);
   return txnSpend;
 }
