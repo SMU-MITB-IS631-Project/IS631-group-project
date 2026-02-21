@@ -101,7 +101,7 @@ def demo_fashion_purchase():
         print(f"   Card: {context.bank} {context.card_name}")
         print(f"   Category: {context.category}")
         print(f"   Base Rate: {float(context.base_rate * 100):.2f}%")
-        print(f"   Bonus Rate: {float(context.bonus_rate * 100) if context.bonus_rate else 'N/A'}%")
+        print(f"   Bonus Rate: {f'{float(context.bonus_rate * 100):.2f}%' if context.bonus_rate else 'N/A'}")
         print(f"   Bonus Eligible: {context.is_bonus_eligible}")
         print(f"   Total Reward: SGD {float(context.total_reward_value) if context.total_reward_value else 0:.2f}")
         
