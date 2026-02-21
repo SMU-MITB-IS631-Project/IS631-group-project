@@ -6,7 +6,10 @@ from dotenv import load_dotenv
 # Add backend directory to path
 sys.path.insert(0, os.path.dirname(__file__))
 
-# Load environment variables from backend/.env (if present)
+# Load environment variables from backend/.env (if present).
+# NOTE: This must run before importing FastAPI routes/services because some
+# modules (e.g., ExplanationService via card_reasoner_router) initialize the
+# OpenAI client at import time and rely on these environment variables.
 load_dotenv()
 
 from fastapi import FastAPI
