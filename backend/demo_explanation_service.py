@@ -101,7 +101,7 @@ def demo_fashion_purchase():
         print(f"   Card: {context.bank} {context.card_name}")
         print(f"   Category: {context.category}")
         print(f"   Base Rate: {float(context.base_rate * 100):.2f}%")
-        print(f"   Bonus Rate: {float(context.bonus_rate * 100) if context.bonus_rate else 'N/A'}%")
+        print(f"   Bonus Rate: {f'{float(context.bonus_rate * 100):.2f}%' if context.bonus_rate else 'N/A'}")
         print(f"   Bonus Eligible: {context.is_bonus_eligible}")
         print(f"   Total Reward: SGD {float(context.total_reward_value) if context.total_reward_value else 0:.2f}")
         
@@ -217,7 +217,7 @@ def main():
     print("="*80)
     print("\n📚 Next Steps:")
     print("   1. Set OPENAI_API_KEY in .env to enable AI-powered explanations")
-    print("   2. Run tests: pytest backend/tests/test_explanation_service.py -v")
+    print("   2. Run tests: pytest backend/tests -v")
     print("   3. Start API: python backend/run.py")
     print("   4. Test endpoint: POST /api/v1/card-reasoner/explain-db")
     print("\n")
