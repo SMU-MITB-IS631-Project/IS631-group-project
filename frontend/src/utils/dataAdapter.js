@@ -259,7 +259,7 @@ export async function registerUser(username, password, name, email, preference, 
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData?.error?.message || 'Registration failed');
+      throw new Error(errorData?.detail?.error?.message || errorData?.error?.message || 'Registration failed');
     }
 
     const data = await response.json();
