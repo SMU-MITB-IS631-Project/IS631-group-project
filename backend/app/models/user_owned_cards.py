@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Enum as SAEnum, Foreig
 from app.db.db import Base
 from pydantic import BaseModel, ConfigDict, field_validator, Field
 from sqlalchemy.orm import relationship
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from enum import Enum as PyEnum
 
 class UserOwnedCardStatus(PyEnum):
@@ -12,7 +12,7 @@ class UserOwnedCardStatus(PyEnum):
 
 def get_billing_cycle_date():
     # return last day of current month
-    today = datetime.utcnow()
+    today = datetime.now(UTC).replace(tzinfo=None)
     # last day of the month
     if today.month == 12:
         return datetime(today.year, 12, 31)

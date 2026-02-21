@@ -83,6 +83,7 @@ class RecommendationApiTests(unittest.TestCase):
         resp = self.client.get(
             "/api/v1/recommendation",
             params={"user_id": 1, "category": "Food", "amount_sgd": "50"},
+            headers={"x-user-id": "1"},
         )
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
@@ -113,6 +114,7 @@ class RecommendationApiTests(unittest.TestCase):
         resp = self.client.get(
             "/api/v1/recommendation",
             params={"user_id": 1, "category": "Food", "amount_sgd": "50"},
+            headers={"x-user-id": "1"},
         )
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
@@ -128,6 +130,7 @@ class RecommendationApiTests(unittest.TestCase):
         resp = self.client.get(
             "/api/v1/recommendation",
             params={"user_id": 1, "category": "Food", "amount_sgd": "0"},
+            headers={"x-user-id": "1"},
         )
         self.assertEqual(resp.status_code, 400)
         body = resp.json()
