@@ -169,7 +169,8 @@ class ExplanationService:
         bonus_data = self._get_bonus_for_category(card_id, category)
         
         # Step 3: Compute reward value
-        bonus_min_spend_sgd = Decimal(str(bonus_data.get("bonus_min_spend_sgd", 0)))
+        bonus_min_spend_val = bonus_data.get("bonus_min_spend_sgd")
+        bonus_min_spend_sgd = Decimal(bonus_min_spend_val) if bonus_min_spend_val is not None else Decimal(0)
         if bonus_data["is_bonus_eligible"] and transaction_amount >= bonus_min_spend_sgd:
             effective_rate = bonus_data["bonus_rate"]
         else:

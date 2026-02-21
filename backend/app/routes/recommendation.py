@@ -163,7 +163,7 @@ def get_recommendation(
         ranked_cards=[to_model(c) for c in ranked],
     )
 
-@router.post("/recommendation/explain", response_model=RecommendationExplainResponse)
+@router.post("/recommendation/explain", response_model=ExplanationResponse)
 def recommend_and_explain(
     payload: RecommendationExplainRequest,
     request: Request,
@@ -283,8 +283,4 @@ def recommend_and_explain(
     exp_request = ExplanationRequest(recommendation=primary_ctx, comparison_cards=comparison_ctxs)
     explanation = exp_service.generate_explanation(exp_request)
 
-    return RecommendationExplainResponse(
-        recommended=to_model(best),
-        ranked_cards=[to_model(c) for c in ranked],
-        explanation=explanation,
-    )
+    return explanation
