@@ -43,7 +43,7 @@ Object.entries(CARD_ID_MAP).forEach(([strId, intId]) => {
  * Convert frontend card ID (string) to backend card ID (integer).
  * Falls back to 1 if the card ID is not found in the mapping.
  */
-function convertCardId(frontendCardId) {
+export function convertCardId(frontendCardId) {
   // If already a number, return it
   if (typeof frontendCardId === 'number') {
     return frontendCardId;
@@ -180,7 +180,7 @@ async function fetchUserCards(userId) {
 
 
 
-async function postRegistrationTransactions(userId, walletCards) {
+export async function postRegistrationTransactions(userId, walletCards) {
   const payloads = (walletCards || [])
     .filter(w => (w.cycle_spend_sgd || 0) > 0)
     .map(w => ({
