@@ -91,6 +91,7 @@ class UserCardManagementService:
 
     def _public_wallet_card(self, card: UserOwnedCard) -> Dict[str, Any]:
         return {
+            "id": card.id,
             "card_id": str(card.card_id),
             "refresh_day_of_month": card.billing_cycle_refresh_date.day,
             "annual_fee_billing_date": card.card_expiry_date.date().isoformat(),
@@ -281,6 +282,8 @@ class UserCardManagementService:
         return self._story_user_card(card, catalog)
 
     def delete_user_card(self, user_id: Optional[str], user_card_id: str) -> None:
+        from app.models.transaction import UserTransaction, TransactionStatus
+        
         resolved_user_id = self._resolve_user_id(user_id)
         if not user_card_id.isdigit():
             raise ServiceError(404, "NOT_FOUND", f"user_card_id '{user_card_id}' not found.", {})
@@ -291,10 +294,20 @@ class UserCardManagementService:
         if cast(int, card.user_id) != resolved_user_id:
             raise ServiceError(403, "FORBIDDEN", "Card does not belong to current user.", {})
 
-        card.status = UserOwnedCardStatus.Inactive  # type: ignore[assignment]
+        card_id = cast(int, card.card_id)
+        
+        # Mark all transactions for this card as deleted_with_card (preserve transaction history)
+        self.db.query(UserTransaction).filter(
+            UserTransaction.user_id == resolved_user_id,
+            UserTransaction.card_id == card_id
+        ).update({"status": TransactionStatus.DeletedWithCard})
+        
+        # Hard delete the card from user_owned_cards
+        self.db.query(UserOwnedCard).filter(UserOwnedCard.id == int(user_card_id)).delete()
+        
         self.db.commit()
         logging.info(
-            "Soft-deleted user card id=%s for user_id=%s",
+            "Hard-deleted user card id=%s for user_id=%s and marked associated transactions as deleted_with_card",
             card.id,
             resolved_user_id,
         )

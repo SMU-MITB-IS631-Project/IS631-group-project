@@ -34,8 +34,9 @@ def get_wallet(authenticated_user_id: str = Depends(require_user_id_header)) -> 
     - wallet: List of credit cards in user's wallet
     
     Security:
-    - Returns wallet for authenticated user (user_id from token)
+    - Returns wallet for authenticated user (user_id from x-user-id header)
     """
+    user_id = authenticated_user_id
     user_id = authenticated_user_id
     users = get_users()
     user = users.get(user_id)

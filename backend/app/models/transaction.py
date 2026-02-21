@@ -19,9 +19,13 @@ class TransactionChannel(PyEnum):
     Online = "online"
     Offline = "offline"
 
-
 def _utc_now_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+class TransactionStatus(PyEnum):
+    Active = "active"
+    DeletedWithCard = "deleted_with_card"
 
 class UserTransaction(Base):
     __tablename__ = "transactions"
@@ -34,6 +38,7 @@ class UserTransaction(Base):
     category = Column(SAEnum(TransactionCategory), nullable=True)
     is_overseas = Column(Boolean, default=False, nullable=False)
     transaction_date = Column(Date, default=date.today, nullable=False)
+    status = Column(SAEnum(TransactionStatus), default=TransactionStatus.Active, nullable=False)
     created_date = Column(DateTime, default=_utc_now_naive, nullable=False)
 
     # Relationship with UserProfile
@@ -53,6 +58,7 @@ class TransactionCreate(BaseModel):
     is_overseas: bool = False
     transaction_date: date | None = Field(default=None, alias="date")  # YYYY-MM-DD, defaults to today if omitted
     category: TransactionCategory | None = None
+    status: TransactionStatus = TransactionStatus.Active
 
     @field_validator("item")
     @classmethod

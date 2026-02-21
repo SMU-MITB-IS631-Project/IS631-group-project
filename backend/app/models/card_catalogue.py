@@ -11,6 +11,7 @@ class BankEnum(str, PyEnum):
     DBS = "DBS"
     CITI = "CITI"
     Standard_Chartered = "Standard_Chartered"
+    UOB = "UOB"
 
 class BenefitTypeEnum(str, PyEnum):
     MILES = "MILES"

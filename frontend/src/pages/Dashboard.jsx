@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import CardSurface from '../components/CardSurface';
 import { CardThumbnail } from '../components/CardAutocomplete';
 import {
-  loadCardsMaster, loadUserProfile, loadTransactions,
+  loadCardsMaster, loadUserProfileFromAPI, loadTransactions,
   getCurrentMonthKey, shiftMonth, formatMonthLabel,
   filterTransactionsByMonth, getMonthSummary, getCardSpendForMonth,
-  getAvailableMonths,
+  getAvailableMonths, convertCardId, postRegistrationTransactions,
 } from '../utils/dataAdapter';
 
 function formatDateDMonYYYY(dateStr) {
@@ -22,23 +22,29 @@ export default function Dashboard() {
   const [profile, setProfile] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [monthKey, setMonthKey] = useState(getCurrentMonthKey());
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [deleteCardModal, setDeleteCardModal] = useState({ show: false, cardId: null, cardName: null, isDeleting: false });
+  const [addCardModal, setAddCardModal] = useState({ show: false, selectedCardId: '', refreshDay: 1, billingDate: '', cycleSpend: '', isAdding: false });
 
   useEffect(() => {
-    const p = loadUserProfile();
-    if (!p) { navigate('/register'); return; }
-    setProfile(p);
-    loadCardsMaster().then(setCardsMaster);
+    const loadData = async () => {
+      const p = await loadUserProfileFromAPI();
+      if (!p) { navigate('/register'); return; }
+      setProfile(p);
+      loadCardsMaster().then(setCardsMaster);
+    };
+    loadData();
   }, []);
 
   // Reload transactions when returning to this page
   useEffect(() => {
-    setTransactions(loadTransactions());
+    loadTransactions().then(setTransactions);
   }, []);
 
   // Also listen for focus to refresh data
   useEffect(() => {
     function handleFocus() {
-      setTransactions(loadTransactions());
+      loadTransactions().then(setTransactions);
     }
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
@@ -46,22 +52,314 @@ export default function Dashboard() {
 
   const availableMonths = getAvailableMonths(transactions);
   const monthTxns = filterTransactionsByMonth(transactions, monthKey);
+  const displayTxns = monthTxns.filter(txn => (txn.item || '').trim().toLowerCase() !== 'registration');
   const summary = getMonthSummary(monthTxns, cardsMaster, profile?.wallet || []);
   const showArrows = availableMonths.length > 1;
 
   const topCardMaster = cardsMaster.find(c => c.card_id === summary.topCardId);
 
-  const hasBaseline = profile?.wallet?.some(wc => (wc.cycle_spend_sgd || 0) > 0);
+  function handleConfirmLogout() {
+    localStorage.clear();
+    setShowLogoutModal(false);
+    navigate('/');
+  }
+
+  async function handleDeleteCard(cardId) {
+    try {
+      // Set loading state
+      setDeleteCardModal(prev => ({ ...prev, isDeleting: true }));
+
+      const userId = localStorage.getItem('cardtrack_user_id');
+      if (!userId) {
+        console.error('No user ID found');
+        setDeleteCardModal(prev => ({ ...prev, isDeleting: false }));
+        return;
+      }
+
+      const response = await fetch(`http://localhost:8000/api/v1/user_cards/${cardId}`, {
+        method: 'DELETE',
+        headers: {
+          'x-user-id': userId,
+        },
+      });
+
+      if (response.ok || response.status === 204) {
+        // Card deleted successfully, refresh both profile and transactions
+        const updatedProfile = await loadUserProfileFromAPI();
+        const updatedTransactions = await loadTransactions();
+        setProfile(updatedProfile);
+        setTransactions(updatedTransactions);
+        setDeleteCardModal({ show: false, cardId: null, cardName: null, isDeleting: false });
+      } else {
+        console.error('Failed to delete card:', response.statusText);
+        setDeleteCardModal(prev => ({ ...prev, isDeleting: false }));
+      }
+    } catch (error) {
+      console.error('Error deleting card:', error);
+      setDeleteCardModal(prev => ({ ...prev, isDeleting: false }));
+    }
+  }
+
+  async function handleAddCard() {
+    try {
+      if (!addCardModal.selectedCardId) {
+        console.error('No card selected');
+        return;
+      }
+
+      setAddCardModal(prev => ({ ...prev, isAdding: true }));
+
+      const userId = localStorage.getItem('cardtrack_user_id');
+      if (!userId) {
+        console.error('No user ID found');
+        setAddCardModal(prev => ({ ...prev, isAdding: false }));
+        return;
+      }
+
+      const payload = {
+        wallet_card: {
+          card_id: String(convertCardId(addCardModal.selectedCardId)),
+          refresh_day_of_month: addCardModal.refreshDay,
+          annual_fee_billing_date: addCardModal.billingDate,
+          cycle_spend_sgd: parseFloat(addCardModal.cycleSpend) || 0,
+        },
+      };
+
+      const response = await fetch('http://localhost:8000/api/v1/user_cards', {
+        method: 'POST',
+        headers: {
+          'x-user-id': userId,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok || response.status === 201) {
+        // Card added successfully, refresh profile and transactions
+        const updatedProfile = await loadUserProfileFromAPI();
+        setProfile(updatedProfile);
+
+        // Create registration transaction for this card if cycle_spend > 0
+        if (addCardModal.cycleSpend && parseFloat(addCardModal.cycleSpend) > 0) {
+          try {
+            const userId = localStorage.getItem('cardtrack_user_id');
+            await postRegistrationTransactions(userId, [{
+              card_id: addCardModal.selectedCardId,
+              cycle_spend_sgd: addCardModal.cycleSpend,
+            }]);
+          } catch (txnError) {
+            console.warn('Failed to create registration transaction:', txnError);
+          }
+        }
+
+        // Refresh transactions to show any new registration transaction
+        const updatedTransactions = await loadTransactions();
+        setTransactions(updatedTransactions);
+
+        setAddCardModal({ show: false, selectedCardId: '', refreshDay: 1, billingDate: '', cycleSpend: '', isAdding: false });
+      } else {
+        console.error('Failed to add card:', response.statusText);
+        setAddCardModal(prev => ({ ...prev, isAdding: false }));
+      }
+    } catch (error) {
+      console.error('Error adding card:', error);
+      setAddCardModal(prev => ({ ...prev, isAdding: false }));
+    }
+  }
 
   return (
-    <div className="pb-6 px-4 pt-6">
-      {/* Header */}
-      <div className="mb-4 px-[14px]">
-        <h1 className="text-[22px] font-semibold tracking-tight text-primary-dark">Dashboard</h1>
+    <div className="pb-6 px-4 pt-6 relative">
+      {/* Avatar - Top Left */}
+      <div className="absolute top-6 left-6 w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-lg">
+        <img src="https://tse4.mm.bing.net/th/id/OIP.mWxq1EykV6nxFaftjOdFyQHaHa?rs=1&pid=ImgDetMain&o=7&rm=3" alt="Avatar" className="w-full h-full object-cover" />
       </div>
 
+      {/* Logout Button - Top Right */}
+      <button
+        type="button"
+        onClick={() => setShowLogoutModal(true)}
+        className="absolute top-6 right-6 w-10 h-10 rounded-full border border-border hover:border-red-400 text-muted hover:text-red-500 font-medium transition-all bg-white hover:bg-red-50 flex items-center justify-center"
+        title="Logout"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </button>
+
+      {/* Header */}
+      <div className="mb-4 px-[14px] pt-20">
+        <p className="text-sm text-white/80 mb-1">Hello, {profile?.username || 'User'}!</p>
+        <h1 className="text-[22px] font-semibold tracking-tight text-white">Dashboard</h1>
+      </div>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="w-full max-w-[280px] p-6 bg-gradient-to-b from-gray-50 to-gray-100 rounded-[18px] shadow-[0_10px_32px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.5)]">
+            <h2 className="text-lg font-semibold text-primary-dark mb-2">Logout?</h2>
+            <p className="text-sm text-muted mb-6">Are you sure you want to logout?</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLogoutModal(false)}
+                className="flex-1 h-10 border border-border text-text font-medium rounded-lg hover:bg-white/60 transition-all text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmLogout}
+                className="flex-1 h-10 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-all text-sm"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Card Confirmation Modal */}
+      {deleteCardModal.show && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="w-full max-w-[280px] p-6 bg-gradient-to-b from-gray-50 to-gray-100 rounded-[18px] shadow-[0_10px_32px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.5)]">
+            <h2 className="text-lg font-semibold text-primary-dark mb-2">Delete Card?</h2>
+            {deleteCardModal.isDeleting ? (
+              <div className="flex flex-col items-center justify-center py-6">
+                <div className="relative w-8 h-8 mb-3">
+                  <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-purple-500 border-r-purple-500 animate-spin"></div>
+                </div>
+                <p className="text-sm text-muted">Deleting in progress...</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-muted mb-6">{profile?.username || 'User'}, are you sure you want to delete <span className="font-medium">{deleteCardModal.cardName}</span>?</p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setDeleteCardModal({ show: false, cardId: null, cardName: null, isDeleting: false })}
+                    className="flex-1 h-10 border border-border text-text font-medium rounded-lg hover:bg-white/60 transition-all text-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleDeleteCard(deleteCardModal.cardId)}
+                    className="flex-1 h-10 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-all text-sm"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Add Card Modal */}
+      {addCardModal.show && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-[380px] bg-card rounded-[18px] shadow-[0_10px_32px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.5)] p-6 overflow-hidden">
+            {/* Glossy shine overlay */}
+            <div 
+              className="absolute inset-0 rounded-[18px] pointer-events-none"
+              style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 50%)',
+                opacity: 0.6,
+              }}
+            />
+            {/* Content */}
+            <div className="relative z-10">
+              <h2 className="text-lg font-semibold text-text mb-4">Add Card</h2>
+              {!addCardModal.isAdding ? (
+                <>
+                  <div className="space-y-2.5 mb-6">
+                    {/* Card Selection */}
+                    <div>
+                      <label className="text-xs font-medium text-muted mb-1 block">Select Card</label>
+                      <select
+                        value={addCardModal.selectedCardId}
+                        onChange={(e) => setAddCardModal(prev => ({ ...prev, selectedCardId: e.target.value }))}
+                        className="w-full h-11 px-3 bg-card border-2 border-primary rounded-[14px] text-sm text-text outline-none focus:border-primary transition-colors"
+                      >
+                        <option value="">Choose a card...</option>
+                        {cardsMaster
+                          .filter(c => !profile?.wallet?.some(w => w.card_id === c.card_id))
+                          .map(c => (
+                            <option key={c.card_id} value={c.card_id}>
+                              {c.card_name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+
+                    {/* Refresh Date and Annual Fee Date */}
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="text-xs font-medium text-muted mb-1 block">Refresh Date</label>
+                        <select
+                          value={addCardModal.refreshDay}
+                          onChange={(e) => setAddCardModal(prev => ({ ...prev, refreshDay: parseInt(e.target.value) }))}
+                          className="w-full h-11 px-3 bg-card border-2 border-primary rounded-[14px] text-sm text-text outline-none focus:border-primary transition-colors"
+                        >
+                          {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-xs font-medium text-muted mb-1 block">Annual Fee Date</label>
+                        <input
+                          type="date"
+                          value={addCardModal.billingDate}
+                          onChange={(e) => setAddCardModal(prev => ({ ...prev, billingDate: e.target.value }))}
+                          className="w-full h-11 px-3 bg-card border-2 border-primary rounded-[14px] text-sm text-text outline-none focus:border-primary transition-colors"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Cycle Spend */}
+                    <div>
+                      <label className="text-xs font-medium text-muted mb-1 block">Spent so far (this cycle)</label>
+                      <input
+                        type="number"
+                        value={addCardModal.cycleSpend}
+                        onChange={(e) => setAddCardModal(prev => ({ ...prev, cycleSpend: e.target.value }))}
+                        placeholder="e.g., 700"
+                        step="0.01"
+                        min="0"
+                        className="w-full h-11 px-3 bg-card border-2 border-primary rounded-[14px] text-sm text-text outline-none focus:border-primary transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setAddCardModal({ show: false, selectedCardId: '', refreshDay: 1, billingDate: '', cycleSpend: '', isAdding: false })}
+                      className="flex-1 h-10 border-2 border-primary text-text font-medium rounded-[12px] hover:bg-white/60 transition-all text-sm"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleAddCard}
+                      disabled={!addCardModal.selectedCardId}
+                      className="flex-1 h-10 bg-purple-500 text-white font-medium rounded-[12px] hover:bg-purple-600 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-6">
+                  <div className="relative w-8 h-8 mb-3">
+                    <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-purple-500 border-r-purple-500 animate-spin"></div>
+                  </div>
+                  <p className="text-sm text-muted">Adding card...</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {/* Month Selector */}
-      <div className="flex items-center justify-center gap-4 mb-5">
+      <div className="flex items-center justify-center gap-4 mb-5 mt-6">
         {showArrows && (
           <button
             type="button"
@@ -113,37 +411,13 @@ export default function Dashboard() {
 
       {/* Transactions List */}
       <CardSurface className="mb-4">
-        {hasBaseline && (
-          <h2 className="text-xs font-semibold text-muted mb-3 uppercase tracking-wide">Prior Spend</h2>
-        )}
-
-        {/* Baseline rows (display-only, from wallet cycle_spend_sgd) */}
-        {profile?.wallet?.filter(wc => (wc.cycle_spend_sgd || 0) > 0).map(wc => {
-          const card = cardsMaster.find(c => c.card_id === wc.card_id);
-          return (
-            <div key={`baseline-${wc.card_id}`} className="flex items-center justify-between gap-3 mb-3 opacity-70">
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-text truncate">
-                  {card?.card_name || wc.card_id}
-                </div>
-              </div>
-              <div className="text-sm font-semibold text-text shrink-0 tabular-nums">
-                ${(wc.cycle_spend_sgd || 0).toFixed(2)}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Stronger divider between baseline and transactions */}
-        {hasBaseline && <hr className="border-gray-300/70 my-3" />}
-
         <h2 className="text-xs font-semibold text-muted mb-3 uppercase tracking-wide">Transactions</h2>
 
-        {monthTxns.length === 0 ? (
+        {displayTxns.length === 0 ? (
           <p className="text-sm text-muted text-center py-4">No transactions yet. Log a transaction from Recommend.</p>
         ) : (
           <div className="divide-y divide-gray-200/60">
-            {monthTxns.map(txn => {
+            {displayTxns.map(txn => {
               const card = cardsMaster.find(c => c.card_id === txn.card_id);
               return (
                 <div key={txn.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
@@ -167,29 +441,65 @@ export default function Dashboard() {
       </CardSurface>
 
       {/* Card Overview */}
-      {profile && profile.wallet && profile.wallet.length > 0 && (
+      {profile && (
         <CardSurface className="mb-4">
-          <h2 className="text-xs font-semibold text-muted mb-3 uppercase tracking-wide">Card Overview</h2>
-          <div className="space-y-3">
-            {profile.wallet.map(wc => {
-              const card = cardsMaster.find(c => c.card_id === wc.card_id);
-              const spend = getCardSpendForMonth(monthTxns, wc.card_id, wc.cycle_spend_sgd || 0);
-              return (
-                <div key={wc.card_id} className="flex items-center gap-3">
-                  <CardThumbnail imagePath={card?.image_path} name={card?.card_name} size="md" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-text truncate">{card?.card_name || wc.card_id}</div>
-                    <div className="text-xs text-muted">
-                      Annual fee: {wc.annual_fee_billing_date || 'Not set'}
-                    </div>
-                  </div>
-                  <div className="text-sm font-semibold text-text">
-                    ${spend.toFixed(2)}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs font-semibold text-muted uppercase tracking-wide">Card Overview</h2>
+            <button
+              type="button"
+              onClick={() => setAddCardModal({ show: true, selectedCardId: '', refreshDay: 1, billingDate: '', cycleSpend: '', isAdding: false })}
+              className="text-sm font-medium text-purple-500 hover:text-purple-600 transition-colors flex items-center gap-1"
+              title="Add new card"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Add Card
+            </button>
           </div>
+          {profile.wallet && profile.wallet.length > 0 ? (
+            <div className="space-y-3">
+              {profile.wallet.map(wc => {
+                const card = cardsMaster.find(c => c.card_id === wc.card_id);
+                const spend = getCardSpendForMonth(monthTxns, wc.card_id);
+                return (
+                  <div key={wc.card_id} className="flex items-center gap-3 group">
+                    <CardThumbnail imagePath={card?.image_path} name={card?.card_name} size="md" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-text truncate">{card?.card_name || wc.card_id}</div>
+                      <div className="text-xs text-muted">
+                        Annual fee: {wc.annual_fee_billing_date || 'Not set'}
+                      </div>
+                    </div>
+                    <div className="text-sm font-semibold text-text">
+                      ${spend.toFixed(2)}
+                    </div>
+                    <button
+                      type="button"
+                      className="ml-2 p-2 rounded-lg text-muted hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
+                      title="Delete card"
+                      onClick={() => {
+                        setDeleteCardModal({ show: true, cardId: wc.id, cardName: card?.card_name || wc.card_id });
+                      }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        <line x1="10" y1="11" x2="10" y2="17"/>
+                        <line x1="14" y1="11" x2="14" y2="17"/>
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-sm text-muted mb-4">No cards added yet</p>
+              <p className="text-xs text-muted/70">Click "Add Card" above to get started</p>
+            </div>
+          )}
         </CardSurface>
       )}
     </div>

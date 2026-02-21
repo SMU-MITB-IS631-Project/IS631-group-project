@@ -65,6 +65,44 @@
               "path": ["api", "v1", "transactions"]
             }
           }
+        },
+        {
+          "name": "Update transaction status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "x-user-id", "value": "{{userId}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"deleted_with_card\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "transactions", "1"]
+            }
+          }
+        },
+        {
+          "name": "Bulk update transaction status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "x-user-id", "value": "{{userId}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_ids\": [1, 2, 3],\n  \"status\": \"deleted_with_card\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions/bulk/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "transactions", "bulk", "status"]
+            }
+          }
         }
       ]
     },
@@ -229,6 +267,67 @@
               "raw": "{{baseUrl}}/api/v1/card-reasoner/explain-async",
               "host": ["{{baseUrl}}"],
               "path": ["api", "v1", "card-reasoner", "explain-async"]
+            }
+          }
+        },
+        {
+          "name": "Explain from DB (TDD)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"card_id\": 3,\n  \"category\": \"Fashion\",\n  \"transaction_amount\": 120.00,\n  \"merchant_name\": \"ZARA\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/card-reasoner/explain-db",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "card-reasoner", "explain-db"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Recommendation",
+      "item": [
+        {
+          "name": "Get recommendation",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "x-user-id", "value": "{{numericUserId}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recommendation?user_id={{numericUserId}}&category=Fashion&amount_sgd=120.00",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "recommendation"],
+              "query": [
+                {"key": "user_id", "value": "{{numericUserId}}"},
+                {"key": "category", "value": "Fashion"},
+                {"key": "amount_sgd", "value": "120.00"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Recommend and explain",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "x-user-id", "value": "{{numericUserId}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount_sgd\": 120.00,\n  \"category\": \"Fashion\",\n  \"merchant_name\": \"ZARA\",\n  \"user_id\": {{numericUserId}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recommendation/explain",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "recommendation", "explain"]
             }
           }
         }
