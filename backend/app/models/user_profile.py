@@ -2,13 +2,17 @@ from sqlalchemy import Column, Integer, String, DateTime, Enum as SAEnum
 from app.db.db import Base
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, UTC
 from enum import Enum as PyEnum
 
 class BenefitsPreference(PyEnum):
     Miles = "miles"
     Cashback = "cashback"
     No_preference = "no preference"
+
+
+def _utc_now_naive() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 class UserProfile(Base):
     __tablename__ = "user_profile"
@@ -18,7 +22,7 @@ class UserProfile(Base):
     name = Column(String, nullable=True)
     email = Column(String, nullable=True, unique=True)
     benefits_preference = Column(SAEnum(BenefitsPreference), nullable=False, default=BenefitsPreference.No_preference)
-    created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_date = Column(DateTime, default=_utc_now_naive, nullable=False)
 
 # Relationships with user-owned cards and transactions
     user_owned_cards = relationship("UserOwnedCard", back_populates="user_profile", cascade="all, delete-orphan")

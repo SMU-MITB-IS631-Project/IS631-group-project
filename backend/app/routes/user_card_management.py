@@ -17,7 +17,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
@@ -32,7 +32,8 @@ class WalletCard(BaseModel):
     annual_fee_billing_date: str  # YYYY-MM-DD
     cycle_spend_sgd: float = Field(0, ge=0)
 
-    @validator("annual_fee_billing_date")
+    @field_validator("annual_fee_billing_date")
+    @classmethod
     def validate_annual_fee_billing_date(cls, v: str) -> str:
         """Ensure date is in ISO YYYY-MM-DD format, per API contract."""
         try:
