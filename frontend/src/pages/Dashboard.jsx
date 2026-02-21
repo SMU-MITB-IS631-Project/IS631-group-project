@@ -441,7 +441,7 @@ export default function Dashboard() {
       </CardSurface>
 
       {/* Card Overview */}
-      {profile && profile.wallet && profile.wallet.length > 0 && (
+      {profile && (
         <CardSurface className="mb-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-xs font-semibold text-muted uppercase tracking-wide">Card Overview</h2>
@@ -458,41 +458,48 @@ export default function Dashboard() {
               Add Card
             </button>
           </div>
-          <div className="space-y-3">
-            {profile.wallet.map(wc => {
-              const card = cardsMaster.find(c => c.card_id === wc.card_id);
-              const spend = getCardSpendForMonth(monthTxns, wc.card_id);
-              return (
-                <div key={wc.card_id} className="flex items-center gap-3 group">
-                  <CardThumbnail imagePath={card?.image_path} name={card?.card_name} size="md" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-text truncate">{card?.card_name || wc.card_id}</div>
-                    <div className="text-xs text-muted">
-                      Annual fee: {wc.annual_fee_billing_date || 'Not set'}
+          {profile.wallet && profile.wallet.length > 0 ? (
+            <div className="space-y-3">
+              {profile.wallet.map(wc => {
+                const card = cardsMaster.find(c => c.card_id === wc.card_id);
+                const spend = getCardSpendForMonth(monthTxns, wc.card_id);
+                return (
+                  <div key={wc.card_id} className="flex items-center gap-3 group">
+                    <CardThumbnail imagePath={card?.image_path} name={card?.card_name} size="md" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-text truncate">{card?.card_name || wc.card_id}</div>
+                      <div className="text-xs text-muted">
+                        Annual fee: {wc.annual_fee_billing_date || 'Not set'}
+                      </div>
                     </div>
+                    <div className="text-sm font-semibold text-text">
+                      ${spend.toFixed(2)}
+                    </div>
+                    <button
+                      type="button"
+                      className="ml-2 p-2 rounded-lg text-muted hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
+                      title="Delete card"
+                      onClick={() => {
+                        setDeleteCardModal({ show: true, cardId: wc.id, cardName: card?.card_name || wc.card_id });
+                      }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        <line x1="10" y1="11" x2="10" y2="17"/>
+                        <line x1="14" y1="11" x2="14" y2="17"/>
+                      </svg>
+                    </button>
                   </div>
-                  <div className="text-sm font-semibold text-text">
-                    ${spend.toFixed(2)}
-                  </div>
-                  <button
-                    type="button"
-                    className="ml-2 p-2 rounded-lg text-muted hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
-                    title="Delete card"
-                    onClick={() => {
-                      setDeleteCardModal({ show: true, cardId: wc.id, cardName: card?.card_name || wc.card_id });
-                    }}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="3 6 5 6 21 6"/>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                      <line x1="10" y1="11" x2="10" y2="17"/>
-                      <line x1="14" y1="11" x2="14" y2="17"/>
-                    </svg>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-sm text-muted mb-4">No cards added yet</p>
+              <p className="text-xs text-muted/70">Click "Add Card" above to get started</p>
+            </div>
+          )}
         </CardSurface>
       )}
     </div>
