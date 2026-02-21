@@ -65,9 +65,9 @@ class RecommendationContext(BaseModel):
     @field_validator("base_rate", "bonus_rate")
     @classmethod
     def validate_rate_bounds(cls, v: Optional[Decimal]) -> Optional[Decimal]:
-        """Ensure rates are within realistic bounds (0-100%)"""
-        if v is not None and v > 1:
-            raise ValueError("Rate cannot exceed 100% (1.0). Check database values.")
+        """Ensure rates are non-negative. Miles-per-dollar rates legitimately exceed 1.0."""
+        if v is not None and v < 0:
+            raise ValueError("Rate must be non-negative.")
         return v
     
     @field_validator("card_name", "bank")
