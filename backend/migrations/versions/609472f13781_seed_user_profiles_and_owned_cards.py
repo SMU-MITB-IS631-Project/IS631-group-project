@@ -32,10 +32,10 @@ def upgrade() -> None:
         """
         INSERT INTO user_owned_cards (user_id, card_id, card_expiry_date, billing_cycle_refresh_date, status)
         VALUES
-          (1, 1, '9999-01-01', '2026-02-28', 'Active'),
-          (1, 2, '9999-01-01', '2026-02-28', 'Active'),
-          (2, 3, '9999-01-01', '2026-02-28', 'Active'),
-          (2, 4, '9999-01-01', '2026-02-28', 'Active');
+          (1, 1, '2029-02-28', '2026-02-28', 'Active'),
+          (1, 2, '2029-02-28', '2026-02-28', 'Active'),
+          (2, 3, '2029-02-28', '2026-02-28', 'Active'),
+          (2, 4, '2029-02-28', '2026-02-28', 'Active');
         """
     )
 
