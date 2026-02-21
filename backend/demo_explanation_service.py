@@ -217,7 +217,7 @@ def main():
     print("="*80)
     print("\n📚 Next Steps:")
     print("   1. Set OPENAI_API_KEY in .env to enable AI-powered explanations")
-    print("   2. Run tests: pytest backend/tests/test_explanation_service.py -v")
+    print("   2. Run tests: pytest backend/tests -v")
     print("   3. Start API: python backend/run.py")
     print("   4. Test endpoint: POST /api/v1/card-reasoner/explain-db")
     print("\n")
