@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 
 from app.models.card_catalogue import CardCatalogue, CardCatalogueResponse
 from app.models.user_owned_cards import UserOwnedCardResponse
