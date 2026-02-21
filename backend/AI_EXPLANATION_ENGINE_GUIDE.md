@@ -81,16 +81,20 @@ cp .env.example .env
 python backend/demo_explanation_service.py
 ```
 
-### 4. Run Tests
+### 4. (Planned) Run Tests
+
+> Note: The `backend/tests/test_explanation_service.py` test file is planned but not yet implemented.  
+> The commands below are examples of how you will run the tests once they exist.
+
 ```bash
-# Run all tests
-pytest backend/tests/test_explanation_service.py -v
+# Example: run all tests (once test_explanation_service.py exists)
+# pytest backend/tests/test_explanation_service.py -v
 
-# Run specific test
-pytest backend/tests/test_explanation_service.py::test_prompt_contains_correct_bonus_rate_from_db -v
+# Example: run specific test
+# pytest backend/tests/test_explanation_service.py::test_prompt_contains_correct_bonus_rate_from_db -v
 
-# Run with coverage
-pytest backend/tests/test_explanation_service.py --cov=app.services.explanation_service
+# Example: run with coverage
+# pytest backend/tests/test_explanation_service.py --cov=app.services.explanation_service
 ```
 
 ### 5. Start API Server
