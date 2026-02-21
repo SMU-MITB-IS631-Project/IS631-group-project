@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
+from app.dependencies.security import normalize_user_id, require_user_id_header
 from app.models.transaction import TransactionRequest
 from app.services.transaction_service import ServiceError, TransactionService
 
@@ -30,7 +31,7 @@ def _unauthorized_response() -> JSONResponse:
 @router.post("", status_code=201)
 def create_transaction(
     request: TransactionRequest,
-    http_request: Request,
+    authenticated_user_id: str = Depends(require_user_id_header),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
@@ -49,13 +50,9 @@ def create_transaction(
         }
     }
     """
-    user_id = http_request.headers.get("x-user-id")
-    if not user_id:
-        return _unauthorized_response()
-    
     try:
         service = TransactionService(db)
-        transaction = service.create_transaction(user_id, request.transaction)
+        transaction = service.create_transaction(authenticated_user_id, request.transaction)
         return {"transaction": transaction}
     except ServiceError as exc:
         raise HTTPException(
@@ -83,19 +80,15 @@ def create_transaction(
 
 @router.get("")
 def list_transactions(
-    request: Request,
+    authenticated_user_id: str = Depends(require_user_id_header),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
     List all transactions for current user.
     """
-    user_id = request.headers.get("x-user-id")
-    if not user_id:
-        return _unauthorized_response()
-    
     try:
         service = TransactionService(db)
-        transactions = service.get_user_transactions(user_id, sort_by_date_desc=True)
+        transactions = service.get_user_transactions(authenticated_user_id, sort_by_date_desc=True)
         return {"transactions": transactions}
     except ServiceError as exc:
         raise HTTPException(
@@ -113,7 +106,7 @@ def list_transactions(
 @router.get("/{user_id}")
 def get_user_transactions_by_id(
     user_id: str,
-    request: Request,
+    authenticated_user_id: str = Depends(require_user_id_header),
     sort: str = "date_desc",
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
@@ -132,9 +125,17 @@ def get_user_transactions_by_id(
     Security:
     - Only returns transactions for the specified user
     """
-    header_user_id = request.headers.get("x-user-id")
-    if not header_user_id:
-        return _unauthorized_response()
+    if normalize_user_id(authenticated_user_id) != normalize_user_id(user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": {
+                    "code": "FORBIDDEN",
+                    "message": "You are not allowed to access another user's transactions.",
+                    "details": {},
+                }
+            },
+        )
     
     sort_value = sort.lower()
     if sort_value == "none":

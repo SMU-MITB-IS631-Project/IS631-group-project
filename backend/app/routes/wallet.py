@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from typing import Dict, Any
 
 from app.models.wallet import (
@@ -8,8 +8,8 @@ from app.models.wallet import (
     WalletResponse,
     WalletCardResponse
 )
+from app.dependencies.security import require_user_id_header
 from app.services.wallet_service import (
-    DEFAULT_USER_ID,
     get_user_wallet,
     add_card_to_wallet,
     update_card_in_wallet,
@@ -26,7 +26,7 @@ router = APIRouter(
 
 
 @router.get("", response_model=WalletResponse)
-def get_wallet() -> Dict[str, Any]:
+def get_wallet(authenticated_user_id: str = Depends(require_user_id_header)) -> Dict[str, Any]:
     """
     Return the current user's wallet.
     
@@ -36,7 +36,7 @@ def get_wallet() -> Dict[str, Any]:
     Security:
     - Returns wallet for authenticated user (user_id from token)
     """
-    user_id = DEFAULT_USER_ID  # TODO: Get from auth token
+    user_id = authenticated_user_id
     users = get_users()
     user = users.get(user_id)
     
@@ -58,7 +58,7 @@ def get_wallet() -> Dict[str, Any]:
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=WalletCardResponse)
-def add_wallet_card(payload: WalletCardCreate) -> Dict[str, Any]:
+def add_wallet_card(payload: WalletCardCreate, authenticated_user_id: str = Depends(require_user_id_header)) -> Dict[str, Any]:
     """
     Add a new card to the user's wallet.
     
@@ -72,7 +72,7 @@ def add_wallet_card(payload: WalletCardCreate) -> Dict[str, Any]:
     Returns:
     - wallet_card: The added card details
     """
-    user_id = DEFAULT_USER_ID  # TODO: Get from auth token
+    user_id = authenticated_user_id
     card = payload.wallet_card
 
     # Business validation: card_id must exist in cards master
@@ -107,7 +107,11 @@ def add_wallet_card(payload: WalletCardCreate) -> Dict[str, Any]:
 
 
 @router.patch("/{card_id}", response_model=WalletCardResponse)
-def update_wallet_card(card_id: str, payload: WalletCardUpdate) -> Dict[str, Any]:
+def update_wallet_card(
+    card_id: str,
+    payload: WalletCardUpdate,
+    authenticated_user_id: str = Depends(require_user_id_header),
+) -> Dict[str, Any]:
     """
     Update fields of an existing wallet card.
     
@@ -120,7 +124,7 @@ def update_wallet_card(card_id: str, payload: WalletCardUpdate) -> Dict[str, Any
     Returns:
     - wallet_card: The updated card details
     """
-    user_id = DEFAULT_USER_ID  # TODO: Get from auth token
+    user_id = authenticated_user_id
     
     # Prepare updates dict with only non-None values
     updates = {}
@@ -149,7 +153,7 @@ def update_wallet_card(card_id: str, payload: WalletCardUpdate) -> Dict[str, Any
 
 
 @router.delete("/{card_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_wallet_card(card_id: str) -> Response:
+def delete_wallet_card(card_id: str, authenticated_user_id: str = Depends(require_user_id_header)) -> Response:
     """
     Remove a card from the user's wallet.
     
@@ -160,7 +164,7 @@ def delete_wallet_card(card_id: str) -> Response:
     - 204 No Content on success
     - 404 if card not found
     """
-    user_id = DEFAULT_USER_ID  # TODO: Get from auth token
+    user_id = authenticated_user_id
     
     deleted = delete_card_from_wallet(card_id, user_id)
     

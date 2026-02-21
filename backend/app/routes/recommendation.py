@@ -3,12 +3,13 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
+from app.dependencies.security import require_user_id_int
 from app.models.card_bonus_category import BonusCategory
 from app.services.recommendation_service import RecommendationService
 
@@ -38,19 +39,10 @@ class RecommendationResponse(BaseModel):
     ranked_cards: list[RecommendationCard]
 
 
-def _parse_user_id(request: Request, user_id: Optional[int]) -> int:
-    if user_id is not None:
-        return user_id
-    header = request.headers.get("x-user-id")
-    if header and header.strip().isdigit():
-        return int(header.strip())
-    raise ValueError("user_id is required (query param) or x-user-id header must be an integer")
-
-
 @router.get("/recommendation", response_model=RecommendationResponse)
 def get_recommendation(
-    request: Request,
     db: Session = Depends(get_db),
+    authenticated_user_id: int = Depends(require_user_id_int),
     user_id: Optional[int] = Query(default=None),
     category: Optional[BonusCategory] = Query(default=None),
     amount_sgd: Optional[Decimal] = Query(default=None),
@@ -61,19 +53,18 @@ def get_recommendation(
     - Queries active user cards from DB.
     - Queries reward rules (bonus categories) from DB.
     """
-    try:
-        resolved_user_id = _parse_user_id(request, user_id)
-    except ValueError as exc:
+    if user_id is not None and user_id != authenticated_user_id:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "error": {
-                    "code": "VALIDATION_ERROR",
-                    "message": str(exc),
-                    "details": {},
+                    "code": "FORBIDDEN",
+                    "message": "You are not allowed to access another user's recommendations.",
+                    "details": {"authenticated_user_id": authenticated_user_id, "requested_user_id": user_id},
                 }
             },
         )
+    resolved_user_id = authenticated_user_id
 
     if amount_sgd is not None and amount_sgd <= 0:
         raise HTTPException(

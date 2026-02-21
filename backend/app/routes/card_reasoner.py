@@ -5,7 +5,8 @@ Endpoints:
 - POST /api/v1/card-reasoner/explain - Generate explanation (sync)
 """
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from app.dependencies.security import require_user_id_header
 from app.services.card_reasoner_service import (
     ExplanationRequest,
     ExplanationResponse,
@@ -21,7 +22,10 @@ router = APIRouter(
 
 
 @router.post("/explain", response_model=ExplanationResponse)
-def explain_recommendation(request: ExplanationRequest) -> ExplanationResponse:
+def explain_recommendation(
+    request: ExplanationRequest,
+    authenticated_user_id: str = Depends(require_user_id_header),
+) -> ExplanationResponse:
     """
     Generate a natural language explanation for why a credit card was recommended.
     
@@ -98,7 +102,10 @@ def explain_recommendation(request: ExplanationRequest) -> ExplanationResponse:
 
 
 @router.post("/explain-async", response_model=ExplanationResponse)
-async def explain_recommendation_async(request: ExplanationRequest) -> ExplanationResponse:
+async def explain_recommendation_async(
+    request: ExplanationRequest,
+    authenticated_user_id: str = Depends(require_user_id_header),
+) -> ExplanationResponse:
     """
     Async variant for non-blocking LLM calls.
     Recommended for high-concurrency scenarios.
