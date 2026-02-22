@@ -45,7 +45,7 @@ export default function CardAutocomplete({ cards, value, onChange, placeholder =
               if (!e.target.value) onChange('');
             }}
             onFocus={() => setIsOpen(true)}
-            className="w-full h-11 px-3 pr-10 bg-white border border-border rounded-[14px] text-sm outline-none focus:border-primary transition-colors"
+            className="w-full h-11 px-3 pr-10 bg-card border-2 border-primary rounded-[14px] text-sm text-text outline-none focus:border-primary transition-colors"
           />
           {isVerified && (
             <span className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -56,7 +56,7 @@ export default function CardAutocomplete({ cards, value, onChange, placeholder =
       </div>
 
       {isOpen && filtered.length > 0 && (
-        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-border rounded-[14px] shadow-lg max-h-48 overflow-y-auto">
+        <div className="absolute z-20 top-full left-0 right-0 mt-2 bg-card border-3 border-primary rounded-[14px] shadow-[0_12px_32px_rgba(91,85,107,0.4),0_0_0_2px_rgba(255,255,255,0.8)] max-h-48 overflow-y-auto">
           {filtered.map(card => (
             <button
               key={card.card_id}
@@ -66,8 +66,7 @@ export default function CardAutocomplete({ cards, value, onChange, placeholder =
                 setQuery(card.card_name);
                 setIsOpen(false);
               }}
-              className="w-full text-left px-3 py-2.5 hover:bg-bg text-sm flex items-center gap-2 transition-colors first:rounded-t-[14px] last:rounded-b-[14px]"
-            >
+              className="w-full text-left px-3 py-3 hover:bg-yellow-300/40 text-sm flex items-center gap-2 transition-all first:rounded-t-[12px] last:rounded-b-[12px] hover:scale-[1.02] active:scale-[0.98]"            >
               <CardThumbnail imagePath={card.image_path} name={card.card_name} size="sm" />
               <div>
                 <div className="font-medium text-text">{card.card_name}</div>

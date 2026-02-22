@@ -1,19 +1,21 @@
 #routes user_profile.py
-from fastapi import APIRouter, HTTPException, status, Response
+from fastapi import APIRouter, HTTPException, status
 from typing import Dict, Any
+from app.services.user_profile import verify_password
+from app.db.db import SessionLocal
 
 from app.models.user_profile import (
-    UserProfile,
-    BenefitsPreference,
     UserProfileResponse,
     UserProfileCreate,
     UserProfileBase,
-    UserProfileUpdate
+    UserProfileUpdate,
+    LoginPayload,
+    LoginResponse
 )
 from app.services.user_profile import (
     get_users,
-    get_next_available_user_id,
-    create_user
+    create_user,
+    get_user_by_username
 )
 
 router = APIRouter(
@@ -100,17 +102,26 @@ def create_user_profile(payload: UserProfileCreate) -> Dict[str, Any]:
                 }
             }
         )
-
-    user_id = get_next_available_user_id(users)
-
-    new_user = create_user(
-        user_id=user_id,
-        username=payload.username,
-        password=payload.password,
-        name=payload.name,
-        email=payload.email,
-        benefits_preference=payload.benefits_preference
-    )
+    
+    try:
+        new_user = create_user(
+            username=payload.username,
+            password=payload.password,
+            name=payload.name,
+            email=payload.email,
+            benefits_preference=payload.benefits_preference.value if payload.benefits_preference else None
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": {
+                    "code": "CONFLICT",
+                    "message": str(exc),
+                    "details": {"username": payload.username}
+                }
+            }
+        )
 
     return {
         "id": new_user["id"],
@@ -121,7 +132,6 @@ def create_user_profile(payload: UserProfileCreate) -> Dict[str, Any]:
         "created_date": new_user["created_date"],
     }
 
-# ...existing code...
 @router.patch("/{user_id}", response_model=UserProfileResponse)
 def update_user_profile(user_id: str, payload: UserProfileUpdate) -> Dict[str, Any]:
     """
@@ -215,4 +225,78 @@ def update_user_profile(user_id: str, payload: UserProfileUpdate) -> Dict[str, A
         "created_date": user["created_date"],
     }
 
-
+@router.post("/login", response_model=UserProfileResponse, tags=["user_profile"])
+def login_user(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Login endpoint to check if user exists by username.
+    
+    Request body:
+    - username: str
+    - password: str
+    
+    Returns:
+    - User profile if credentials are valid
+    - 404 error if user doesn't exist
+    - 401 error if password is invalid
+    """
+    username = payload.get("username", "").strip()
+    password = payload.get("password", "")
+    
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "Username is required.",
+                    "details": {}
+                }
+            }
+        )
+        
+    if not password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "Password is required.",
+                    "details": {}
+                }
+            }
+        )
+    
+    user = get_user_by_username(username)
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": "User not found.",
+                    "details": {"username": username}
+                }
+            }
+        )
+        
+    if not verify_password(password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Invalid username or password.",
+                    "details": {}
+                }
+            }
+        )
+    
+    return {
+        "id": user.id,
+        "username": user.username,
+        "name": user.name,
+        "email": user.email,
+        "benefits_preference": user.benefits_preference,
+        "created_date": user.created_date,
+    }

@@ -1,12 +1,14 @@
-import csv
+import calendar
 import logging
-import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-import uuid
+from datetime import date, datetime
+from typing import Any, Dict, List, Optional, cast
 
-from app.services.data_service import USERS_FILE, _load_json, _save_json
+from sqlalchemy.orm import Session
+
+from app.models.card_catalogue import CardCatalogue
+from app.models.user_owned_cards import UserOwnedCard, UserOwnedCardStatus
+from app.models.user_profile import BenefitsPreference, UserProfile
 
 
 @dataclass
@@ -18,195 +20,160 @@ class ServiceError(Exception):
 
 
 class UserCardManagementService:
-    def __init__(self, user_id: Optional[str]) -> None:
-        self.user_id = user_id
-        self._cards_master_rows = self._load_cards_master_rows()
-        self._cards_master_ids = {row["card_id"] for row in self._cards_master_rows}
+    def __init__(self, db: Session) -> None:
+        self.db = db
 
-    def _backend_root(self) -> str:
-        return os.path.dirname(os.path.dirname(__file__))
-
-    def _repo_root(self) -> str:
-        return os.path.dirname(self._backend_root())
-
-    def _audit_log_file(self) -> str:
-        return os.path.join(self._backend_root(), "data", "user_card_audit_log.json")
-
-    def _load_cards_master_rows(self) -> List[Dict[str, Any]]:
-        csv_path = os.path.join(
-            self._repo_root(),
-            "frontend",
-            "public",
-            "data",
-            "cards_master.csv",
-        )
-        if not os.path.exists(csv_path):
-            logging.warning(f"Cards master file not found at: {csv_path}")
-            return []
-        try:
-            with open(csv_path, newline="", encoding="utf-8") as file:
-                reader = csv.DictReader(file)
-                # Validate that the expected card_id column exists
-                if not reader.fieldnames or "card_id" not in reader.fieldnames:
-                    logging.error(
-                        "Cards master CSV at %s is missing required 'card_id' header. "
-                        "Available headers: %s",
-                        csv_path,
-                        reader.fieldnames,
-                    )
-                    return []
-
-                rows: List[Dict[str, Any]] = []
-                for index, row in enumerate(reader, start=1):
-                    # Safely fetch and normalize card_id
-                    card_id = (row.get("card_id") or "").strip()
-                    if not card_id:
-                        logging.warning(
-                            "Skipping cards_master.csv row %d at %s due to missing/blank 'card_id': %r",
-                            index,
-                            csv_path,
-                            row,
-                        )
-                        continue
-                    row["card_id"] = card_id
-                    rows.append(row)
-
-                return rows
-        except csv.Error as e:
-            logging.error(f"CSV read error in {csv_path}: {e}")
-            return []
-        except Exception as e:
-            logging.error(f"Failed to load cards master file {csv_path}: {e}")
-            return []
-
-    def _get_users(self) -> Dict[str, Any]:
-        return _load_json(USERS_FILE)
-
-    def _save_users(self, users: Dict[str, Any]) -> None:
-        _save_json(USERS_FILE, users)
-
-    def _load_audit_log(self) -> List[Dict[str, Any]]:
-        raw = _load_json(self._audit_log_file())
-        if isinstance(raw, list):
-            return raw
-        return raw.get("events", []) if isinstance(raw, dict) else []
-
-    def _save_audit_log(self, events: List[Dict[str, Any]]) -> None:
-        _save_json(self._audit_log_file(), {"events": events})
-
-    def _require_user_context(self) -> str:
-        if not self.user_id:
+    def _require_user_context(self, user_id: Optional[str]) -> str:
+        if not user_id:
             raise ServiceError(401, "UNAUTHORIZED", "Missing or invalid user context.", {"required_header": "x-user-id"})
-        return self.user_id
+        return user_id
 
-    def _ensure_wallet_card_ids(self, users: Dict[str, Any], user_key: str) -> bool:
-        user = users.get(user_key, {})
-        wallet = user.get("wallet", [])
-        changed = False
-        for card in wallet:
-            if not card.get("id"):
-                card["id"] = f"uc_{uuid.uuid4().hex}"
-                changed = True
-            if "is_active" not in card:
-                card["is_active"] = True
-                changed = True
-        if changed:
-            user["wallet"] = wallet
-            users[user_key] = user
-        return changed
+    def _resolve_user_id(self, user_id: Optional[str]) -> int:
+        raw_user_id = self._require_user_context(user_id).strip()
+        if raw_user_id.isdigit():
+            return int(raw_user_id)
+        if raw_user_id.startswith("u_") and raw_user_id[2:].isdigit():
+            return int(raw_user_id[2:])
 
-    def _public_wallet_card(self, card: Dict[str, Any]) -> Dict[str, Any]:
-        return {
-            "card_id": card.get("card_id"),
-            "refresh_day_of_month": card.get("refresh_day_of_month"),
-            "annual_fee_billing_date": card.get("annual_fee_billing_date"),
-            "cycle_spend_sgd": card.get("cycle_spend_sgd", 0),
-        }
-
-    def _story_user_card(self, card: Dict[str, Any]) -> Dict[str, Any]:
-        data = self._public_wallet_card(card)
-        data["id"] = card.get("id")
-        data["reward_rules"] = self._get_rewards_rule(card.get("card_id", ""))
-        return data
-
-    def _get_user_or_raise(self, require_auth: bool = False) -> tuple[Dict[str, Any], Dict[str, Any], str]:
-        if require_auth:
-            user_key = self._require_user_context()
-        else:
-            user_key = self.user_id or "u_001"
-        users = self._get_users()
-        user = users.get(user_key)
+        user = self.db.query(UserProfile).filter(UserProfile.username == raw_user_id).first()
         if not user:
             raise ServiceError(404, "NOT_FOUND", "Profile not found.", {})
-        if self._ensure_wallet_card_ids(users, user_key):
-            self._save_users(users)
-            user = users[user_key]
-        return users, user, user_key
+        return cast(int, user.id)
 
-    def _find_user_card_owner(self, user_card_id: str) -> Optional[str]:
-        users = self._get_users()
-        for uid, user in users.items():
-            for card in user.get("wallet", []):
-                if card.get("id") == user_card_id and card.get("is_active", True):
-                    return uid
-        return None
+    def _format_user_id(self, user_id: int) -> str:
+        return f"u_{user_id:03d}"
 
-    def _get_rewards_rule(self, card_id: str) -> Dict[str, Any]:
-        row = next((r for r in self._cards_master_rows if r.get("card_id") == card_id), None)
-        reward_type = (row or {}).get("reward_type", "unknown")
-        
-        # Validate that hardcoded defaults exist in master data
-        defaults = {
-            "ww": "4.0 mpd for eligible online spend, base rate otherwise.",
-            "prvi": "Higher miles on eligible spend categories; base miles otherwise.",
-            "uobone": "Tiered cashback with minimum monthly spend requirements.",
-        }
-        for default_id in defaults:
-            if default_id not in self._cards_master_ids:
-                logging.warning(f"Default reward rule for card_id '{default_id}' has no corresponding entry in cards_master.csv")
-        
+    def _parse_card_id(self, card_id: Any, field: str = "user_card.card_id") -> int:
+        if isinstance(card_id, int):
+            return card_id
+        if isinstance(card_id, str) and card_id.isdigit():
+            return int(card_id)
+        raise ServiceError(
+            400,
+            "VALIDATION_ERROR",
+            f"Invalid card_id '{card_id}'. Must be an integer.",
+            {"field": field, "reason": "Invalid format or type."},
+        )
+
+    def _get_card_catalogue(self, card_id: int) -> Optional[CardCatalogue]:
+        return self.db.query(CardCatalogue).filter(CardCatalogue.card_id == card_id).first()
+
+    def _benefit_to_reward_type(self, card: Optional[CardCatalogue]) -> str:
+        if not card or not getattr(card, "benefit_type", None):
+            return "unknown"
+        return str(card.benefit_type.value).lower()
+
+    def _next_billing_cycle_date(self, refresh_day_of_month: int) -> datetime:
+        today = date.today()
+        last_day = calendar.monthrange(today.year, today.month)[1]
+        day = min(refresh_day_of_month, last_day)
+        candidate = date(today.year, today.month, day)
+        if candidate < today:
+            if today.month == 12:
+                year, month = today.year + 1, 1
+            else:
+                year, month = today.year, today.month + 1
+            last_day = calendar.monthrange(year, month)[1]
+            day = min(refresh_day_of_month, last_day)
+            candidate = date(year, month, day)
+        return datetime.combine(candidate, datetime.min.time())
+
+    def _parse_annual_fee_date(self, annual_fee_billing_date: str) -> datetime:
+        try:
+            return datetime.fromisoformat(annual_fee_billing_date)
+        except ValueError as exc:
+            raise ServiceError(
+                400,
+                "VALIDATION_ERROR",
+                "Invalid profile payload.",
+                {"field": "annual_fee_billing_date", "reason": "Must be YYYY-MM-DD."},
+            ) from exc
+
+    def _public_wallet_card(self, card: UserOwnedCard) -> Dict[str, Any]:
         return {
-            "reward_type": reward_type,
-            "rule_summary": defaults.get(card_id, "See issuer terms for reward computation."),
+            "id": card.id,
+            "card_id": str(card.card_id),
+            "refresh_day_of_month": card.billing_cycle_refresh_date.day,
+            "annual_fee_billing_date": card.card_expiry_date.date().isoformat(),
         }
 
-    def list_user_cards(self) -> List[Dict[str, Any]]:
-        _, user, _ = self._get_user_or_raise(require_auth=True)
-        wallet = user.get("wallet", [])
-        active_cards = [card for card in wallet if card.get("is_active", True)]
-        return [self._story_user_card(card) for card in active_cards]
+    def _story_user_card(self, card: UserOwnedCard, catalog: Optional[CardCatalogue]) -> Dict[str, Any]:
+        data = self._public_wallet_card(card)
+        data["id"] = str(card.id)
+        data["reward_rules"] = {
+            "reward_type": self._benefit_to_reward_type(catalog),
+            "rule_summary": "See issuer terms for reward computation.",
+        }
+        return data
 
-    def get_profile(self) -> Dict[str, Any]:
-        _, user, _ = self._get_user_or_raise(require_auth=False)
-        active_wallet = [self._public_wallet_card(card) for card in user.get("wallet", []) if card.get("is_active", True)]
+    def list_user_cards(self, user_id: Optional[str]) -> List[Dict[str, Any]]:
+        resolved_user_id = self._resolve_user_id(user_id)
+        user = self.db.query(UserProfile).filter(UserProfile.id == resolved_user_id).first()
+        if not user:
+            raise ServiceError(404, "NOT_FOUND", "Profile not found.", {})
+        rows = (
+            self.db.query(UserOwnedCard, CardCatalogue)
+            .outerjoin(CardCatalogue, UserOwnedCard.card_id == CardCatalogue.card_id)
+            .filter(
+                UserOwnedCard.user_id == resolved_user_id,
+                UserOwnedCard.status == UserOwnedCardStatus.Active,
+            )
+            .all()
+        )
+        return [self._story_user_card(card, catalog) for card, catalog in rows]
+
+    def get_profile(self, user_id: Optional[str]) -> Dict[str, Any]:
+        resolved_user_id = self._resolve_user_id(user_id)
+        user = self.db.query(UserProfile).filter(UserProfile.id == resolved_user_id).first()
+        if not user:
+            raise ServiceError(404, "NOT_FOUND", "Profile not found.", {})
+
+        cards = (
+            self.db.query(UserOwnedCard)
+            .filter(
+                UserOwnedCard.user_id == resolved_user_id,
+                UserOwnedCard.status == UserOwnedCardStatus.Active,
+            )
+            .all()
+        )
+        benefits_preference = cast(Optional[BenefitsPreference], user.benefits_preference)
         return {
-            "user_id": user.get("user_id"),
-            "username": user.get("username"),
-            "preference": user.get("preference"),
-            "wallet": active_wallet,
+            "user_id": self._format_user_id(cast(int, user.id)),
+            "username": cast(str, user.username),
+            "preference": benefits_preference.value if benefits_preference is not None else None,
+            "wallet": [self._public_wallet_card(card) for card in cards],
         }
 
-    def save_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+    def save_profile(self, user_id: Optional[str], profile: Dict[str, Any]) -> Dict[str, Any]:
         username = (profile.get("username") or "").strip()
         preference = profile.get("preference")
         wallet = profile.get("wallet")
 
         if not username:
             raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": "username", "reason": "Required."})
-        if preference not in {"miles", "cashback"}:
-            raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": "preference", "reason": "Must be miles or cashback."})
+        if preference not in {"miles", "cashback", "no preference"}:
+            raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": "preference", "reason": "Must be miles, cashback, or no preference."})
         if not isinstance(wallet, list) or len(wallet) < 1:
             raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": "wallet", "reason": "Must have at least one card."})
 
-        normalized_wallet: List[Dict[str, Any]] = []
+        resolved_user_id = self._resolve_user_id(profile.get("user_id") or user_id)
+        user = self.db.query(UserProfile).filter(UserProfile.id == resolved_user_id).first()
+        if not user:
+            user = UserProfile(
+                id=resolved_user_id,
+                username=username,
+                password_hash="not_set",
+                benefits_preference=BenefitsPreference(preference),
+            )
+            self.db.add(user)
+        else:
+            user.username = username  # type: ignore[assignment]
+            user.benefits_preference = BenefitsPreference(preference)  # type: ignore[assignment]
+
         for idx, card in enumerate(wallet):
             card_id = card.get("card_id")
             if not card_id:
                 raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": f"wallet[{idx}].card_id", "reason": "Required."})
-            if not self._cards_master_rows:
-                raise ServiceError(500, "SERVER_ERROR", "Master card data is not available. Cannot validate card.", {})
-            if self._cards_master_ids and card_id not in self._cards_master_ids:
-                raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": f"wallet[{idx}].card_id", "reason": "Not in cards master."})
 
             refresh_day = card.get("refresh_day_of_month")
             if not isinstance(refresh_day, int) or refresh_day < 1 or refresh_day > 31:
@@ -220,52 +187,46 @@ class UserCardManagementService:
             if not isinstance(cycle_spend, (int, float)) or cycle_spend < 0:
                 raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": f"wallet[{idx}].cycle_spend_sgd", "reason": "Must be >= 0."})
 
-            normalized_wallet.append(
-                {
-                    "id": card.get("id") or f"uc_{uuid.uuid4().hex}",
-                    "card_id": card_id,
-                    "refresh_day_of_month": refresh_day,
-                    "annual_fee_billing_date": annual_date,
-                    "cycle_spend_sgd": cycle_spend,
-                    "is_active": True,
-                }
+            parsed_card_id = self._parse_card_id(card_id, field=f"wallet[{idx}].card_id")
+            if not self._get_card_catalogue(parsed_card_id):
+                raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": f"wallet[{idx}].card_id", "reason": "Not in cards master."})
+
+            existing = (
+                self.db.query(UserOwnedCard)
+                .filter(
+                    UserOwnedCard.user_id == resolved_user_id,
+                    UserOwnedCard.card_id == parsed_card_id,
+                )
+                .first()
             )
+            if existing:
+                existing.billing_cycle_refresh_date = self._next_billing_cycle_date(refresh_day)  # type: ignore[assignment]
+                existing.card_expiry_date = self._parse_annual_fee_date(annual_date)  # type: ignore[assignment]
+                existing.status = UserOwnedCardStatus.Active  # type: ignore[assignment]
+            else:
+                self.db.add(
+                    UserOwnedCard(
+                        user_id=resolved_user_id,
+                        card_id=parsed_card_id,
+                        billing_cycle_refresh_date=self._next_billing_cycle_date(refresh_day),
+                        card_expiry_date=self._parse_annual_fee_date(annual_date),
+                        status=UserOwnedCardStatus.Active,
+                    )
+                )
 
-        users = self._get_users()
-        user_key = profile.get("user_id") or self.user_id or "u_001"
-        
-        # Preserve inactive cards by merging wallets
-        existing_user = users.get(user_key, {})
-        existing_wallet = existing_user.get("wallet", [])
-        active_new_card_ids = {c["card_id"] for c in normalized_wallet}
-        
-        merged_wallet = [c for c in existing_wallet if not c.get("is_active") or c.get("card_id") not in active_new_card_ids]
-        merged_wallet.extend(normalized_wallet)
-        
-        users[user_key] = {
-            "user_id": user_key,
-            "username": username,
-            "preference": preference,
-            "wallet": merged_wallet,
-        }
-        self._save_users(users)
-        return {
-            "user_id": users[user_key]["user_id"],
-            "username": users[user_key]["username"],
-            "preference": users[user_key]["preference"],
-            "wallet": [self._public_wallet_card(card) for card in merged_wallet if card.get("is_active")],
-        }
+        self.db.commit()
+        return self.get_profile(self._format_user_id(resolved_user_id))
 
-    def add_user_card(self, card_data: Dict[str, Any]) -> Dict[str, Any]:
-        user_key = self._require_user_context()
+    def add_user_card(self, user_id: Optional[str], card_data: Dict[str, Any]) -> Dict[str, Any]:
+        resolved_user_id = self._resolve_user_id(user_id)
+        user = self.db.query(UserProfile).filter(UserProfile.id == resolved_user_id).first()
+        if not user:
+            raise ServiceError(404, "NOT_FOUND", "Profile not found.", {})
         card_id = card_data.get("card_id")
         if not card_id:
             raise ServiceError(400, "VALIDATION_ERROR", "card_id is required.", {"field": "user_card.card_id"})
-        
-        if not self._cards_master_rows:
-            raise ServiceError(500, "SERVER_ERROR", "Master card data is not available. Cannot validate card.", {})
-        
-        if self._cards_master_ids and card_id not in self._cards_master_ids:
+        parsed_card_id = self._parse_card_id(card_id)
+        if not self._get_card_catalogue(parsed_card_id):
             raise ServiceError(
                 400,
                 "VALIDATION_ERROR",
@@ -273,80 +234,80 @@ class UserCardManagementService:
                 {"field": "user_card.card_id"},
             )
 
-        users = self._get_users()
-        user = users.get(user_key)
-        if not user:
-            user = {"user_id": user_key, "username": user_key, "preference": "miles", "wallet": []}
-            users[user_key] = user
-
-        wallet = user.get("wallet", [])
-        if any(c.get("card_id") == card_id and c.get("is_active", True) for c in wallet):
+        existing = (
+            self.db.query(UserOwnedCard)
+            .filter(
+                UserOwnedCard.user_id == resolved_user_id,
+                UserOwnedCard.card_id == parsed_card_id,
+                UserOwnedCard.status == UserOwnedCardStatus.Active,
+            )
+            .first()
+        )
+        if existing:
             raise ServiceError(409, "CONFLICT", f"card_id '{card_id}' already exists.", {"field": "user_card.card_id"})
 
-        new_card = {
-            "id": f"uc_{uuid.uuid4().hex}",
-            "card_id": card_id,
-            "refresh_day_of_month": card_data["refresh_day_of_month"],
-            "annual_fee_billing_date": card_data["annual_fee_billing_date"],
-            "cycle_spend_sgd": card_data.get("cycle_spend_sgd", 0),
-            "is_active": True,
-        }
-        wallet.append(new_card)
-        user["wallet"] = wallet
-        users[user_key] = user
-        self._save_users(users)
-        return self._story_user_card(new_card)
+        refresh_day = card_data["refresh_day_of_month"]
+        annual_date = card_data["annual_fee_billing_date"]
+        new_card = UserOwnedCard(
+            user_id=resolved_user_id,
+            card_id=parsed_card_id,
+            billing_cycle_refresh_date=self._next_billing_cycle_date(refresh_day),
+            card_expiry_date=self._parse_annual_fee_date(annual_date),
+            status=UserOwnedCardStatus.Active,
+        )
+        self.db.add(new_card)
+        self.db.commit()
+        self.db.refresh(new_card)
+        catalog = self._get_card_catalogue(parsed_card_id)
+        return self._story_user_card(new_card, catalog)
 
-    def replace_user_card(self, user_card_id: str, card_data: Dict[str, Any]) -> Dict[str, Any]:
-        user_key = self._require_user_context()
-        users = self._get_users()
-        user = users.get(user_key)
-        if not user:
-            raise ServiceError(404, "NOT_FOUND", "Profile not found.", {})
+    def replace_user_card(self, user_id: Optional[str], user_card_id: str, card_data: Dict[str, Any]) -> Dict[str, Any]:
+        resolved_user_id = self._resolve_user_id(user_id)
+        if not user_card_id.isdigit():
+            raise ServiceError(404, "NOT_FOUND", f"user_card_id '{user_card_id}' not found.", {})
 
-        wallet = user.get("wallet", [])
-        for idx, card in enumerate(wallet):
-            if card.get("id") == user_card_id and card.get("is_active", True):
-                wallet[idx]["refresh_day_of_month"] = card_data["refresh_day_of_month"]
-                wallet[idx]["annual_fee_billing_date"] = card_data["annual_fee_billing_date"]
-                wallet[idx]["cycle_spend_sgd"] = card_data.get("cycle_spend_sgd", 0)
-                users[user_key] = user
-                self._save_users(users)
-                return self._story_user_card(wallet[idx])
-
-        owner = self._find_user_card_owner(user_card_id)
-        if owner and owner != user_key:
+        card = self.db.query(UserOwnedCard).filter(UserOwnedCard.id == int(user_card_id)).first()
+        if not card:
+            raise ServiceError(404, "NOT_FOUND", f"user_card_id '{user_card_id}' not found.", {})
+        if cast(int, card.user_id) != resolved_user_id:
             raise ServiceError(403, "FORBIDDEN", "Card does not belong to current user.", {})
-        raise ServiceError(404, "NOT_FOUND", f"user_card_id '{user_card_id}' not found.", {})
 
-    def delete_user_card(self, user_card_id: str) -> None:
-        user_key = self._require_user_context()
-        users = self._get_users()
-        user = users.get(user_key)
-        if not user:
-            raise ServiceError(404, "NOT_FOUND", "Profile not found.", {})
+        refresh_day = card_data["refresh_day_of_month"]
+        annual_date = card_data["annual_fee_billing_date"]
+        card.billing_cycle_refresh_date = self._next_billing_cycle_date(refresh_day)  # type: ignore[assignment]
+        card.card_expiry_date = self._parse_annual_fee_date(annual_date)  # type: ignore[assignment]
+        card.status = UserOwnedCardStatus.Active  # type: ignore[assignment]
+        self.db.commit()
+        catalog = self._get_card_catalogue(cast(int, card.card_id))
+        return self._story_user_card(card, catalog)
 
-        wallet = user.get("wallet", [])
-        for card in wallet:
-            if card.get("id") == user_card_id and card.get("is_active", True):
-                card["is_active"] = False
-                users[user_key] = user
-                self._save_users(users)
-                events = self._load_audit_log()
-                events.append(
-                    {
-                        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-                        "event": "DELETE_USER_CARD",
-                        "user_id": user_key,
-                        "user_card_id": user_card_id,
-                        "card_id": card.get("card_id"),
-                        "mode": "soft_delete",
-                    }
-                )
-                self._save_audit_log(events)
-                return
+    def delete_user_card(self, user_id: Optional[str], user_card_id: str) -> None:
+        from app.models.transaction import UserTransaction, TransactionStatus
+        
+        resolved_user_id = self._resolve_user_id(user_id)
+        if not user_card_id.isdigit():
+            raise ServiceError(404, "NOT_FOUND", f"user_card_id '{user_card_id}' not found.", {})
 
-        owner = self._find_user_card_owner(user_card_id)
-        if owner and owner != user_key:
+        card = self.db.query(UserOwnedCard).filter(UserOwnedCard.id == int(user_card_id)).first()
+        if not card:
+            raise ServiceError(404, "NOT_FOUND", f"user_card_id '{user_card_id}' not found.", {})
+        if cast(int, card.user_id) != resolved_user_id:
             raise ServiceError(403, "FORBIDDEN", "Card does not belong to current user.", {})
-        raise ServiceError(404, "NOT_FOUND", f"user_card_id '{user_card_id}' not found.", {})
+
+        card_id = cast(int, card.card_id)
+        
+        # Mark all transactions for this card as deleted_with_card (preserve transaction history)
+        self.db.query(UserTransaction).filter(
+            UserTransaction.user_id == resolved_user_id,
+            UserTransaction.card_id == card_id
+        ).update({"status": TransactionStatus.DeletedWithCard})
+        
+        # Hard delete the card from user_owned_cards
+        self.db.query(UserOwnedCard).filter(UserOwnedCard.id == int(user_card_id)).delete()
+        
+        self.db.commit()
+        logging.info(
+            "Hard-deleted user card id=%s for user_id=%s and marked associated transactions as deleted_with_card",
+            card.id,
+            resolved_user_id,
+        )

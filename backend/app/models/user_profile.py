@@ -25,15 +25,13 @@ class UserProfile(Base):
     user_transactions = relationship("UserTransaction", back_populates="user_profile", cascade="all, delete-orphan")
 
     def to_dict(self) -> dict:
-        """Convert UserProfile instance to dictionary."""
         return {
-            'id': self.id,
-            'username': self.username,
-            'password_hash': self.password_hash,
-            'name': self.name,
-            'email': self.email,
-            'benefits_preference': self.benefits_preference.value if self.benefits_preference else None,
-            'created_date': self.created_date.isoformat() if self.created_date else None,
+            "id": self.id,
+            "username": self.username,
+            "name": self.name,
+            "email": self.email,
+            "benefits_preference": self.benefits_preference.value if self.benefits_preference else None,
+            "created_date": self.created_date,
         }
 
 # Pydantic Models for Request/Response Validation
@@ -54,3 +52,11 @@ class UserProfileResponse(UserProfileBase):
 
 class UserProfileUpdate(UserProfileBase):
     password: str
+
+class LoginPayload(BaseModel):
+    username: str
+    password: str
+
+class LoginResponse(BaseModel):
+    message: str
+    user_id: int

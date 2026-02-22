@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, Numeric, String, DateTime, Date, Boolean, Enum as SAEnum, ForeignKey
 from app.db.db import Base
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import relationship
 from datetime import datetime, date
 from enum import Enum as PyEnum
@@ -19,6 +19,10 @@ class TransactionChannel(PyEnum):
     online = "online"
     offline = "offline"
 
+class TransactionStatus(PyEnum):
+    Active = "active"
+    DeletedWithCard = "deleted_with_card"
+
 class UserTransaction(Base):
     __tablename__ = "transactions"
     id = Column(Integer, primary_key=True, index=True)
@@ -30,6 +34,7 @@ class UserTransaction(Base):
     category = Column(SAEnum(TransactionCategory), nullable=True)
     is_overseas = Column(Boolean, nullable=False)
     transaction_date = Column(Date, default=date.today, nullable=False)
+    status = Column(SAEnum(TransactionStatus), default=TransactionStatus.Active, nullable=False)
     created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationship with UserProfile
@@ -40,15 +45,16 @@ class UserTransaction(Base):
 # Create Pydantic models for Transaction
 class TransactionCreate(BaseModel):
     """Transaction creation request (from API contract)"""
-    model_config = ConfigDict(from_attributes=True)
-    user_id: int
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    user_id: int | None = None
     card_id: int
     amount_sgd: Decimal
     item: str
     channel: TransactionChannel  # "online" or "offline"
     is_overseas: bool = False
-    transaction_date: date | None = None  # YYYY-MM-DD, defaults to today if omitted
+    transaction_date: date | None = Field(default=None, alias="date")  # YYYY-MM-DD, defaults to today if omitted
     category: TransactionCategory | None = None
+    status: TransactionStatus = TransactionStatus.Active
 
     @field_validator("item")
     @classmethod

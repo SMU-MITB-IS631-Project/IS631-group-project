@@ -1,13 +1,13 @@
-from fastapi import APIRouter, HTTPException, status
-from typing import Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
+from typing import Dict, Any, Optional
+from pydantic import BaseModel
 
-from app.models.transaction import TransactionRequest, TransactionResponse
-from app.services.data_service import (
-    create_transaction,
-    card_exists_in_wallet,
-    get_user_transactions,
-    get_transaction_by_id
-)
+from sqlalchemy.orm import Session
+
+from app.dependencies.db import get_db
+from app.models.transaction import TransactionRequest, TransactionStatus
+from app.services.transaction_service import ServiceError, TransactionService
 
 router = APIRouter(
     prefix="/api/v1/transactions",
@@ -15,46 +15,78 @@ router = APIRouter(
 )
 
 
+class TransactionStatusUpdate(BaseModel):
+    """Update transaction status"""
+    status: str  # "active" or "deleted_with_card"
+
+
+class BulkTransactionStatusUpdate(BaseModel):
+    """Bulk update multiple transactions status"""
+    transaction_ids: list[int]
+    status: str  # "active" or "deleted_with_card"
+
+
+def _unauthorized_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={
+            "error": {
+                "code": "UNAUTHORIZED",
+                "message": "Missing or invalid user context.",
+                "details": {"required_header": "x-user-id"},
+            }
+        },
+    )
+
+
 @router.post("", status_code=201)
-def create_transaction_endpoint(request: TransactionRequest) -> Dict[str, Any]:
+def create_transaction(
+    request: TransactionRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
     """
     Create a new transaction.
     
-    Per API contract:
-    - `item` required
-    - `amount_sgd` required and > 0
-    - `card_id` must be in user wallet
-    - `channel` must be `online` | `offline`
-    
-    Server generates `id` and sets `date = today` if missing.
+    Request body:
+    {
+        "transaction": {
+            "card_id": 1,
+            "amount_sgd": 12.50,
+            "item": "GrabFood",
+            "channel": "online",
+            "category": "food",
+            "is_overseas": false,
+            "date": "2026-02-18"
+        }
+    }
     """
-    txn_data = request.transaction.model_dump()
-    user_id = "u_001"  # TODO: Get from auth token
+    user_id = http_request.headers.get("x-user-id")
+    if not user_id:
+        return _unauthorized_response()
     
-    # Validation: card_id must exist in user's wallet
-    if not card_exists_in_wallet(txn_data['card_id'], user_id):
+    try:
+        service = TransactionService(db)
+        transaction = service.create_transaction(user_id, request.transaction)
+        return {"transaction": transaction}
+    except ServiceError as exc:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=exc.status_code,
             detail={
                 "error": {
-                    "code": "VALIDATION_ERROR",
-                    "message": f"card_id '{txn_data['card_id']}' not found in user wallet",
-                    "details": {}
+                    "code": exc.code,
+                    "message": exc.message,
+                    "details": exc.details,
                 }
-            }
+            },
         )
-    
-    # Create transaction
-    try:
-        transaction = create_transaction(txn_data, user_id)
-        return {"transaction": transaction}
-    except Exception as e:
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error": {
                     "code": "INTERNAL_ERROR",
-                    "message": str(e),
+                    "message": str(exc),
                     "details": {}
                 }
             }
@@ -62,17 +94,41 @@ def create_transaction_endpoint(request: TransactionRequest) -> Dict[str, Any]:
 
 
 @router.get("")
-def list_transactions() -> Dict[str, Any]:
+def list_transactions(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
     """
     List all transactions for current user.
     """
-    user_id = "u_001"  # TODO: Get from auth token
-    transactions = get_user_transactions(user_id)
-    return {"transactions": transactions}
+    user_id = request.headers.get("x-user-id")
+    if not user_id:
+        return _unauthorized_response()
+    
+    try:
+        service = TransactionService(db)
+        transactions = service.get_user_transactions(user_id, sort_by_date_desc=True)
+        return {"transactions": transactions}
+    except ServiceError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "details": exc.details,
+                }
+            },
+        )
 
 
 @router.get("/{user_id}")
-def get_user_transactions_by_id(user_id: str, sort: str = "date_desc") -> Dict[str, Any]:
+def get_user_transactions_by_id(
+    user_id: str,
+    request: Request,
+    sort: str = "date_desc",
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
     """
     Get all transactions for a specific user.
     
@@ -88,18 +144,129 @@ def get_user_transactions_by_id(user_id: str, sort: str = "date_desc") -> Dict[s
     Security:
     - Only returns transactions for the specified user
     """
-    # Determine sort order
-    sort_desc = sort.lower() != "date_asc" and sort.lower() != "none"
+    header_user_id = request.headers.get("x-user-id")
+    if not header_user_id:
+        return _unauthorized_response()
     
-    # Get transactions filtered by user_id and sorted
-    transactions = get_user_transactions(user_id, sort_by_date_desc=sort_desc)
+    sort_value = sort.lower()
+    if sort_value == "none":
+        sort_desc = None
+    else:
+        sort_desc = sort_value != "date_asc"
     
-    # Apply ascending sort if requested
-    if sort.lower() == "date_asc":
-        transactions = sorted(
-            transactions,
-            key=lambda t: t.get('date', '1900-01-01'),
-            reverse=False
+    try:
+        service = TransactionService(db)
+        transactions = service.get_user_transactions(user_id, sort_by_date_desc=sort_desc)
+        return {"transactions": transactions}
+    except ServiceError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "details": exc.details,
+                }
+            },
         )
+
+
+@router.put("/{transaction_id}")
+def update_transaction_status(
+    transaction_id: int,
+    status_update: TransactionStatusUpdate,
+    http_request: Request,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Update a transaction's status (e.g., mark as deleted_with_card).
     
-    return {"transactions": transactions}
+    Path Parameters:
+    - transaction_id: The transaction ID to update
+    
+    Request body:
+    {
+        "status": "deleted_with_card"
+    }
+    """
+    user_id = http_request.headers.get("x-user-id")
+    if not user_id:
+        return _unauthorized_response()
+    
+    try:
+        service = TransactionService(db)
+        transaction = service.update_transaction_status(user_id, transaction_id, status_update.status)
+        return {"transaction": transaction}
+    except ServiceError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "details": exc.details,
+                }
+            },
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": str(exc),
+                    "details": {}
+                }
+            }
+        )
+
+
+@router.put("/bulk/status")
+def bulk_update_transaction_status(
+    bulk_update: BulkTransactionStatusUpdate,
+    http_request: Request,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Bulk update multiple transactions' status.
+    
+    Request body:
+    {
+        "transaction_ids": [1, 2, 3],
+        "status": "deleted_with_card"
+    }
+    
+    Returns:
+    - count: Number of transactions updated
+    """
+    user_id = http_request.headers.get("x-user-id")
+    if not user_id:
+        return _unauthorized_response()
+    
+    try:
+        service = TransactionService(db)
+        count = service.bulk_update_transaction_status(user_id, bulk_update.transaction_ids, bulk_update.status)
+        return {"count": count, "status": bulk_update.status}
+    except ServiceError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "details": exc.details,
+                }
+            },
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": str(exc),
+                    "details": {}
+                }
+            }
+        )
+

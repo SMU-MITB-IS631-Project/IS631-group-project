@@ -1,7 +1,7 @@
 export default function AppShell({ children }) {
   return (
     <div className="min-h-screen flex items-start justify-center bg-[#E8E2DA] py-[4vh]">
-      <div className="relative w-[390px] max-w-[100vw] h-[min(812px,92vh)] rounded-[2rem] border border-[#D5CFC7] shadow-[0_12px_48px_rgba(0,0,0,0.12)] overflow-hidden flex flex-col bg-bg">
+      <div className="relative w-[390px] max-w-[100vw] h-[min(812px,92vh)] rounded-[2rem] border border-[#D5CFC7] shadow-[0_12px_48px_rgba(0,0,0,0.12)] overflow-hidden flex flex-col bg-gradient-to-br from-[#0f1419] via-[#1a1f2e] to-[#1f2942]">
         {/* Background pattern — inside the frame */}
         <div
           className="pointer-events-none absolute inset-0 z-0 opacity-10"
