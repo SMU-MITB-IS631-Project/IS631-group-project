@@ -90,8 +90,8 @@ class CardService:
         if not isinstance(refresh_day, int) or refresh_day < 1 or refresh_day > 31:
             raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": f"wallet[{idx}].refresh_day_of_month", "reason": "Must be 1..31."})
 
-        annual_date = card.get("annual_fee_billing_date")
-        if not annual_date:
+        annual_billing_date = card.get("annual_fee_billing_date")
+        if not annual_billing_date:
             raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": f"wallet[{idx}].annual_fee_billing_date", "reason": "Required when card_id is set."})
 
         cycle_spend = card.get("cycle_spend_sgd", 0)
@@ -102,7 +102,7 @@ class CardService:
         if not self._get_card_catalogue(parsed_card_id):
             raise ServiceError(400, "VALIDATION_ERROR", "Invalid profile payload.", {"field": f"wallet[{idx}].card_id", "reason": "Not in cards master."})
 
-        return parsed_card_id, refresh_day, annual_date
+        return parsed_card_id, refresh_day, annual_billing_date
 
     # ------------------------------------------------------------------
     # Read operations
@@ -144,7 +144,7 @@ class CardService:
         if not user:
             raise ServiceError(404, "NOT_FOUND", "Profile not found.", {})
 
-        parsed_card_id, refresh_day, annual_date = self._validate_wallet_entry(card_data)
+        parsed_card_id, refresh_day, annual_billing_date = self._validate_wallet_entry(card_data)
 
         existing = (
             self.db.query(UserOwnedCard)
@@ -162,7 +162,7 @@ class CardService:
             user_id=resolved_user_id,
             card_id=parsed_card_id,
             billing_cycle_refresh_date=self._next_billing_cycle_date(refresh_day),
-            card_expiry_date=self._parse_annual_fee_date(annual_date),
+            card_expiry_date=self._parse_annual_fee_date(annual_billing_date),
             status=UserOwnedCardStatus.Active,
         )
         self.db.add(new_card)
@@ -182,10 +182,10 @@ class CardService:
         if cast(int, card.user_id) != resolved_user_id:
             raise ServiceError(403, "FORBIDDEN", "Card does not belong to current user.", {})
 
-        _, refresh_day, annual_date = self._validate_wallet_entry(card_data)
+        _, refresh_day, annual_billing_date = self._validate_wallet_entry(card_data)
 
         card.billing_cycle_refresh_date = self._next_billing_cycle_date(refresh_day)  # type: ignore[assignment]
-        card.card_expiry_date = self._parse_annual_fee_date(annual_date)  # type: ignore[assignment]
+        card.card_expiry_date = self._parse_annual_fee_date(annual_billing_date)  # type: ignore[assignment]
         card.status = UserOwnedCardStatus.Active  # type: ignore[assignment]
         self.db.commit()
         catalog = self._get_card_catalogue(cast(int, card.card_id))
@@ -224,7 +224,7 @@ class CardService:
 
     def save_wallet(self, user_id: int, wallet: List[Dict[str, Any]]) -> None:
         for idx, card in enumerate(wallet):
-            parsed_card_id, refresh_day, annual_date = self._validate_wallet_entry(card, idx)
+            parsed_card_id, refresh_day, annual_billing_date = self._validate_wallet_entry(card, idx)
 
             existing = (
                 self.db.query(UserOwnedCard)
@@ -236,7 +236,7 @@ class CardService:
             )
             if existing:
                 existing.billing_cycle_refresh_date = self._next_billing_cycle_date(refresh_day)  # type: ignore[assignment]
-                existing.card_expiry_date = self._parse_annual_fee_date(annual_date)  # type: ignore[assignment]
+                existing.card_expiry_date = self._parse_annual_fee_date(annual_billing_date)  # type: ignore[assignment]
                 existing.status = UserOwnedCardStatus.Active  # type: ignore[assignment]
             else:
                 self.db.add(
@@ -244,7 +244,7 @@ class CardService:
                         user_id=user_id,
                         card_id=parsed_card_id,
                         billing_cycle_refresh_date=self._next_billing_cycle_date(refresh_day),
-                        card_expiry_date=self._parse_annual_fee_date(annual_date),
+                        card_expiry_date=self._parse_annual_fee_date(annual_billing_date),
                         status=UserOwnedCardStatus.Active,
                     )
                 )
