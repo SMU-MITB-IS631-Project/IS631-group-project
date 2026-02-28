@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-import logging
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Iterable, Optional
@@ -14,10 +12,6 @@ from app.models.user_profile import UserProfile  # noqa: F401
 from app.models.user_owned_cards import UserOwnedCard, UserOwnedCardStatus
 from app.models.card_catalogue import CardCatalogue
 from app.models.card_bonus_category import BonusCategory, CardBonusCategory
-from app.services.errors import ServiceError
-
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -64,30 +58,6 @@ class RecommendationService:
     def __init__(self, db: Session):
         self.db = db
 
-    async def _get_ai_recommendation(
-        self,
-        user_id: int,
-        category: Optional[BonusCategory],
-        amount_sgd: Optional[Decimal]
-    ) -> Optional[CardRecommendationDTO]:
-        """
-        Private async method to get AI-driven recommendation.
-        
-        This is a placeholder for production AI integration.
-        In production, this would call an LLM or ML model.
-        
-        Args:
-            user_id: The user's ID
-            category: Optional spending category
-            amount_sgd: Optional spending amount
-            
-        Returns:
-            CardRecommendationDTO if AI recommendation succeeds, None otherwise
-        """
-        # Placeholder logic: In production, this would call an LLM.
-        # For now, return None so the fallback logic can be tested.
-        return None
-
     def recommend(
         self,
         *,
@@ -97,57 +67,14 @@ class RecommendationService:
     ) -> tuple[Optional[CardRecommendationDTO], list[CardRecommendationDTO]]:
         """Return (best_card, ranked_cards) for a user.
 
-        Rules:
-        1. First, attempt AI-driven recommendation with timeout
-        2. On timeout, error, or AI unavailability, fall back to deterministic logic
-        3. Deterministic logic (minimal + DB-driven):
-           - Consider only active cards in `user_owned_cards`.
-           - Base rate comes from `card_catalogue.base_benefit_rate`.
-           - If `category` is provided, apply the highest matching bonus rule among:
-             - exact category match, or
-             - `All`
-             and only if `amount_sgd` meets `bonus_minimum_spend_in_dollar`.
+        Rules (minimal + DB-driven):
+        - Consider only active cards in `user_owned_cards`.
+        - Base rate comes from `card_catalogue.base_benefit_rate`.
+        - If `category` is provided, apply the highest matching bonus rule among:
+          - exact category match, or
+          - `All`
+          and only if `amount_sgd` meets `bonus_minimum_spend_in_dollar`.
         """
-        # Try AI recommendation first with timeout
-        ai_recommendation = None
-        try:
-            # Create or get the event loop
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            # Attempt AI recommendation with 3-second timeout
-            ai_recommendation = loop.run_until_complete(
-                asyncio.wait_for(
-                    self._get_ai_recommendation(user_id, category, amount_sgd),
-                    timeout=3.0
-                )
-            )
-            
-            if ai_recommendation is not None:
-                logger.info(f"AI recommendation succeeded for user {user_id}")
-                # If AI returns a recommendation, use it as the primary result
-                # For now, we still compute ranked_cards using DB logic for comparison
-                # In production, you might want to only use AI or blend both approaches
-        
-        except asyncio.TimeoutError:
-            logger.warning(
-                f"AI recommendation timed out for user {user_id}, falling back to deterministic logic"
-            )
-        except ServiceError as e:
-            logger.error(
-                f"AI recommendation service error for user {user_id}: {e.message}, "
-                f"falling back to deterministic logic"
-            )
-        except Exception as e:
-            logger.error(
-                f"Unexpected error during AI recommendation for user {user_id}: {str(e)}, "
-                f"falling back to deterministic logic"
-            )
-        
-        # Proceed with deterministic DB-driven logic (fallback or standard path)
         user = self.db.query(UserProfile).filter(UserProfile.id == user_id).first()
         if user is None:
             return None, []
@@ -166,7 +93,7 @@ class RecommendationService:
         active_cards = (
             self.db.query(UserOwnedCard)
             .filter(UserOwnedCard.user_id == user_id)
-            .filter(UserOwnedCard.status == UserOwnedCardStatus.active)
+            .filter(UserOwnedCard.status == UserOwnedCardStatus.Active)
             .all()
         )
         if not active_cards:
@@ -296,36 +223,7 @@ class RecommendationService:
             )
 
         ranked.sort(key=lambda c: (c.effective_benefit_rate, c.base_benefit_rate), reverse=True)
-        
-        # Add fallback explanation if we used deterministic logic (AI failed or returned None)
-        if ai_recommendation is None and ranked:
-            # Update all ranked cards with fallback explanation
-            updated_ranked = []
-            for card in ranked:
-                explanations_with_fallback = [
-                    "AI unavailable - using deterministic recommendation"
-                ] + list(card.explanations)
-                updated_card = CardRecommendationDTO(
-                    card_id=card.card_id,
-                    card_name=card.card_name,
-                    base_benefit_rate=card.base_benefit_rate,
-                    effective_benefit_rate=card.effective_benefit_rate,
-                    applied_bonus_category=card.applied_bonus_category,
-                    bonus_rules=card.bonus_rules,
-                    reward_unit=card.reward_unit,
-                    estimated_reward_value=card.estimated_reward_value,
-                    effective_rate_str=card.effective_rate_str,
-                    explanations=explanations_with_fallback,
-                    reward_breakdown=card.reward_breakdown,
-                )
-                updated_ranked.append(updated_card)
-            ranked = updated_ranked
-        
-        # If AI recommendation succeeded and returned a result, use it as primary
-        # Otherwise use the top-ranked deterministic result
-        best_card = ai_recommendation if ai_recommendation is not None else (ranked[0] if ranked else None)
-        
-        return best_card, ranked
+        return (ranked[0] if ranked else None), ranked
 
     @staticmethod
     def _matching_bonus_rules(
@@ -378,10 +276,10 @@ class RecommendationService:
         cap_in_dollar: Optional[int],
         apply_cap: bool,
     ) -> tuple[Decimal, Decimal, bool]:
-        # Gracefully handle zero/negative inputs to preserve legacy behavior in tests
-        # (no category + no spend => reward = 0 without raising).
         if amount_sgd <= 0:
-            return Decimal("0"), Decimal("0"), False
+            raise ValueError(
+                f"amount_sgd must be greater than 0 in _estimate_reward, got {amount_sgd!r}"
+            )
 
         if reward_unit == "cashback":
             fraction = self._cashback_fraction(effective_rate)
