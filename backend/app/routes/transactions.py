@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
 from app.models.transaction import TransactionRequest, TransactionStatus
-from app.services.transaction_service import ServiceError, TransactionService
+from app.services.errors import ServiceError
+from app.services.transaction_service import TransactionService
 
 router = APIRouter(
     prefix="/api/v1/transactions",

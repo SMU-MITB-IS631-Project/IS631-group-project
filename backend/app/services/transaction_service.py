@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from datetime import date
 from typing import Any, Dict, List, Optional, cast
 
@@ -7,14 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.transaction import TransactionCreate, UserTransaction, TransactionStatus
 from app.models.user_owned_cards import UserOwnedCard, UserOwnedCardStatus
 from app.models.user_profile import UserProfile
-
-
-@dataclass
-class ServiceError(Exception):
-    status_code: int
-    code: str
-    message: str
-    details: Dict[str, Any]
+from app.services.errors import ServiceError
 
 
 class TransactionService:
