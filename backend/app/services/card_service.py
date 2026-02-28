@@ -69,7 +69,7 @@ class CardService:
             "id": card.id,
             "card_id": str(card.card_id),
             "refresh_day_of_month": card.billing_cycle_refresh_date.day,
-            "annual_fee_billing_date": card.card_expiry_date.date().isoformat(),
+            "annual_fee_billing_date": card.card_expiry_date.isoformat() if card.card_expiry_date else None,
         }
 
     def _story_user_card(self, card: UserOwnedCard, catalog: Optional[CardCatalogue]) -> Dict[str, Any]:
@@ -118,7 +118,7 @@ class CardService:
             .outerjoin(CardCatalogue, UserOwnedCard.card_id == CardCatalogue.card_id)
             .filter(
                 UserOwnedCard.user_id == resolved_user_id,
-                UserOwnedCard.status == UserOwnedCardStatus.Active,
+                UserOwnedCard.status == UserOwnedCardStatus.active,
             )
             .all()
         )
@@ -129,7 +129,7 @@ class CardService:
             self.db.query(UserOwnedCard)
             .filter(
                 UserOwnedCard.user_id == user_id,
-                UserOwnedCard.status == UserOwnedCardStatus.Active,
+                UserOwnedCard.status == UserOwnedCardStatus.active,
             )
             .all()
         )
@@ -151,7 +151,7 @@ class CardService:
             .filter(
                 UserOwnedCard.user_id == resolved_user_id,
                 UserOwnedCard.card_id == parsed_card_id,
-                UserOwnedCard.status == UserOwnedCardStatus.Active,
+                UserOwnedCard.status == UserOwnedCardStatus.active,
             )
             .first()
         )
@@ -163,7 +163,7 @@ class CardService:
             card_id=parsed_card_id,
             billing_cycle_refresh_date=self._next_billing_cycle_date(refresh_day),
             card_expiry_date=self._parse_annual_fee_date(annual_billing_date),
-            status=UserOwnedCardStatus.Active,
+            status=UserOwnedCardStatus.active,
         )
         self.db.add(new_card)
         self.db.commit()
@@ -186,7 +186,7 @@ class CardService:
 
         card.billing_cycle_refresh_date = self._next_billing_cycle_date(refresh_day)  # type: ignore[assignment]
         card.card_expiry_date = self._parse_annual_fee_date(annual_billing_date)  # type: ignore[assignment]
-        card.status = UserOwnedCardStatus.Active  # type: ignore[assignment]
+        card.status = UserOwnedCardStatus.active  # type: ignore[assignment]
         self.db.commit()
         catalog = self._get_card_catalogue(cast(int, card.card_id))
         return self._story_user_card(card, catalog)
@@ -237,7 +237,7 @@ class CardService:
             if existing:
                 existing.billing_cycle_refresh_date = self._next_billing_cycle_date(refresh_day)  # type: ignore[assignment]
                 existing.card_expiry_date = self._parse_annual_fee_date(annual_billing_date)  # type: ignore[assignment]
-                existing.status = UserOwnedCardStatus.Active  # type: ignore[assignment]
+                existing.status = UserOwnedCardStatus.active  # type: ignore[assignment]
             else:
                 self.db.add(
                     UserOwnedCard(
@@ -245,7 +245,7 @@ class CardService:
                         card_id=parsed_card_id,
                         billing_cycle_refresh_date=self._next_billing_cycle_date(refresh_day),
                         card_expiry_date=self._parse_annual_fee_date(annual_billing_date),
-                        status=UserOwnedCardStatus.Active,
+                        status=UserOwnedCardStatus.active,
                     )
                 )
 
