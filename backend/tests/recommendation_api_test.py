@@ -137,39 +137,38 @@ class RecommendationApiTests(unittest.TestCase):
         self.assertEqual(body["detail"]["error"]["code"], "VALIDATION_ERROR")
 
     def test_api_returns_200_with_fallback_explanation_when_ai_fails(self):
-        """End-to-end: when _get_ai_recommendation raises ServiceError, the API must
-        still return 200 and include the DB-driven fallback explanation in the response."""
-        from app.services.recommendation_service import RecommendationService
-        from app.services.errors import ServiceError
+        """End-to-end: when OpenAI explanation service fails, the API must
+        still return 200 and use template-based fallback explanation."""
+        with patch("app.services.explanation_service.openai_client") as mock_client:
+            # Simulate OpenAI failure
+            from openai import APIError
+            from unittest.mock import MagicMock
+            mock_client.chat.completions.create.side_effect = APIError(
+                message="OpenAI API failed",
+                request=MagicMock(),
+                body=None
+            )
 
-        with patch.object(
-            RecommendationService,
-            "_get_ai_recommendation",
-            side_effect=ServiceError(
-                status_code=500,
-                code="AI_ERROR",
-                message="AI API failed",
-                details={},
-            ),
-        ):
-            resp = self.client.get(
-                "/api/v1/recommendation",
-                params={"user_id": 1, "category": "Food", "amount_sgd": "50"},
+            resp = self.client.post(
+                "/api/v1/recommendation/explain",
+                json={"user_id": 1, "category": "Food", "amount_sgd": 50.00}
             )
 
         self.assertEqual(resp.status_code, 200, msg=f"Expected 200, got {resp.status_code}: {resp.text}")
         data = resp.json()
-        self.assertIsNotNone(data.get("recommended"), "Expected a recommended card in the response")
-
-        # The fallback explanation must be present somewhere in the ranked cards
-        all_explanations = [
-            expl
-            for card in data.get("ranked_cards", [])
-            for expl in card.get("explanations", [])
-        ]
+        
+        # Verify fallback was used
         self.assertTrue(
-            any("AI unavailable" in e or "fallback" in e.lower() for e in all_explanations),
-            f"Expected fallback explanation in response. Got explanations: {all_explanations}",
+            data.get("is_fallback", False),
+            "Expected is_fallback=true when AI fails"
+        )
+        
+        # Verify explanation is present and useful
+        explanation = data.get("explanation", "")
+        self.assertGreater(
+            len(explanation),
+            0,
+            "Expected non-empty explanation in fallback mode"
         )
 
 

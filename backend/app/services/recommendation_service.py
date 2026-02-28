@@ -93,7 +93,7 @@ class RecommendationService:
         active_cards = (
             self.db.query(UserOwnedCard)
             .filter(UserOwnedCard.user_id == user_id)
-            .filter(UserOwnedCard.status == UserOwnedCardStatus.Active)
+            .filter(UserOwnedCard.status == UserOwnedCardStatus.active)
             .all()
         )
         if not active_cards:

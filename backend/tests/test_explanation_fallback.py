@@ -15,6 +15,7 @@ Expected behavior:
 
 import sys
 import unittest
+import logging
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -24,6 +25,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from openai import APIError, APITimeoutError
+import pytest
 
 
 # Ensure backend/ is on sys.path
@@ -311,6 +313,148 @@ class TestExplanationFallback(unittest.TestCase):
                 data.get("model_used", "").lower(),
                 "Expected actual model name when AI succeeds"
             )
+
+
+# Pytest-based tests for logging verification (require caplog fixture)
+@pytest.fixture
+def test_client():
+    """Create test client with in-memory database"""
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    TestSession = sessionmaker(bind=engine)
+
+    with TestSession() as db:
+        # Create test user
+        db.add(
+            UserProfile(
+                id=1,
+                username="test_user",
+                password_hash="hash123",
+                benefits_preference=BenefitsPreference.cashback,
+            )
+        )
+
+        # Create test card
+        db.add(
+            CardCatalogue(
+                card_id=1,
+                bank=BankEnum.DBS,
+                card_name="DBS Live Fresh",
+                benefit_type=BenefitTypeEnum.cashback,
+                base_benefit_rate=Decimal("0.01"),
+                status=StatusEnum.valid,
+            )
+        )
+
+        # Add bonus category
+        db.add(
+            CardBonusCategory(
+                card_bonuscat_id=1,
+                card_id=1,
+                bonus_category=BonusCategory.Fashion,
+                bonus_benefit_rate=Decimal("0.05"),
+                bonus_cap_in_dollar=100,
+                bonus_minimum_spend_in_dollar=50,
+            )
+        )
+
+        # Add card to user's wallet
+        db.add(
+            UserOwnedCard(
+                user_id=1,
+                card_id=1,
+                status=UserOwnedCardStatus.active
+            )
+        )
+        db.commit()
+
+    def override_get_db():
+        db = TestSession()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    client = TestClient(app)
+    yield client
+    app.dependency_overrides.clear()
+
+
+def test_logging_verification_on_timeout(test_client, caplog):
+    """
+    Test 6: Verify internal logging when OpenAI times out
+    
+    This satisfies the "Error is logged internally" criterion
+    """
+    with patch("app.services.explanation_service.openai_client") as mock_client:
+        # Simulate OpenAI timeout
+        mock_client.chat.completions.create.side_effect = APITimeoutError(
+            request=MagicMock()
+        )
+
+        # Capture logs at WARNING level
+        with caplog.at_level(logging.WARNING):
+            response = test_client.post(
+                "/api/v1/recommendation/explain",
+                json={
+                    "user_id": 1,
+                    "amount_sgd": 100.00,
+                    "category": "Fashion"
+                }
+            )
+
+        # Verify response is still successful
+        assert response.status_code == 200, f"Expected 200 OK, got {response.status_code}: {response.text}"
+        
+        # Verify warning was logged
+        warning_logs = [record for record in caplog.records if record.levelname == "WARNING"]
+        assert len(warning_logs) > 0, "Expected at least one WARNING log when OpenAI times out"
+        
+        # Verify log message mentions timeout and fallback
+        log_messages = [record.message for record in warning_logs]
+        timeout_logged = any("timeout" in msg.lower() or "fallback" in msg.lower() for msg in log_messages)
+        assert timeout_logged, f"Expected log to mention 'timeout' or 'fallback', got: {log_messages}"
+
+
+def test_logging_verification_on_api_error(test_client, caplog):
+    """
+    Test 7: Verify internal logging when OpenAI returns API error
+    """
+    with patch("app.services.explanation_service.openai_client") as mock_client:
+        # Simulate OpenAI API error
+        mock_client.chat.completions.create.side_effect = APIError(
+            message="Rate limit exceeded",
+            request=MagicMock(),
+            body=None
+        )
+
+        # Capture logs at ERROR level
+        with caplog.at_level(logging.ERROR):
+            response = test_client.post(
+                "/api/v1/recommendation/explain",
+                json={
+                    "user_id": 1,
+                    "amount_sgd": 100.00,
+                    "category": "Fashion"
+                }
+            )
+
+        # Verify response is still successful
+        assert response.status_code == 200, f"Expected 200 OK, got {response.status_code}: {response.text}"
+        
+        # Verify error was logged
+        error_logs = [record for record in caplog.records if record.levelname == "ERROR"]
+        assert len(error_logs) > 0, "Expected at least one ERROR log when OpenAI API fails"
+        
+        # Verify log message mentions the error and fallback
+        log_messages = [record.message for record in error_logs]
+        error_logged = any("error" in msg.lower() and "fallback" in msg.lower() for msg in log_messages)
+        assert error_logged, f"Expected log to mention 'error' and 'fallback', got: {log_messages}"
 
 
 if __name__ == "__main__":
