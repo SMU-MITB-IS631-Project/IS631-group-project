@@ -93,7 +93,7 @@ class RecommendationService:
         active_cards = (
             self.db.query(UserOwnedCard)
             .filter(UserOwnedCard.user_id == user_id)
-            .filter(UserOwnedCard.status == UserOwnedCardStatus.Active)
+            .filter(UserOwnedCard.status == UserOwnedCardStatus.active)
             .all()
         )
         if not active_cards:
@@ -276,10 +276,10 @@ class RecommendationService:
         cap_in_dollar: Optional[int],
         apply_cap: bool,
     ) -> tuple[Decimal, Decimal, bool]:
-        # Gracefully handle zero/negative inputs to preserve legacy behavior in tests
-        # (no category + no spend => reward = 0 without raising).
         if amount_sgd <= 0:
-            return Decimal("0"), Decimal("0"), False
+            raise ValueError(
+                f"amount_sgd must be greater than 0 in _estimate_reward, got {amount_sgd!r}"
+            )
 
         if reward_unit == "cashback":
             fraction = self._cashback_fraction(effective_rate)
