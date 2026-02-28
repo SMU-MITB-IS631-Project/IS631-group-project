@@ -2,6 +2,7 @@ import sys
 import unittest
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -40,7 +41,7 @@ class RecommendationApiTests(unittest.TestCase):
                     id=1,
                     username="u1",
                     password_hash="x",
-                    benefits_preference=BenefitsPreference.No_preference,
+                    benefits_preference=BenefitsPreference.no_preference,
                 )
             )
             db.add(
@@ -48,9 +49,9 @@ class RecommendationApiTests(unittest.TestCase):
                     card_id=10,
                     bank=BankEnum.DBS,
                     card_name="Card A",
-                    benefit_type=BenefitTypeEnum.MILES,
+                    benefit_type=BenefitTypeEnum.miles,
                     base_benefit_rate=Decimal("1.0"),
-                    status=StatusEnum.VALID,
+                    status=StatusEnum.valid,
                 )
             )
             db.add(
@@ -63,7 +64,7 @@ class RecommendationApiTests(unittest.TestCase):
                     bonus_minimum_spend_in_dollar=0,
                 )
             )
-            db.add(UserOwnedCard(user_id=1, card_id=10, status=UserOwnedCardStatus.Active))
+            db.add(UserOwnedCard(user_id=1, card_id=10, status=UserOwnedCardStatus.active))
             db.commit()
 
         def override_get_db():
@@ -134,6 +135,42 @@ class RecommendationApiTests(unittest.TestCase):
         self.assertIn("detail", body)
         self.assertIn("error", body["detail"])
         self.assertEqual(body["detail"]["error"]["code"], "VALIDATION_ERROR")
+
+    def test_api_returns_200_with_fallback_explanation_when_ai_fails(self):
+        """End-to-end: when _get_ai_recommendation raises ServiceError, the API must
+        still return 200 and include the DB-driven fallback explanation in the response."""
+        from app.services.recommendation_service import RecommendationService
+        from app.services.errors import ServiceError
+
+        with patch.object(
+            RecommendationService,
+            "_get_ai_recommendation",
+            side_effect=ServiceError(
+                status_code=500,
+                code="AI_ERROR",
+                message="AI API failed",
+                details={},
+            ),
+        ):
+            resp = self.client.get(
+                "/api/v1/recommendation",
+                params={"user_id": 1, "category": "Food", "amount_sgd": "50"},
+            )
+
+        self.assertEqual(resp.status_code, 200, msg=f"Expected 200, got {resp.status_code}: {resp.text}")
+        data = resp.json()
+        self.assertIsNotNone(data.get("recommended"), "Expected a recommended card in the response")
+
+        # The fallback explanation must be present somewhere in the ranked cards
+        all_explanations = [
+            expl
+            for card in data.get("ranked_cards", [])
+            for expl in card.get("explanations", [])
+        ]
+        self.assertTrue(
+            any("AI unavailable" in e or "fallback" in e.lower() for e in all_explanations),
+            f"Expected fallback explanation in response. Got explanations: {all_explanations}",
+        )
 
 
 if __name__ == "__main__":
