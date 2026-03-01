@@ -38,7 +38,7 @@ class RecommendationServiceTests(unittest.TestCase):
                     id=1,
                     username="u1",
                     password_hash="x",
-                    benefits_preference=BenefitsPreference.No_preference,
+                    benefits_preference=BenefitsPreference.no_preference,
                 )
             )
 
@@ -48,17 +48,17 @@ class RecommendationServiceTests(unittest.TestCase):
                         card_id=10,
                         bank=BankEnum.DBS,
                         card_name="Card A",
-                        benefit_type=BenefitTypeEnum.MILES,
+                        benefit_type=BenefitTypeEnum.miles,
                         base_benefit_rate=Decimal("1.0"),
-                        status=StatusEnum.VALID,
+                        status=StatusEnum.valid,
                     ),
                     CardCatalogue(
                         card_id=20,
                         bank=BankEnum.DBS,
                         card_name="Card B",
-                        benefit_type=BenefitTypeEnum.MILES,
+                        benefit_type=BenefitTypeEnum.miles,
                         base_benefit_rate=Decimal("1.5"),
-                        status=StatusEnum.VALID,
+                        status=StatusEnum.valid,
                     ),
                 ]
             )
@@ -76,8 +76,8 @@ class RecommendationServiceTests(unittest.TestCase):
 
             db.add_all(
                 [
-                    UserOwnedCard(user_id=1, card_id=10, status=UserOwnedCardStatus.Active),
-                    UserOwnedCard(user_id=1, card_id=20, status=UserOwnedCardStatus.Active),
+                    UserOwnedCard(user_id=1, card_id=10, status=UserOwnedCardStatus.active),
+                    UserOwnedCard(user_id=1, card_id=20, status=UserOwnedCardStatus.active),
                 ]
             )
             db.commit()
@@ -124,19 +124,19 @@ class RecommendationServiceTests(unittest.TestCase):
             # Ensure we recommend within cashback cards (miles vs cashback is otherwise not comparable).
             profile = db.query(UserProfile).filter(UserProfile.id == 1).first()
             self.assertIsNotNone(profile)
-            profile.benefits_preference = BenefitsPreference.Cashback
+            profile.benefits_preference = BenefitsPreference.cashback
 
             db.add(
                 CardCatalogue(
                     card_id=30,
                     bank=BankEnum.DBS,
                     card_name="Cashback Card",
-                    benefit_type=BenefitTypeEnum.CASHBACK,
+                    benefit_type=BenefitTypeEnum.cashback,
                     base_benefit_rate=Decimal("0.01"),
-                    status=StatusEnum.VALID,
+                    status=StatusEnum.valid,
                 )
             )
-            db.add(UserOwnedCard(user_id=1, card_id=30, status=UserOwnedCardStatus.Active))
+            db.add(UserOwnedCard(user_id=1, card_id=30, status=UserOwnedCardStatus.active))
             db.add(
                 CardBonusCategory(
                     card_bonuscat_id=200,

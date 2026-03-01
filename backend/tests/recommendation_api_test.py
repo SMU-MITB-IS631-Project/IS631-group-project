@@ -40,7 +40,7 @@ class RecommendationApiTests(unittest.TestCase):
                     id=1,
                     username="u1",
                     password_hash="x",
-                    benefits_preference=BenefitsPreference.No_preference,
+                    benefits_preference=BenefitsPreference.no_preference,
                 )
             )
             db.add(
@@ -48,9 +48,9 @@ class RecommendationApiTests(unittest.TestCase):
                     card_id=10,
                     bank=BankEnum.DBS,
                     card_name="Card A",
-                    benefit_type=BenefitTypeEnum.MILES,
+                    benefit_type=BenefitTypeEnum.miles,
                     base_benefit_rate=Decimal("1.0"),
-                    status=StatusEnum.VALID,
+                    status=StatusEnum.valid,
                 )
             )
             db.add(
@@ -63,7 +63,7 @@ class RecommendationApiTests(unittest.TestCase):
                     bonus_minimum_spend_in_dollar=0,
                 )
             )
-            db.add(UserOwnedCard(user_id=1, card_id=10, status=UserOwnedCardStatus.Active))
+            db.add(UserOwnedCard(user_id=1, card_id=10, status=UserOwnedCardStatus.active))
             db.commit()
 
         def override_get_db():
