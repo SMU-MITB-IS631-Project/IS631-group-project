@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 
@@ -26,19 +25,6 @@ class BulkTransactionStatusUpdate(BaseModel):
     """Bulk update multiple transactions status"""
     transaction_ids: list[int]
     status: str  # "active" or "deleted_with_card"
-
-
-def _unauthorized_response() -> JSONResponse:
-    return JSONResponse(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        content={
-            "error": {
-                "code": "UNAUTHORIZED",
-                "message": "Missing or invalid user context.",
-                "details": {"required_header": "x-user-id"},
-            }
-        },
-    )
 
 
 @router.post("", status_code=201)
