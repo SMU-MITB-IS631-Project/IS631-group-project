@@ -138,6 +138,22 @@ class RecommendationApiTests(unittest.TestCase):
         self.assertIn("error", body["detail"])
         self.assertEqual(body["detail"]["error"]["code"], "VALIDATION_ERROR")
 
+    def test_omitted_amount_returns_200_with_zero_reward(self):
+        resp = self.client.get(
+            "/api/v1/recommendation",
+            params={"user_id": 1, "category": "Food"},
+            headers={"x-user-id": "1"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIsNotNone(data.get("recommended"))
+        self.assertEqual(data["recommended"]["estimated_reward_value"], 0)
+        breakdown = data["recommended"]["reward_breakdown"]
+        self.assertIn("reward_before_cap", breakdown)
+        self.assertIn("reward_after_cap", breakdown)
+        self.assertEqual(breakdown["reward_before_cap"], 0)
+        self.assertEqual(breakdown["reward_after_cap"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
