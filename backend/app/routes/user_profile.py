@@ -175,8 +175,9 @@ def update_user_profile(
         )
 
     try:
-        user_id_int = int(user_id)
-    except ValueError:
+        normalized_user_id = normalize_user_id(user_id)
+        user_id_int = int(normalized_user_id)
+    except (ValueError, TypeError):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
