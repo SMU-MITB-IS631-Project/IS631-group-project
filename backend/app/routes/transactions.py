@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from app.dependencies.db import get_db
 from app.dependencies.security import normalize_user_id, require_user_id_header
 from app.models.transaction import TransactionRequest
-from app.services.transaction_service import ServiceError, TransactionService
+from app.services.errors import ServiceError
+from app.services.transaction_service import TransactionService
 
 router = APIRouter(
     prefix="/api/v1/transactions",

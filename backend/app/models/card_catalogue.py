@@ -8,19 +8,22 @@ from decimal import Decimal
 
 # Python Enums for type safety
 class BankEnum(str, PyEnum):
+    dbs = "DBS"
+    citi = "CITI"
+    standard_chartered = "Standard Chartered"
     DBS = "DBS"
     CITI = "CITI"
     Standard_Chartered = "Standard_Chartered"
     UOB = "UOB"
 
 class BenefitTypeEnum(str, PyEnum):
-    MILES = "MILES"
-    CASHBACK = "CASHBACK"
-    BOTH = "BOTH"
+    miles = "miles"
+    cashback = "cashback"
+    both = "both"
 
 class StatusEnum(str, PyEnum):
-    VALID = "VALID"
-    INVALID = "INVALID"
+    valid = "valid"
+    invalid = "invalid"
 
 # SQLAlchemy ORM Model
 class CardCatalogue(Base):

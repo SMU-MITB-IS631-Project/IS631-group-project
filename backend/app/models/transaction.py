@@ -8,16 +8,16 @@ from decimal import Decimal
 from typing import Optional
 
 class TransactionCategory(PyEnum):
-    Food = "food"
-    Travel = "travel"
-    Shopping = "shopping"
-    Bills = "bills"
-    Entertainment = "entertainment"
-    Others = "others"
+    food = "food"
+    travel = "travel"
+    shopping = "shopping"
+    bills = "bills"
+    entertainment = "entertainment"
+    others = "others"
 
 class TransactionChannel(PyEnum):
-    Online = "online"
-    Offline = "offline"
+    online = "online"
+    offline = "offline"
 
 def _utc_now_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
@@ -36,7 +36,7 @@ class UserTransaction(Base):
     item = Column(String, nullable=False)
     channel = Column(SAEnum(TransactionChannel), nullable=False)
     category = Column(SAEnum(TransactionCategory), nullable=True)
-    is_overseas = Column(Boolean, default=False, nullable=False)
+    is_overseas = Column(Boolean, nullable=False)
     transaction_date = Column(Date, default=date.today, nullable=False)
     status = Column(SAEnum(TransactionStatus), default=TransactionStatus.Active, nullable=False)
     created_date = Column(DateTime, default=_utc_now_naive, nullable=False)

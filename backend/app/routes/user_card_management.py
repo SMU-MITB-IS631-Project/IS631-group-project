@@ -6,9 +6,9 @@ Implements Sprint 1 assigned user stories:
 - Delete user-owned cards (DELETE /api/v1/user_cards/{id})
 
 Route handlers keep local error response shaping and delegate business logic
-to app.services.user_card_services.
-Card catalog validation is resolved by the service against the
-`card_catalogue` table/model in the application database.
+to service-layer classes (`UserService`, `CardService`). Card catalog
+validation is resolved by the services against the `card_catalogue`
+table/model in the application database.
 """
 
 from datetime import datetime
@@ -21,7 +21,9 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
-from app.services.user_card_services import ServiceError, UserCardManagementService
+from app.services.card_service import CardService
+from app.services.errors import ServiceError
+from app.services.user_service import UserService
 
 logger = logging.getLogger(__name__)
 
@@ -114,8 +116,10 @@ def _get_user_id_from_request(request: Request) -> Optional[str]:
     return user_id.strip() if user_id else None
 
 
-def _service_from_request(db: Session) -> UserCardManagementService:
-    return UserCardManagementService(db)
+def _services(db: Session) -> tuple[UserService, CardService]:
+    user_service = UserService(db)
+    card_service = CardService(db, user_service)
+    return user_service, card_service
 
 
 def _unauthorized_response() -> JSONResponse:
@@ -140,8 +144,8 @@ def get_user_cards(request: Request, db: Session = Depends(get_db)):
         return _unauthorized_response()
 
     try:
-        service = _service_from_request(db)
-        return {"user_cards": service.list_user_cards(user_id)}
+        _, card_service = _services(db)
+        return {"user_cards": card_service.list_user_cards(user_id)}
     except ServiceError as exc:
         return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
     except Exception:
@@ -171,7 +175,8 @@ def get_profile(request: Request, db: Session = Depends(get_db)):
     """Contract endpoint: return current user profile with wallet cards."""
     try:
         user_id = _get_user_id_from_request(request) or "u_001"
-        profile = _service_from_request(db).get_profile(user_id)
+        user_service, card_service = _services(db)
+        profile = user_service.get_profile(user_id, card_service)
         return {"profile": profile}
     except ServiceError as exc:
         return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
@@ -184,7 +189,8 @@ def save_profile(payload: ProfileRequest, request: Request, db: Session = Depend
     """Contract endpoint: create/update profile and wallet."""
     try:
         user_id = _get_user_id_from_request(request) or "u_001"
-        profile = _service_from_request(db).save_profile(user_id, payload.profile.model_dump())
+        user_service, card_service = _services(db)
+        profile = user_service.save_profile(user_id, payload.profile.model_dump(), card_service)
         return {"profile": profile}
     except ServiceError as exc:
         return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
@@ -200,15 +206,17 @@ def add_user_card(payload: WalletCardCreate, request: Request, db: Session = Dep
         if not user_id:
             return _unauthorized_response()
 
-        service = _service_from_request(db)
-        saved = service.add_user_card(user_id, payload.wallet_card.model_dump())
-        
-        return {"wallet_card": {
-            "card_id": saved.get("card_id"),
-            "refresh_day_of_month": saved.get("refresh_day_of_month"),
-            "annual_fee_billing_date": saved.get("annual_fee_billing_date"),
-            "cycle_spend_sgd": saved.get("cycle_spend_sgd", 0),
-        }}
+        _, card_service = _services(db)
+        saved = card_service.add_user_card(user_id, payload.wallet_card.model_dump())
+
+        return {
+            "wallet_card": {
+                "card_id": saved.get("card_id"),
+                "refresh_day_of_month": saved.get("refresh_day_of_month"),
+                "annual_fee_billing_date": saved.get("annual_fee_billing_date"),
+                "cycle_spend_sgd": saved.get("cycle_spend_sgd", 0),
+            }
+        }
     except ServiceError as exc:
         return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
     except Exception:
@@ -230,8 +238,8 @@ def put_user_card(card_id: str, payload: UserCardPut, request: Request, db: Sess
         return _unauthorized_response()
 
     try:
-        service = _service_from_request(db)
-        saved = service.replace_user_card(user_id, card_id, payload.user_card.model_dump())
+        _, card_service = _services(db)
+        saved = card_service.replace_user_card(user_id, card_id, payload.user_card.model_dump())
         return {
             "wallet_card": {
                 "card_id": saved.get("card_id"),
@@ -258,7 +266,8 @@ def patch_wallet_alias(card_id: str, payload: WalletCardUpdate, request: Request
         return _error_response(status_code=400, code="VALIDATION_ERROR", message="No fields to update.", details={})
 
     try:
-        current_cards = _service_from_request(db).list_user_cards(user_id)
+        _, card_service = _services(db)
+        current_cards = card_service.list_user_cards(user_id)
         current = next((c for c in current_cards if c.get("id") == card_id), None)
         if not current:
             return _error_response(status_code=404, code="NOT_FOUND", message=f"user_card_id '{card_id}' not found.", details={})
@@ -268,7 +277,7 @@ def patch_wallet_alias(card_id: str, payload: WalletCardUpdate, request: Request
             "annual_fee_billing_date": updates.get("annual_fee_billing_date", current.get("annual_fee_billing_date")),
             "cycle_spend_sgd": updates.get("cycle_spend_sgd", current.get("cycle_spend_sgd", 0)),
         }
-        saved = _service_from_request(db).replace_user_card(user_id, card_id, merged)
+        saved = card_service.replace_user_card(user_id, card_id, merged)
         return {
             "wallet_card": {
                 "card_id": saved.get("card_id"),
@@ -292,7 +301,8 @@ def delete_user_card(card_id: str, request: Request, db: Session = Depends(get_d
         return _unauthorized_response()
 
     try:
-        _service_from_request(db).delete_user_card(user_id, card_id)
+        _, card_service = _services(db)
+        card_service.delete_user_card(user_id, card_id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except ServiceError as exc:
         return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
