@@ -26,7 +26,7 @@ class CatalogService:
         user_owned_card = UserOwnedCard(
             user_id=user_id,
             card_id=card_id,
-            status=UserOwnedCardStatus.Active,
+            status=UserOwnedCardStatus.active,
             card_expiry_date=card_expiry_date if card_expiry_date else None,
             billing_cycle_refresh_date=billing_cycle_refresh_date if billing_cycle_refresh_date else None
         )
