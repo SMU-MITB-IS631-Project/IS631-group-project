@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, Numeric, String, DateTime, Date, Boolean
 from app.db.db import Base
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import relationship
-from datetime import datetime, date
+from datetime import datetime, date, UTC
 from enum import Enum as PyEnum
 from decimal import Decimal
 from typing import Optional
@@ -18,6 +18,10 @@ class TransactionCategory(PyEnum):
 class TransactionChannel(PyEnum):
     online = "online"
     offline = "offline"
+
+def _utc_now_naive() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
 
 class TransactionStatus(PyEnum):
     Active = "active"
@@ -35,7 +39,7 @@ class UserTransaction(Base):
     is_overseas = Column(Boolean, nullable=False)
     transaction_date = Column(Date, default=date.today, nullable=False)
     status = Column(SAEnum(TransactionStatus), default=TransactionStatus.Active, nullable=False)
-    created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_date = Column(DateTime, default=_utc_now_naive, nullable=False)
 
     # Relationship with UserProfile
     user_profile = relationship("UserProfile", back_populates="user_transactions")

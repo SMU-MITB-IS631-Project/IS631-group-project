@@ -1,9 +1,9 @@
-from alembic.environment import Optional
+from typing import Optional
 from sqlalchemy import Column, Date, Integer, String, DateTime, Enum as SAEnum, ForeignKey
 from app.db.db import Base
 from pydantic import BaseModel, ConfigDict, field_validator, Field
 from sqlalchemy.orm import relationship
-from datetime import datetime, timedelta, date
+from datetime import timedelta, date
 from enum import Enum as PyEnum
 
 class UserOwnedCardStatus(PyEnum):
@@ -56,4 +56,13 @@ class UserOwnedCardUpdate(BaseModel):
     status: Optional[UserOwnedCardStatus] = None
 
 class UserOwnedCardResponse(UserOwnedCardBase):
+    pass
+
+
+class UserOwnedCardWrappedResponse(BaseModel):
+    wallet: list[UserOwnedCardResponse]
+
+
+# Backwards compatibility: keep old typo’d name as an alias
+class UserOwnedCarWrappedResponse(UserOwnedCardWrappedResponse):
     pass

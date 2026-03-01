@@ -1,8 +1,8 @@
 #routes user_profile.py
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Dict, Any
+from app.dependencies.security import normalize_user_id, require_user_id_header
 from app.services.user_profile import verify_password
-from app.db.db import SessionLocal
 
 from app.models.user_profile import (
     UserProfileResponse,
@@ -25,7 +25,7 @@ router = APIRouter(
 
 
 @router.get("", response_model=UserProfileResponse)
-def get_user_profile() -> Dict[str, Any]:
+def get_user_profile(authenticated_user_id: str = Depends(require_user_id_header)) -> Dict[str, Any]:
     """
     Return the current user's profile.
     
@@ -33,7 +33,19 @@ def get_user_profile() -> Dict[str, Any]:
     - user_profile: List of fields personal particulars in the user's profile
 
     """
-    user_id = 1  # TODO: Get from auth token
+    normalized_user_id = normalize_user_id(authenticated_user_id)
+    if not normalized_user_id.isdigit():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "x-user-id must be an integer or u_<integer> format.",
+                    "details": {"header": "x-user-id"}
+                }
+            }
+        )
+    user_id = int(normalized_user_id)
     users = get_users()
     user = users.get(user_id)
     
@@ -133,7 +145,11 @@ def create_user_profile(payload: UserProfileCreate) -> Dict[str, Any]:
     }
 
 @router.patch("/{user_id}", response_model=UserProfileResponse)
-def update_user_profile(user_id: str, payload: UserProfileUpdate) -> Dict[str, Any]:
+def update_user_profile(
+    user_id: str,
+    payload: UserProfileUpdate,
+    authenticated_user_id: str = Depends(require_user_id_header),
+) -> Dict[str, Any]:
     """
     Update fields of an existing user profile
     
@@ -146,9 +162,22 @@ def update_user_profile(user_id: str, payload: UserProfileUpdate) -> Dict[str, A
     Returns:
     - The updated full user profile
     """
+    if normalize_user_id(authenticated_user_id) != normalize_user_id(user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": {
+                    "code": "FORBIDDEN",
+                    "message": "You are not allowed to update another user's profile.",
+                    "details": {}
+                }
+            }
+        )
+
     try:
-        user_id_int = int(user_id)
-    except ValueError:
+        normalized_user_id = normalize_user_id(user_id)
+        user_id_int = int(normalized_user_id)
+    except (ValueError, TypeError):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={

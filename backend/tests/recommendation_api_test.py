@@ -40,7 +40,7 @@ class RecommendationApiTests(unittest.TestCase):
                     id=1,
                     username="u1",
                     password_hash="x",
-                    benefits_preference=BenefitsPreference.No_preference,
+                    benefits_preference=BenefitsPreference.no_preference,
                 )
             )
             db.add(
@@ -48,9 +48,9 @@ class RecommendationApiTests(unittest.TestCase):
                     card_id=10,
                     bank=BankEnum.DBS,
                     card_name="Card A",
-                    benefit_type=BenefitTypeEnum.MILES,
+                    benefit_type=BenefitTypeEnum.miles,
                     base_benefit_rate=Decimal("1.0"),
-                    status=StatusEnum.VALID,
+                    status=StatusEnum.valid,
                 )
             )
             db.add(
@@ -63,7 +63,7 @@ class RecommendationApiTests(unittest.TestCase):
                     bonus_minimum_spend_in_dollar=0,
                 )
             )
-            db.add(UserOwnedCard(user_id=1, card_id=10, status=UserOwnedCardStatus.Active))
+            db.add(UserOwnedCard(user_id=1, card_id=10, status=UserOwnedCardStatus.active))
             db.commit()
 
         def override_get_db():
@@ -83,6 +83,7 @@ class RecommendationApiTests(unittest.TestCase):
         resp = self.client.get(
             "/api/v1/recommendation",
             params={"user_id": 1, "category": "Food", "amount_sgd": "50"},
+            headers={"x-user-id": "1"},
         )
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
@@ -113,6 +114,7 @@ class RecommendationApiTests(unittest.TestCase):
         resp = self.client.get(
             "/api/v1/recommendation",
             params={"user_id": 1, "category": "Food", "amount_sgd": "50"},
+            headers={"x-user-id": "1"},
         )
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
@@ -128,12 +130,29 @@ class RecommendationApiTests(unittest.TestCase):
         resp = self.client.get(
             "/api/v1/recommendation",
             params={"user_id": 1, "category": "Food", "amount_sgd": "0"},
+            headers={"x-user-id": "1"},
         )
         self.assertEqual(resp.status_code, 400)
         body = resp.json()
         self.assertIn("detail", body)
         self.assertIn("error", body["detail"])
         self.assertEqual(body["detail"]["error"]["code"], "VALIDATION_ERROR")
+
+    def test_omitted_amount_returns_200_with_zero_reward(self):
+        resp = self.client.get(
+            "/api/v1/recommendation",
+            params={"user_id": 1, "category": "Food"},
+            headers={"x-user-id": "1"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIsNotNone(data.get("recommended"))
+        self.assertEqual(data["recommended"]["estimated_reward_value"], 0)
+        breakdown = data["recommended"]["reward_breakdown"]
+        self.assertIn("reward_before_cap", breakdown)
+        self.assertIn("reward_after_cap", breakdown)
+        self.assertEqual(breakdown["reward_before_cap"], 0)
+        self.assertEqual(breakdown["reward_after_cap"], 0)
 
 
 if __name__ == "__main__":

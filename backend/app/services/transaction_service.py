@@ -46,7 +46,7 @@ class TransactionService:
             .filter(
                 UserOwnedCard.user_id == user_id,
                 UserOwnedCard.card_id == card_id,
-                UserOwnedCard.status == UserOwnedCardStatus.Active,
+                UserOwnedCard.status == UserOwnedCardStatus.active,
             )
             .first()
             is not None

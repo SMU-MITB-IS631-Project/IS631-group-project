@@ -6,8 +6,9 @@ Endpoints:
 - POST /api/v1/card-reasoner/explain-db - Generate explanation from DB ground truth [NEW - TDD]
 """
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from app.dependencies.security import require_user_id_header
 from decimal import Decimal
-from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
@@ -47,7 +48,10 @@ class ExplainFromDBRequest(BaseModel):
 
 
 @router.post("/explain", response_model=LegacyExplanationResponse)
-def explain_recommendation(request: LegacyExplanationRequest) -> LegacyExplanationResponse:
+def explain_recommendation(
+    request: LegacyExplanationRequest,
+    authenticated_user_id: str = Depends(require_user_id_header),
+) -> LegacyExplanationResponse:
     """
     Generate a natural language explanation for why a credit card was recommended.
     
@@ -122,9 +126,11 @@ def explain_recommendation(request: LegacyExplanationRequest) -> LegacyExplanati
             }
         )
 
-
 @router.post("/explain-async", response_model=LegacyExplanationResponse)
-async def explain_recommendation_async(request: LegacyExplanationRequest) -> LegacyExplanationResponse:
+async def explain_recommendation_async(
+    request: LegacyExplanationRequest,
+    authenticated_user_id: str = Depends(require_user_id_header),
+) -> LegacyExplanationResponse:
     """
     Async variant for non-blocking LLM calls.
     Recommended for high-concurrency scenarios.
@@ -166,6 +172,7 @@ async def explain_recommendation_async(request: LegacyExplanationRequest) -> Leg
 @router.post("/explain-db", response_model=ExplanationResponse, status_code=status.HTTP_200_OK)
 def explain_from_database(
     request: ExplainFromDBRequest,
+    authenticated_user_id: str = Depends(require_user_id_header),
     db: Session = Depends(get_db)
 ) -> ExplanationResponse:
     """
