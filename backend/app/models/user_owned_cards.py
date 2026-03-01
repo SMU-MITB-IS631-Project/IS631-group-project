@@ -59,5 +59,10 @@ class UserOwnedCardResponse(UserOwnedCardBase):
     pass
 
 
-class UserOwnedCarWrappedResponse(BaseModel):
+class UserOwnedCardWrappedResponse(BaseModel):
     wallet: list[UserOwnedCardResponse]
+
+
+# Backwards compatibility: keep old typo’d name as an alias
+class UserOwnedCarWrappedResponse(UserOwnedCardWrappedResponse):
+    pass
