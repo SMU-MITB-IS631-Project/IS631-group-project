@@ -1,8 +1,9 @@
 #routes user_profile.py
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Request
 from typing import Dict, Any
 from app.services.user_profile import verify_password
-from app.db.db import SessionLocal
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.models.user_profile import (
     UserProfileResponse,
@@ -22,7 +23,6 @@ router = APIRouter(
     prefix="/api/v1/user_profile",
     tags=["user_profile"]
 )
-
 
 @router.get("", response_model=UserProfileResponse)
 def get_user_profile() -> Dict[str, Any]:
@@ -225,42 +225,33 @@ def update_user_profile(user_id: str, payload: UserProfileUpdate) -> Dict[str, A
         "created_date": user["created_date"],
     }
 
-@router.post("/login", response_model=UserProfileResponse, tags=["user_profile"])
-def login_user(payload: Dict[str, Any]) -> Dict[str, Any]:
+@router.post("/login", response_model=LoginResponse)
+@limiter.limit("5/minute")
+async def login(request: Request):
     """
-    Login endpoint to check if user exists by username.
+    Login endpoint to authenticate user credentials.
     
     Request body:
     - username: str
     - password: str
     
     Returns:
-    - User profile if credentials are valid
+    - Login response with user profile if credentials are valid
+    - 400 error if username or password is missing
     - 404 error if user doesn't exist
     - 401 error if password is invalid
     """
-    username = payload.get("username", "").strip()
-    password = payload.get("password", "")
+    data = await request.json()
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
     
-    if not username:
+    if not username or not password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "error": {
                     "code": "INVALID_REQUEST",
-                    "message": "Username is required.",
-                    "details": {}
-                }
-            }
-        )
-        
-    if not password:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": {
-                    "code": "INVALID_REQUEST",
-                    "message": "Password is required.",
+                    "message": "Missing username or password",
                     "details": {}
                 }
             }
