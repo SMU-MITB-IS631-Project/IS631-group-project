@@ -1,5 +1,5 @@
 #routes user_profile.py
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Dict, Any
 from app.dependencies.security import normalize_user_id, require_user_id_header
 from app.services.user_profile import verify_password
