@@ -157,23 +157,11 @@ def get_recommendation(
 @router.post("/recommendation/explain", response_model=ExplanationResponse)
 def recommend_and_explain(
     payload: RecommendationExplainRequest,
-    request: Request,
     db: Session = Depends(get_db),
+    authenticated_user_id: int = Depends(require_user_id_int),
 ):
     # Resolve user_id from body or header
-    try:
-        resolved_user_id = _parse_user_id(request, payload.user_id)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": {
-                    "code": "VALIDATION_ERROR",
-                    "message": str(exc),
-                    "details": {},
-                }
-            },
-        )
+    resolved_user_id = payload.user_id if payload.user_id is not None else authenticated_user_id
 
     if payload.amount_sgd <= 0:
         raise HTTPException(
