@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from pydantic import BaseModel
 
 from sqlalchemy.orm import Session
