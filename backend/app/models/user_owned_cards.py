@@ -1,7 +1,7 @@
 from typing import Optional
-from sqlalchemy import Column, Date, Integer, String, DateTime, Enum as SAEnum, ForeignKey
+from sqlalchemy import Column, Date, Integer, Enum as SAEnum, ForeignKey
 from app.db.db import Base
-from pydantic import BaseModel, ConfigDict, field_validator, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import relationship
 from datetime import timedelta, date
 from enum import Enum as PyEnum
