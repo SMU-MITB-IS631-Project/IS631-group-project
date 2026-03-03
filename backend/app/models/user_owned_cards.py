@@ -56,7 +56,7 @@ class UserOwnedCardUpdate(BaseModel):
     status: Optional[UserOwnedCardStatus] = None
 
 class UserOwnedCardResponse(UserOwnedCardBase):
-    id: int
+    id: int | None = None  # Optional for JSON-backed wallet
 
 class UserOwnedCardWrappedResponse(BaseModel):
     """Wrapper response for single card endpoint"""

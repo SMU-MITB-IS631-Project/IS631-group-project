@@ -207,6 +207,20 @@ class TransactionService:
         if not transaction:
             raise ServiceError(404, "NOT_FOUND", "Transaction not found.", {})
         
+        # Define which fields are nullable
+        nullable_fields = {"category"}
+        non_nullable_fields = {"card_id", "amount_sgd", "item", "channel", "is_overseas", "transaction_date"}
+        
+        # Validate non-nullable fields aren't explicitly set to None
+        for field in non_nullable_fields:
+            if field in updates and updates[field] is None:
+                raise ServiceError(
+                    400,
+                    "VALIDATION_ERROR",
+                    f"Field '{field}' cannot be null.",
+                    {"field": field},
+                )
+        
         # Validate card_id if being updated
         if "card_id" in updates and updates["card_id"] is not None:
             card_id = self._parse_card_id(updates["card_id"])
@@ -219,9 +233,9 @@ class TransactionService:
                 )
             updates["card_id"] = card_id
         
-        # Apply updates (exclude None values)
+        # Apply updates (allow None for nullable fields, skip None for others)
         for key, value in updates.items():
-            if value is not None:
+            if key in nullable_fields or value is not None:
                 setattr(transaction, key, value)
         
         self.db.commit()
