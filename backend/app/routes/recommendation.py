@@ -160,7 +160,12 @@ def recommend_and_explain(
     db: Session = Depends(get_db),
     authenticated_user_id: int = Depends(require_user_id_int),
 ):
-    # Resolve user_id from body or header
+    # Resolve user_id from body or header, enforcing that it matches the authenticated user
+    if payload.user_id is not None and payload.user_id != authenticated_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": {"code": "FORBIDDEN", "message": "Cannot access recommendations for another user."}},
+        )
     resolved_user_id = payload.user_id if payload.user_id is not None else authenticated_user_id
 
     if payload.amount_sgd <= 0:
