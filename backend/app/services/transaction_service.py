@@ -194,3 +194,55 @@ class TransactionService:
         self.db.commit()
         return count
 
+    def update_transaction(self, user_id: str, transaction_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
+        """Update transaction fields. Returns updated transaction."""
+        resolved_user_id = self._resolve_user_id(user_id)
+        
+        transaction = (
+            self.db.query(UserTransaction)
+            .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.id == transaction_id)
+            .first()
+        )
+        
+        if not transaction:
+            raise ServiceError(404, "NOT_FOUND", "Transaction not found.", {})
+        
+        # Validate card_id if being updated
+        if "card_id" in updates and updates["card_id"] is not None:
+            card_id = self._parse_card_id(updates["card_id"])
+            if not self._card_exists_in_wallet(resolved_user_id, card_id):
+                raise ServiceError(
+                    400,
+                    "VALIDATION_ERROR",
+                    f"card_id '{card_id}' not found in user wallet",
+                    {},
+                )
+            updates["card_id"] = card_id
+        
+        # Apply updates (exclude None values)
+        for key, value in updates.items():
+            if value is not None:
+                setattr(transaction, key, value)
+        
+        self.db.commit()
+        self.db.refresh(transaction)
+        return self._transaction_to_dict(transaction)
+
+    def delete_transaction(self, user_id: str, transaction_id: int) -> Dict[str, Any]:
+        """Delete a transaction. Returns deleted transaction."""
+        resolved_user_id = self._resolve_user_id(user_id)
+        
+        transaction = (
+            self.db.query(UserTransaction)
+            .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.id == transaction_id)
+            .first()
+        )
+        
+        if not transaction:
+            raise ServiceError(404, "NOT_FOUND", "Transaction not found.", {})
+        
+        transaction_dict = self._transaction_to_dict(transaction)
+        self.db.delete(transaction)
+        self.db.commit()
+        return transaction_dict
+
