@@ -17,19 +17,17 @@ pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
 
 
 # ------------------------------------------------------------------
-# Authentication Dependency
+# Header-Based Authentication Dependency
 # ------------------------------------------------------------------
 async def get_required_user_id(
     x_user_id: Optional[str] = Header(None)
 ) -> str:
     """
-    Extract and require x-user-id header from request.
-
-    Raises 401 Unauthorized if header is missing or empty.
-    Use this for endpoints where authentication is required.
-
-    Per team decision (March 4, 2026), user identification
-    is handled via x-user-id header during session.
+    FastAPI dependency to extract and validate x-user-id header.
+    
+    Returns the user ID if present, raises 401 Unauthorized if missing.
+    Per team decision (March 4, 2026), user identification is handled
+    via x-user-id header during session.
     """
     if not x_user_id:
         raise HTTPException(
