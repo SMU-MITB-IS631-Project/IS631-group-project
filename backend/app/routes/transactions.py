@@ -86,13 +86,13 @@ def create_transaction(
                 }
             },
         )
-    except Exception as exc:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error": {
                     "code": "INTERNAL_ERROR",
-                    "message": str(exc),
+                    "message": "Internal server error.",
                     "details": {}
                 }
             }
@@ -222,13 +222,13 @@ def update_transaction(
                 }
             },
         )
-    except Exception as exc:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error": {
                     "code": "INTERNAL_ERROR",
-                    "message": str(exc),
+                    "message": "Internal server error.",
                     "details": {}
                 }
             }
@@ -272,13 +272,13 @@ def update_transaction_status(
                 }
             },
         )
-    except Exception as exc:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error": {
                     "code": "INTERNAL_ERROR",
-                    "message": str(exc),
+                    "message": "Internal server error.",
                     "details": {}
                 }
             }
@@ -322,13 +322,13 @@ def bulk_update_transaction_status(
                 }
             },
         )
-    except Exception as exc:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error": {
                     "code": "INTERNAL_ERROR",
-                    "message": str(exc),
+                    "message": "Internal server error.",
                     "details": {}
                 }
             }
@@ -369,13 +369,13 @@ def delete_transaction(
                 }
             },
         )
-    except Exception as exc:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error": {
                     "code": "INTERNAL_ERROR",
-                    "message": str(exc),
+                    "message": "Internal server error.",
                     "details": {}
                 }
             }
