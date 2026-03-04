@@ -71,7 +71,7 @@ class RewardsEarnedService:
                     .filter(CardBonusCategory.card_id == card.card_id)
                     .all()
                 )
-                bonus_categories = [bonus.bonus_category for bonus in bonus_categories_all]
+                bonus_categories = [bonus.bonus_category.value for bonus in bonus_categories_all]
 
                 # Get all transactions for the card in the latest billing cycle
                 transactions = (
@@ -91,7 +91,7 @@ class RewardsEarnedService:
                     reward_rate = card.base_benefit_rate
                     
                     # Check if transaction category matches any bonus category
-                    if txn.category in bonus_categories:
+                    if txn.category.value in bonus_categories:
                         bonus_txn_amount += float(txn.amount_sgd)
                         total_txn_amount += float(txn.amount_sgd)
                     else:
@@ -106,7 +106,7 @@ class RewardsEarnedService:
                         bonus_amt = bonus_txn_amount
                     
                     base_amt = total_txn_amount - bonus_amt  
-                    rewards_amt_earned = (base_amt * float(card.base_benefit_rate)) + (bonus_amt * float(card.base_benefit_rate + bonus.bonus_benefit_rate))
+                    rewards_amt_earned = (base_amt * float(card.base_benefit_rate)) + (bonus_amt * float(bonus.bonus_benefit_rate))
                 else:
                     # No bonus categories, all rewards are base rate
                     rewards_amt_earned = total_txn_amount * float(card.base_benefit_rate)
