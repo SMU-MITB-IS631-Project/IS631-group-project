@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from typing import Dict, Any
 from app.services.user_profile import verify_password
 from app.db.db import SessionLocal
-from app.dependencies.auth import get_required_user_id
+from app.services.user_service import get_required_user_id
 
 from app.models.user_profile import (
     UserProfileResponse,

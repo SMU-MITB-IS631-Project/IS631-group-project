@@ -7,7 +7,7 @@ from app.models.user_owned_cards import (
     UserOwnedCardUpdate,
     UserOwnedCardResponse,
 )
-from app.dependencies.auth import get_required_user_id
+from app.services.user_service import get_required_user_id
 
 from app.services.wallet_service import (
     DEFAULT_USER_ID,
