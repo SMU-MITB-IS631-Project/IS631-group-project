@@ -312,7 +312,7 @@ class ExplanationService:
         """
         # Compute effective rate value for display/LLM
         effective_rate = context.bonus_rate if context.is_bonus_eligible and context.bonus_rate else context.base_rate
-        if context.benefit_type == BenefitType.MILES:
+        if context.benefit_type == BenefitType.miles:
             # Miles cards: effective_rate is in miles per dollar (mpd); do not scale
             rate_pct = float(effective_rate)
         else:
@@ -320,9 +320,9 @@ class ExplanationService:
             rate_pct = float(effective_rate * 100)
         
         # Build core explanation request
-        benefit_label = "cashback" if context.benefit_type == BenefitType.CASHBACK else "miles"
+        benefit_label = "cashback" if context.benefit_type == BenefitType.cashback else "miles"
         bank_name = context.bank.replace("_", " ")
-        if context.benefit_type == BenefitType.MILES:
+        if context.benefit_type == BenefitType.miles:
             rate_display = f"{rate_pct:.2f} mpd"
         else:
             rate_display = f"{rate_pct:.2f}% ({rate_pct/100:.4f})"
@@ -335,7 +335,7 @@ Ground Truth Facts:
 - Effective Rate: {rate_display}"""
 
         if context.is_bonus_eligible and context.bonus_rate:
-            if context.benefit_type == BenefitType.MILES:
+            if context.benefit_type == BenefitType.miles:
                 prompt += f"""
 - Base Rate: {float(context.base_rate):.2f} mpd
 - Bonus Rate: {float(context.bonus_rate):.2f} mpd (bonus category applied)"""
@@ -348,7 +348,7 @@ Ground Truth Facts:
             prompt += f"\n- Monthly Cap: SGD {context.bonus_cap_sgd}"
         
         if context.total_reward_value:
-            if context.benefit_type == BenefitType.MILES:
+            if context.benefit_type == BenefitType.miles:
                 prompt += f"\n- Total Reward: {float(context.total_reward_value):.0f} miles"
             else:
                 prompt += f"\n- Total Reward: SGD {float(context.total_reward_value):.2f}"
@@ -359,7 +359,7 @@ Ground Truth Facts:
             for alt in comparison_cards[:2]:  # Limit to top 2 for brevity
                 alt_rate = alt.bonus_rate if alt.is_bonus_eligible and alt.bonus_rate else alt.base_rate
                 alt_reward = float(alt.transaction_amount * alt_rate)
-                if alt.benefit_type == BenefitType.CASHBACK:
+                if alt.benefit_type == BenefitType.cashback:
                     alt_rate_pct = float(alt_rate * 100)
                     prompt += (
                         f"\n- {alt.bank} {alt.card_name}: "
@@ -434,11 +434,11 @@ Ground Truth Facts:
             Template-generated explanation string
         """
         effective_rate = context.bonus_rate if context.is_bonus_eligible and context.bonus_rate else context.base_rate
-        benefit_label = "cashback" if context.benefit_type == BenefitType.CASHBACK else "miles"
+        benefit_label = "cashback" if context.benefit_type == BenefitType.cashback else "miles"
         reward_value = float(context.total_reward_value) if context.total_reward_value else 0.0
         bank_name = context.bank.replace("_", " ")
 
-        if context.benefit_type == BenefitType.MILES:
+        if context.benefit_type == BenefitType.miles:
             rate_display = f"{float(effective_rate):.2f} mpd"
             reward_phrase = f"{reward_value:.0f} {benefit_label}"
         else:
