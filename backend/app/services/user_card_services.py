@@ -1,29 +1,69 @@
-"""Consolidated card management service.
+"""Consolidated card management service with header-based authentication.
 
 This service provides the primary interface for card and profile operations,
 functioning as a unified wrapper around UserService and CardService.
 
+Features:
+- Header-based user identification via x-user-id extraction
+- Service-level validation enforcing 401 errors for missing headers
+- Single source of truth for card operations (database-backed)
+- Unified profile and wallet management
+
 Route handlers should:
-1. Extract x-user-id header using get_required_user_id dependency from user_service.py
+1. Use get_required_user_id() as a FastAPI dependency to extract header
 2. Pass the validated user_id to methods in this service
 3. Handle ServiceError exceptions appropriately
 
 Examples:
-    from app.services.user_service import get_required_user_id
+    from app.services.user_card_services import get_required_user_id
     
     @router.get("/cards")
-    def get_cards(user_id: str = Depends(get_required_user_id), db: Session = Depends(get_db)):
+    def get_cards(
+        user_id: str = Depends(get_required_user_id),
+        db: Session = Depends(get_db)
+    ):
         service = UserCardManagementService(db)
         return service.list_user_cards(user_id)
 """
 
 from typing import Any, Dict, List, Optional
 
+from fastapi import Header, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.services.card_service import CardService
 from app.services.errors import ServiceError
 from app.services.user_service import UserService
+
+
+# ------------------------------------------------------------------
+# Header-Based Authentication Dependency
+# ------------------------------------------------------------------
+async def get_required_user_id(
+    x_user_id: Optional[str] = Header(None)
+) -> str:
+    """
+    FastAPI dependency to extract and validate x-user-id header.
+    
+    Returns the stripped user ID if present, raises 401 Unauthorized if missing.
+    Per team decision (March 4, 2026), user identification is handled
+    via x-user-id header during session.
+    
+    Raises:
+        HTTPException(401): If header is missing, empty, or invalid.
+    """
+    if not x_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Missing or invalid user context.",
+                    "details": {"required_header": "x-user-id"},
+                }
+            },
+        )
+    return x_user_id.strip()
 
 
 class UserCardManagementService:

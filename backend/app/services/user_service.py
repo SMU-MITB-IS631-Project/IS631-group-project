@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, TYPE_CHECKING, cast
 
-from fastapi import Header, HTTPException, status
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
@@ -14,33 +13,6 @@ if TYPE_CHECKING:
 
 
 pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
-
-
-# ------------------------------------------------------------------
-# Header-Based Authentication Dependency
-# ------------------------------------------------------------------
-async def get_required_user_id(
-    x_user_id: Optional[str] = Header(None)
-) -> str:
-    """
-    FastAPI dependency to extract and validate x-user-id header.
-    
-    Returns the user ID if present, raises 401 Unauthorized if missing.
-    Per team decision (March 4, 2026), user identification is handled
-    via x-user-id header during session.
-    """
-    if not x_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
-                "error": {
-                    "code": "UNAUTHORIZED",
-                    "message": "Missing or invalid user context.",
-                    "details": {"required_header": "x-user-id"},
-                }
-            },
-        )
-    return x_user_id.strip()
 
 
 class UserService:
