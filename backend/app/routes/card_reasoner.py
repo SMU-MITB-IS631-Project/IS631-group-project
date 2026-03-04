@@ -50,7 +50,7 @@ class ExplainFromDBRequest(BaseModel):
 @router.post("/explain", response_model=LegacyExplanationResponse)
 def explain_recommendation(
     request: LegacyExplanationRequest,
-    authenticated_user_id: str = Depends(require_user_id_header),
+    _authenticated_user_id: str = Depends(require_user_id_header),
 ) -> LegacyExplanationResponse:
     """
     Generate a natural language explanation for why a credit card was recommended.
