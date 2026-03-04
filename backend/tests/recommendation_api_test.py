@@ -2,6 +2,7 @@ import sys
 import unittest
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -40,7 +41,7 @@ class RecommendationApiTests(unittest.TestCase):
                     id=1,
                     username="u1",
                     password_hash="x",
-                    benefits_preference=BenefitsPreference.No_preference,
+                    benefits_preference=BenefitsPreference.no_preference,
                 )
             )
             db.add(
@@ -48,9 +49,9 @@ class RecommendationApiTests(unittest.TestCase):
                     card_id=10,
                     bank=BankEnum.DBS,
                     card_name="Card A",
-                    benefit_type=BenefitTypeEnum.MILES,
+                    benefit_type=BenefitTypeEnum.miles,
                     base_benefit_rate=Decimal("1.0"),
-                    status=StatusEnum.VALID,
+                    status=StatusEnum.valid,
                 )
             )
             db.add(
@@ -63,7 +64,7 @@ class RecommendationApiTests(unittest.TestCase):
                     bonus_minimum_spend_in_dollar=0,
                 )
             )
-            db.add(UserOwnedCard(user_id=1, card_id=10, status=UserOwnedCardStatus.Active))
+            db.add(UserOwnedCard(user_id=1, card_id=10, status=UserOwnedCardStatus.active))
             db.commit()
 
         def override_get_db():
@@ -134,6 +135,41 @@ class RecommendationApiTests(unittest.TestCase):
         self.assertIn("detail", body)
         self.assertIn("error", body["detail"])
         self.assertEqual(body["detail"]["error"]["code"], "VALIDATION_ERROR")
+
+    def test_api_returns_200_with_fallback_explanation_when_ai_fails(self):
+        """End-to-end: when OpenAI explanation service fails, the API must
+        still return 200 and use template-based fallback explanation."""
+        with patch("app.services.explanation_service.openai_client") as mock_client:
+            # Simulate OpenAI failure
+            from openai import APIError
+            from unittest.mock import MagicMock
+            mock_client.chat.completions.create.side_effect = APIError(
+                message="OpenAI API failed",
+                request=MagicMock(),
+                body=None
+            )
+
+            resp = self.client.post(
+                "/api/v1/recommendation/explain",
+                json={"user_id": 1, "category": "Food", "amount_sgd": 50.00}
+            )
+
+        self.assertEqual(resp.status_code, 200, msg=f"Expected 200, got {resp.status_code}: {resp.text}")
+        data = resp.json()
+        
+        # Verify fallback was used
+        self.assertTrue(
+            data.get("is_fallback", False),
+            "Expected is_fallback=true when AI fails"
+        )
+        
+        # Verify explanation is present and useful
+        explanation = data.get("explanation", "")
+        self.assertGreater(
+            len(explanation),
+            0,
+            "Expected non-empty explanation in fallback mode"
+        )
 
 
 if __name__ == "__main__":
