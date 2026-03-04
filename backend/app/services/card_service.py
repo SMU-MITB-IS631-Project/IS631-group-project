@@ -65,11 +65,17 @@ class CardService:
             ) from exc
 
     def _public_wallet_card(self, card: UserOwnedCard) -> Dict[str, Any]:
+        expiry = card.card_expiry_date
+        if hasattr(expiry, "date"):
+            annual_fee_billing_date = expiry.date().isoformat()
+        else:
+            annual_fee_billing_date = expiry.isoformat()
+
         return {
             "id": card.id,
             "card_id": str(card.card_id),
             "refresh_day_of_month": card.billing_cycle_refresh_date.day,
-            "annual_fee_billing_date": card.card_expiry_date.date().isoformat(),
+            "annual_fee_billing_date": annual_fee_billing_date,
         }
 
     def _story_user_card(self, card: UserOwnedCard, catalog: Optional[CardCatalogue]) -> Dict[str, Any]:
