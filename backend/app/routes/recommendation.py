@@ -164,7 +164,13 @@ def recommend_and_explain(
     if payload.user_id is not None and payload.user_id != authenticated_user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"error": {"code": "FORBIDDEN", "message": "Cannot access recommendations for another user."}},
+            detail={
+                "error": {
+                    "code": "FORBIDDEN",
+                    "message": "Cannot access recommendations for another user.",
+                    "details": {},
+                }
+            },
         )
     resolved_user_id = payload.user_id if payload.user_id is not None else authenticated_user_id
 
