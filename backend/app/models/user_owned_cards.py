@@ -58,8 +58,8 @@ class UserOwnedCardUpdate(BaseModel):
     status: Optional[UserOwnedCardStatus] = None
 
 class UserOwnedCardResponse(UserOwnedCardBase):
-    pass
+    id: int | None = None  # Optional for JSON-backed wallet
 
-class UserOwnedCarWrappedResponse(BaseModel):
-    """Response for GET /wallet endpoint"""
-    wallet: List[UserOwnedCardResponse]
+class UserOwnedCardWrappedResponse(BaseModel):
+    """Wrapper response for single card endpoint"""
+    wallet_card: UserOwnedCardResponse

@@ -25,3 +25,7 @@ Thumbs.db
 # Environment variables
 .env
 backend/.env
+
+# Local SQLite databases
+app.db
+backend/app.db
