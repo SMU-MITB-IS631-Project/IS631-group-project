@@ -24,6 +24,8 @@ router = APIRouter(
     tags=["user_profile"]
 )
 
+limiter = Limiter(key_func=get_remote_address)
+
 @router.get("", response_model=UserProfileResponse)
 def get_user_profile() -> Dict[str, Any]:
     """

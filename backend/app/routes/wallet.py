@@ -6,7 +6,7 @@ from app.models.user_owned_cards import (
     UserOwnedCardCreate,
     UserOwnedCardUpdate,
     UserOwnedCardResponse,
-    UserOwnedCarWrappedResponse,
+    #UserOwnedCarWrappedResponse,
 )
 
 from app.services.wallet_service import (
@@ -26,7 +26,7 @@ router = APIRouter(
 )
 
 
-@router.get("", response_model=UserOwnedCarWrappedResponse)
+@router.get("", response_model=UserOwnedCardResponse)
 def get_wallet(x_user_id: Optional[str] = Header(default=str(DEFAULT_USER_ID))):
     """
     Return the current user's wallet.
