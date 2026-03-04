@@ -158,16 +158,18 @@ class RecommendationService:
             if amount_sgd is None:
                 # Keep legacy behavior: rank by rate only when no spend provided.
                 amount_for_calc = Decimal("0")
+                reward_before_cap = Decimal("0")
+                reward_after_cap = Decimal("0")
+                cap_applied = False
             else:
                 amount_for_calc = Decimal(str(amount_sgd))
-
-            reward_before_cap, reward_after_cap, cap_applied = self._estimate_reward(
-                amount_sgd=amount_for_calc,
-                reward_unit=reward_unit,
-                effective_rate=effective_rate,
-                cap_in_dollar=cap_in_dollar if selected_rule is not None else None,
-                apply_cap=(selected_rule is not None),
-            )
+                reward_before_cap, reward_after_cap, cap_applied = self._estimate_reward(
+                    amount_sgd=amount_for_calc,
+                    reward_unit=reward_unit,
+                    effective_rate=effective_rate,
+                    cap_in_dollar=cap_in_dollar if selected_rule is not None else None,
+                    apply_cap=(selected_rule is not None),
+                )
 
             effective_rate_str = self._format_effective_rate(reward_unit=reward_unit, effective_rate=effective_rate)
             estimated_reward_value = self._format_reward_value(reward_unit=reward_unit, reward=reward_after_cap)
