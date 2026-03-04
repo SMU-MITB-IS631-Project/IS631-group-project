@@ -8,12 +8,11 @@ from decimal import Decimal
 from typing import Optional
 
 class TransactionCategory(PyEnum):
-    food = "food"
-    travel = "travel"
-    shopping = "shopping"
-    bills = "bills"
-    entertainment = "entertainment"
-    others = "others"
+    food = "Food"
+    transport = "Transport"
+    fashion = "Fashion"
+    entertainment = "Entertainment"
+    others = "Others"
 
 class TransactionChannel(PyEnum):
     online = "online"
