@@ -5,7 +5,7 @@ from .user_card_management import router as user_card_router
 from .user_profile import router as user_profile_router
 from .recommendation import router as recommendation_router
 from .card_reasoner import router as card_reasoner_router
-from .user_profile import router as user_profile_router
+from .rewards_earned import router as rewards_earned_router
 
 __all__ = [
     "transactions_router",
@@ -15,5 +15,5 @@ __all__ = [
     "user_profile_router",
     "recommendation_router",
     "card_reasoner_router",
-    "user_profile_router",
+    "rewards_earned_router",
 ]
