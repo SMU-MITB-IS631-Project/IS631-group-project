@@ -34,6 +34,8 @@ from app.schemas.ai_schemas import (
     BenefitType,
 )
 
+from app.services.datetime_utils import utc_now
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -487,7 +489,7 @@ Ground Truth Facts:
             prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()[:16]
         
         return AuditLogEntry(
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=utc_now().isoformat(),
             event_type="explanation_generated",
             user_id=user_id,
             card_id=response.card_id,

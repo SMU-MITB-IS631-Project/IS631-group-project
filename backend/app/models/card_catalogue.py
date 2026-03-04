@@ -20,10 +20,17 @@ class BenefitTypeEnum(str, PyEnum):
     miles = "miles"
     cashback = "cashback"
     both = "both"
+    # Backward-compatible aliases (older code/tests used uppercase names)
+    MILES = "miles"
+    CASHBACK = "cashback"
+    BOTH = "both"
 
 class StatusEnum(str, PyEnum):
     valid = "valid"
     invalid = "invalid"
+    # Backward-compatible aliases (older code/tests used uppercase names)
+    VALID = "valid"
+    INVALID = "invalid"
 
 # SQLAlchemy ORM Model
 class CardCatalogue(Base):
