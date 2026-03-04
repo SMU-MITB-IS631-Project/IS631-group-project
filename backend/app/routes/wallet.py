@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Response, Header
+from fastapi import APIRouter, HTTPException, status, Response, Header, Depends
 from typing import Dict, Any, List, Optional
 
 from app.models.user_owned_cards import (
@@ -7,6 +7,7 @@ from app.models.user_owned_cards import (
     UserOwnedCardUpdate,
     UserOwnedCardResponse,
 )
+from app.dependencies.auth import get_required_user_id
 
 from app.services.wallet_service import (
     DEFAULT_USER_ID,
@@ -58,7 +59,10 @@ def get_wallet(x_user_id: Optional[str] = Header(default=str(DEFAULT_USER_ID))):
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=Dict[str, UserOwnedCardResponse])
-def add_wallet_card(payload: UserOwnedCardCreate):
+def add_wallet_card(
+    payload: UserOwnedCardCreate,
+    user_id: str = Depends(get_required_user_id),
+):
     """
     Add a new card to the user's wallet.
     
@@ -72,7 +76,6 @@ def add_wallet_card(payload: UserOwnedCardCreate):
     Returns:
     - wallet_card: The added card details
     """
-    user_id = str(DEFAULT_USER_ID)  # TODO: Get from auth token
     card = payload
 
     # Business validation: card_id must exist in cards master
@@ -107,7 +110,11 @@ def add_wallet_card(payload: UserOwnedCardCreate):
 
 
 @router.patch("/{card_id}", response_model=Dict[str, UserOwnedCardResponse])
-def update_wallet_card(card_id: str, payload: UserOwnedCardUpdate):
+def update_wallet_card(
+    card_id: str,
+    payload: UserOwnedCardUpdate,
+    user_id: str = Depends(get_required_user_id),
+):
     """
     Update fields of an existing wallet card.
     
@@ -120,7 +127,6 @@ def update_wallet_card(card_id: str, payload: UserOwnedCardUpdate):
     Returns:
     - wallet_card: The updated card details
     """
-    user_id = str(DEFAULT_USER_ID)  # TODO: Get from auth token
     
     # Prepare updates dict with only non-None values
     updates = {}
@@ -151,7 +157,10 @@ def update_wallet_card(card_id: str, payload: UserOwnedCardUpdate):
 
 
 @router.delete("/{card_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_wallet_card(card_id: str):
+def delete_wallet_card(
+    card_id: str,
+    user_id: str = Depends(get_required_user_id),
+):
     """
     Remove a card from the user's wallet.
     
@@ -162,7 +171,6 @@ def delete_wallet_card(card_id: str):
     - 204 No Content on success
     - 404 if card not found
     """
-    user_id = str(DEFAULT_USER_ID)  # TODO: Get from auth token
     
     deleted = delete_card_from_wallet(card_id, user_id)
     

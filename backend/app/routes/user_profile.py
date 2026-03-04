@@ -1,8 +1,9 @@
 #routes user_profile.py
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from typing import Dict, Any
 from app.services.user_profile import verify_password
 from app.db.db import SessionLocal
+from app.dependencies.auth import get_required_user_id
 
 from app.models.user_profile import (
     UserProfileResponse,
@@ -25,15 +26,16 @@ router = APIRouter(
 
 
 @router.get("", response_model=UserProfileResponse)
-def get_user_profile() -> Dict[str, Any]:
+def get_user_profile(user_id: str = Depends(get_required_user_id)) -> Dict[str, Any]:
     """
     Return the current user's profile.
     
     Returns:
     - user_profile: List of fields personal particulars in the user's profile
-
+    
+    Security:
+    - Requires x-user-id header from authenticated session
     """
-    user_id = 1  # TODO: Get from auth token
     users = get_users()
     user = users.get(user_id)
     
