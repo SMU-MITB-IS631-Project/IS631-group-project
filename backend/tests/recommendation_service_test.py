@@ -159,6 +159,7 @@ class RecommendationServiceTests(unittest.TestCase):
             self.assertTrue(best.reward_breakdown.cap_applied)
             self.assertEqual(best.reward_breakdown.reward_before_cap, Decimal("100.0"))
             self.assertEqual(best.reward_breakdown.reward_after_cap, Decimal("20"))
+            self.assertEqual(best.estimated_reward_value, Decimal("20"))
 
 
     def test_preference_override_changes_recommendation_unit(self):
