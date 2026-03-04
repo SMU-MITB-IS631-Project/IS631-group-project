@@ -8,7 +8,7 @@ from app.db.db import Base
 class SecurityLog(Base):
     __tablename__ = "security_logs"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     event_type = Column(String(100), nullable=False, index=True)
     event_status = Column(String(50), nullable=False, default="success")

@@ -36,7 +36,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_security_logs_event_type'), 'security_logs', ['event_type'], unique=False)
-    op.create_index(op.f('ix_security_logs_id'), 'security_logs', ['id'], unique=False)
     op.create_index(op.f('ix_security_logs_timestamp'), 'security_logs', ['timestamp'], unique=False)
     op.create_index(op.f('ix_security_logs_user_id'), 'security_logs', ['user_id'], unique=False)
 
@@ -44,6 +43,5 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index(op.f('ix_security_logs_user_id'), table_name='security_logs')
     op.drop_index(op.f('ix_security_logs_timestamp'), table_name='security_logs')
-    op.drop_index(op.f('ix_security_logs_id'), table_name='security_logs')
     op.drop_index(op.f('ix_security_logs_event_type'), table_name='security_logs')
     op.drop_table('security_logs')
