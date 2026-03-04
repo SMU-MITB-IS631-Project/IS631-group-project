@@ -32,6 +32,7 @@ class UserOwnedCard(Base):
     card_id = Column(Integer, ForeignKey("card_catalogue.card_id", ondelete="CASCADE"), nullable=False)
     card_expiry_date = Column(Date, default=lambda: date(9999,1,1), nullable=False)
     billing_cycle_refresh_date = Column(Date, default=get_billing_cycle_date, nullable=False)
+    billing_cycle_refresh_day_of_mth = Column(Integer, default=1, nullable=False)
     status = Column(SAEnum(UserOwnedCardStatus), nullable=False, default=UserOwnedCardStatus.active)
     cycle_spend_sgd: float = Field(0, ge=0)
 
@@ -46,6 +47,7 @@ class UserOwnedCardBase(BaseModel):
     card_id: int
     card_expiry_date: date = date(9999,1,1)
     billing_cycle_refresh_date: date = Field(default_factory=get_billing_cycle_date)
+    billing_cycle_refresh_day_of_mth: int = 1
     status: UserOwnedCardStatus = UserOwnedCardStatus.active
     cycle_spend_sgd: float = Field(0, ge=0)
 
@@ -60,8 +62,7 @@ class UserOwnedCardUpdate(BaseModel):
     status: Optional[UserOwnedCardStatus] = None
 
 class UserOwnedCardResponse(UserOwnedCardBase):
-    pass
-
+    id: int | None = None  # Optional for JSON-backed wallet
 
 class UserOwnedCardWrappedResponse(BaseModel):
     """Envelope response for wallet endpoints."""
