@@ -22,6 +22,8 @@ from enum import Enum
 from pydantic import BaseModel, Field, field_validator
 from openai import AsyncOpenAI, OpenAI, APIError, APITimeoutError
 
+from app.services.datetime_utils import utc_now
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -63,9 +65,9 @@ class BenefitTypeEnum(str, Enum):
 
 class TransactionInput(BaseModel):
     """Validated transaction input"""
-    merchant_name: str = Field(..., example="ZARA")
-    amount: float = Field(..., gt=0, le=1_000_000, example=120.00)
-    category: str = Field(..., example="Fashion")
+    merchant_name: str = Field(..., json_schema_extra={"example": "ZARA"})
+    amount: float = Field(..., gt=0, le=1_000_000, json_schema_extra={"example": 120.00})
+    category: str = Field(..., json_schema_extra={"example": "Fashion"})
     
     @field_validator("merchant_name")
     @classmethod
@@ -330,7 +332,7 @@ def generate_explanation(request: ExplanationRequest) -> ExplanationResponse:
     
     # Create audit log with error details if applicable
     audit_log = AuditLogEntry(
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=utc_now().isoformat(),
         model_used=LLMConfig.MODEL,
         merchant_name=request.transaction.merchant_name,
         category=request.transaction.category,
@@ -363,7 +365,7 @@ async def generate_explanation_async(request: ExplanationRequest) -> Explanation
     explanation, error = await _call_openai_async(system_prompt, user_prompt)
     
     audit_log = AuditLogEntry(
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=utc_now().isoformat(),
         model_used=LLMConfig.MODEL,
         merchant_name=request.transaction.merchant_name,
         category=request.transaction.category,

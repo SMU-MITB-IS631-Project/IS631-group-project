@@ -64,6 +64,7 @@ class RecommendationService:
         user_id: int,
         category: Optional[BonusCategory] = None,
         amount_sgd: Optional[Decimal] = None,
+        preference: Optional[str] = None,
     ) -> tuple[Optional[CardRecommendationDTO], list[CardRecommendationDTO]]:
         """Return (best_card, ranked_cards) for a user.
 
@@ -79,14 +80,25 @@ class RecommendationService:
         if user is None:
             return None, []
 
-        preference_raw = getattr(user, "benefits_preference", None)
-        preference_value = preference_raw.value if hasattr(preference_raw, "value") else str(preference_raw)
-        preference_value = (preference_value or "").strip().lower()
+        # Allow request-level override of stored user preference.
+        # Accepted values: miles|cashback|points|no_preference
+        if preference is not None:
+            preference_value = str(preference).strip().lower()
+        else:
+            preference_raw = getattr(user, "benefits_preference", None)
+            preference_value = preference_raw.value if hasattr(preference_raw, "value") else str(preference_raw)
+            preference_value = (preference_value or "").strip().lower()
+
+        # Treat "points" as miles-equivalent for scoring (both are unit-per-dollar style).
+        if preference_value == "points":
+            preference_value = "miles"
         preferred_unit: Optional[str]
         if preference_value == "miles":
             preferred_unit = "miles"
         elif preference_value == "cashback":
             preferred_unit = "cashback"
+        elif preference_value in ("no_preference", "none", ""):
+            preferred_unit = None
         else:
             preferred_unit = None
 
@@ -222,7 +234,20 @@ class RecommendationService:
                 )
             )
 
-        ranked.sort(key=lambda c: (c.effective_benefit_rate, c.base_benefit_rate), reverse=True)
+        # Ranking strategy:
+        # - If spend context exists (> 0), rank by estimated reward after cap (then rate as tiebreaker).
+        # - Otherwise, preserve legacy behavior: rank by effective rate.
+        if amount_sgd is not None and amount_sgd > 0:
+            ranked.sort(
+                key=lambda c: (
+                    c.reward_breakdown.reward_after_cap,
+                    c.effective_benefit_rate,
+                    c.base_benefit_rate,
+                ),
+                reverse=True,
+            )
+        else:
+            ranked.sort(key=lambda c: (c.effective_benefit_rate, c.base_benefit_rate), reverse=True)
         return (ranked[0] if ranked else None), ranked
 
     @staticmethod

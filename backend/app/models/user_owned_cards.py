@@ -1,4 +1,4 @@
-from alembic.environment import Optional
+from typing import Optional
 from sqlalchemy import Column, Date, Integer, String, DateTime, Enum as SAEnum, ForeignKey
 from app.db.db import Base
 from pydantic import BaseModel, ConfigDict, field_validator, Field
@@ -10,6 +10,10 @@ class UserOwnedCardStatus(PyEnum):
     active = "Active"
     inactive = "Suspended"
     closed = "Expired"
+    # Backward-compatible aliases (older code/tests used title-case names)
+    Active = "Active"
+    Inactive = "Suspended"
+    Closed = "Expired"
 
 def get_billing_cycle_date():
     # return last day of current month
@@ -57,3 +61,9 @@ class UserOwnedCardUpdate(BaseModel):
 
 class UserOwnedCardResponse(UserOwnedCardBase):
     pass
+
+
+class UserOwnedCardWrappedResponse(BaseModel):
+    """Envelope response for wallet endpoints."""
+
+    wallet: list[UserOwnedCardResponse]

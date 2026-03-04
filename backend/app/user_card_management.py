@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, status, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.services.data_service import USERS_FILE, _load_json, _save_json
 
@@ -68,7 +68,8 @@ class WalletCard(BaseModel):
     annual_fee_billing_date: str  # YYYY-MM-DD
     cycle_spend_sgd: float = Field(0, ge=0)
 
-    @validator("annual_fee_billing_date")
+    @field_validator("annual_fee_billing_date")
+    @classmethod
     def validate_annual_fee_billing_date(cls, v: str) -> str:
         """Ensure date is in ISO YYYY-MM-DD format, per API contract."""
         try:

@@ -127,13 +127,55 @@ class RecommendationApiTests(unittest.TestCase):
     def test_invalid_amount_returns_400(self):
         resp = self.client.get(
             "/api/v1/recommendation",
-            params={"user_id": 1, "category": "Food", "amount_sgd": "0"},
+            params={"user_id": 1, "category": "Food", "amount_sgd": "-1"},
         )
         self.assertEqual(resp.status_code, 400)
         body = resp.json()
         self.assertIn("detail", body)
         self.assertIn("error", body["detail"])
         self.assertEqual(body["detail"]["error"]["code"], "VALIDATION_ERROR")
+
+
+    def test_invalid_preference_is_rejected(self):
+        resp = self.client.get(
+            "/api/v1/recommendation",
+            params={"user_id": 1, "category": "Food", "amount_sgd": "50", "preference": "invalid"},
+        )
+        # App normalizes request validation errors to 400.
+        self.assertEqual(resp.status_code, 400)
+
+
+    def test_preference_parameter_changes_output(self):
+        with self.Session() as db:
+            # Add a cashback card owned by the same user.
+            db.add(
+                CardCatalogue(
+                    card_id=30,
+                    bank=BankEnum.DBS,
+                    card_name="Cashback Card",
+                    benefit_type=BenefitTypeEnum.CASHBACK,
+                    base_benefit_rate=Decimal("0.01"),
+                    status=StatusEnum.VALID,
+                )
+            )
+            db.add(UserOwnedCard(user_id=1, card_id=30, status=UserOwnedCardStatus.Active))
+            db.commit()
+
+        # Miles preference should recommend the miles card.
+        resp_miles = self.client.get(
+            "/api/v1/recommendation",
+            params={"user_id": 1, "category": "Food", "amount_sgd": "50", "preference": "miles"},
+        )
+        self.assertEqual(resp_miles.status_code, 200)
+        self.assertEqual(resp_miles.json()["recommended"]["reward_unit"], "miles")
+
+        # Cashback preference should recommend the cashback card.
+        resp_cb = self.client.get(
+            "/api/v1/recommendation",
+            params={"user_id": 1, "category": "Food", "amount_sgd": "50", "preference": "cashback"},
+        )
+        self.assertEqual(resp_cb.status_code, 200)
+        self.assertEqual(resp_cb.json()["recommended"]["reward_unit"], "cashback")
 
 
 if __name__ == "__main__":
