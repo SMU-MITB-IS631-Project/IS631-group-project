@@ -70,7 +70,7 @@ class UserCardManagementService:
     """Consolidated interface for user card and profile operations.
     
     This service:
-    - Acts as single source of truth for card operations (eliminating redundancy with wallet_service.py)
+    - Acts as single source of truth for card operations
     - Delegates complex logic to specialized services (UserService, CardService)
     - Enforces header-based user identification validation
     - Points all operations to the database (not JSON files)
