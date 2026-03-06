@@ -2,6 +2,9 @@ import os
 import sys
 
 from dotenv import load_dotenv
+from fastapi import FastAPI, Request
+from slowapi.errors import RateLimitExceeded
+from fastapi.responses import JSONResponse
 
 # Add backend directory to path
 sys.path.insert(0, os.path.dirname(__file__))
@@ -101,6 +104,12 @@ async def general_exception_handler(request, exc: Exception):  # type: ignore[ov
         }
     )
 
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded. Try again later."}
+    )
 
 # Register routers
 app.include_router(transactions_router)
