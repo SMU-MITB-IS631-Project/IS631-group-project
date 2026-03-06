@@ -52,7 +52,8 @@ async def get_required_user_id(
     Raises:
         HTTPException(401): If header is missing, empty, or invalid.
     """
-    if not x_user_id:
+    stripped = x_user_id.strip() if x_user_id else ""
+    if not stripped:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -63,7 +64,7 @@ async def get_required_user_id(
                 }
             },
         )
-    return x_user_id.strip()
+    return stripped
 
 
 class UserCardManagementService:
@@ -89,14 +90,15 @@ class UserCardManagementService:
         Raises:
             ServiceError(401): If user_id is None or empty.
         """
-        if not user_id:
+        stripped = user_id.strip() if user_id else ""
+        if not stripped:
             raise ServiceError(
                 401, 
                 "UNAUTHORIZED", 
                 "Missing or invalid user context.",
                 {"required_header": "x-user-id"}
             )
-        return user_id.strip()
+        return stripped
 
     # Card operations ---------------------------------------------------------
     def list_user_cards(self, user_id: Optional[str]) -> List[Dict[str, Any]]:

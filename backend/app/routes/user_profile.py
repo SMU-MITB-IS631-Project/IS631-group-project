@@ -40,7 +40,27 @@ def get_user_profile(user_id: str = Depends(get_required_user_id)) -> Dict[str, 
     - Requires x-user-id header from authenticated session
     """
     users = get_users()
-    user = users.get(user_id)
+
+    # Normalize the incoming user identifier to match the int keys used by get_users().
+    user = None
+    try:
+        int_user_id = int(user_id)
+    except (TypeError, ValueError):
+        int_user_id = None
+
+    if int_user_id is not None:
+        user = users.get(int_user_id)
+
+    # If no user was found by integer ID, fall back to matching by username.
+    if not user:
+        # Handle "u_###" format (e.g. "u_001" -> 1)
+        if user_id.startswith("u_") and user_id[2:].isdigit():
+            user = users.get(int(user_id[2:]))
+        else:
+            for u in users.values():
+                if u.get("username") == user_id:
+                    user = u
+                    break
     
     if not user:
         raise HTTPException(
