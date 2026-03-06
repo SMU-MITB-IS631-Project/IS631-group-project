@@ -159,7 +159,36 @@ class RecommendationServiceTests(unittest.TestCase):
             self.assertTrue(best.reward_breakdown.cap_applied)
             self.assertEqual(best.reward_breakdown.reward_before_cap, Decimal("100.0"))
             self.assertEqual(best.reward_breakdown.reward_after_cap, Decimal("20"))
-            self.assertEqual(best.estimated_reward_value, Decimal("20.00"))
+            self.assertEqual(best.estimated_reward_value, Decimal("20"))
+
+
+    def test_preference_override_changes_recommendation_unit(self):
+        with self.Session() as db:
+            # Add a cashback card owned by the same user.
+            db.add(
+                CardCatalogue(
+                    card_id=30,
+                    bank=BankEnum.DBS,
+                    card_name="Cashback Card",
+                    benefit_type=BenefitTypeEnum.CASHBACK,
+                    base_benefit_rate=Decimal("0.01"),
+                    status=StatusEnum.VALID,
+                )
+            )
+            db.add(UserOwnedCard(user_id=1, card_id=30, status=UserOwnedCardStatus.Active))
+            db.commit()
+
+            best_miles, _ = RecommendationService(db).recommend(
+                user_id=1, category=BonusCategory.Food, amount_sgd=Decimal("50"), preference="miles"
+            )
+            self.assertIsNotNone(best_miles)
+            self.assertEqual(best_miles.reward_unit, "miles")
+
+            best_cb, _ = RecommendationService(db).recommend(
+                user_id=1, category=BonusCategory.Food, amount_sgd=Decimal("50"), preference="cashback"
+            )
+            self.assertIsNotNone(best_cb)
+            self.assertEqual(best_cb.reward_unit, "cashback")
 
 
 if __name__ == "__main__":

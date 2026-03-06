@@ -1,9 +1,11 @@
 #routes user_profile.py
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from typing import Dict, Any
 from app.services.user_profile import verify_password
 from app.db.db import SessionLocal
 from app.services.user_card_services import get_required_user_id
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.models.user_profile import (
     UserProfileResponse,
@@ -24,6 +26,7 @@ router = APIRouter(
     tags=["user_profile"]
 )
 
+limiter = Limiter(key_func=get_remote_address)
 
 @router.get("", response_model=UserProfileResponse)
 def get_user_profile(user_id: str = Depends(get_required_user_id)) -> Dict[str, Any]:
@@ -227,42 +230,33 @@ def update_user_profile(user_id: str, payload: UserProfileUpdate) -> Dict[str, A
         "created_date": user["created_date"],
     }
 
-@router.post("/login", response_model=UserProfileResponse, tags=["user_profile"])
-def login_user(payload: Dict[str, Any]) -> Dict[str, Any]:
+@router.post("/login", response_model=LoginResponse)
+@limiter.limit("5/minute")
+async def login(request: Request):
     """
-    Login endpoint to check if user exists by username.
+    Login endpoint to authenticate user credentials.
     
     Request body:
     - username: str
     - password: str
     
     Returns:
-    - User profile if credentials are valid
+    - Login response with user profile if credentials are valid
+    - 400 error if username or password is missing
     - 404 error if user doesn't exist
     - 401 error if password is invalid
     """
-    username = payload.get("username", "").strip()
-    password = payload.get("password", "")
+    data = await request.json()
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
     
-    if not username:
+    if not username or not password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "error": {
                     "code": "INVALID_REQUEST",
-                    "message": "Username is required.",
-                    "details": {}
-                }
-            }
-        )
-        
-    if not password:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": {
-                    "code": "INVALID_REQUEST",
-                    "message": "Password is required.",
+                    "message": "Missing username or password",
                     "details": {}
                 }
             }
