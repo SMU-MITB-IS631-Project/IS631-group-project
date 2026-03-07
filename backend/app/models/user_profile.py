@@ -65,5 +65,9 @@ class LoginPayload(BaseModel):
     password: str
 
 class LoginResponse(BaseModel):
-    message: str
-    user_id: int
+    id: int
+    username: str
+    name: str | None = None
+    email: str | None = None
+    benefits_preference: BenefitsPreference | str
+    created_date: datetime
