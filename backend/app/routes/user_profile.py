@@ -1,11 +1,18 @@
 #routes user_profile.py
+import logging
+
 from fastapi import APIRouter, HTTPException, status, Depends, Request
+from passlib.exc import UnknownHashError
 from typing import Dict, Any
 from app.services.user_profile import verify_password
 from app.db.db import SessionLocal
+from app.dependencies.db import get_db
 from app.services.user_card_services import get_required_user_id
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy.orm import Session
+
+from app.services.security_log_service import log_auth_event
 
 from app.models.user_profile import (
     UserProfileResponse,
@@ -27,6 +34,32 @@ router = APIRouter(
 )
 
 limiter = Limiter(key_func=get_remote_address)
+logger = logging.getLogger(__name__)
+
+
+def _safe_log_auth_event(
+    db: Session,
+    *,
+    status: str,
+    request: Request,
+    user_id: int | None = None,
+    username: str | None = None,
+    reason: str | None = None,
+    error_message: str | None = None,
+) -> None:
+    # Security logging must never block auth flow.
+    try:
+        log_auth_event(
+            db,
+            status=status,
+            request=request,
+            user_id=user_id,
+            username=username,
+            reason=reason,
+            error_message=error_message,
+        )
+    except Exception:
+        logger.exception("Failed to write authentication security log")
 
 @router.get("", response_model=UserProfileResponse)
 def get_user_profile(user_id: str = Depends(get_required_user_id)) -> Dict[str, Any]:
@@ -252,7 +285,7 @@ def update_user_profile(user_id: str, payload: UserProfileUpdate) -> Dict[str, A
 
 @router.post("/login", response_model=LoginResponse)
 @limiter.limit("5/minute")
-async def login(request: Request):
+async def login(request: Request, db: Session = Depends(get_db)):
     """
     Login endpoint to authenticate user credentials.
     
@@ -271,6 +304,14 @@ async def login(request: Request):
     password = data.get("password", "")
     
     if not username or not password:
+        _safe_log_auth_event(
+            db,
+            status="failed",
+            request=request,
+            username=username or None,
+            reason="missing_fields",
+            error_message="Missing username or password",
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -285,6 +326,14 @@ async def login(request: Request):
     user = get_user_by_username(username)
     
     if not user:
+        _safe_log_auth_event(
+            db,
+            status="failed",
+            request=request,
+            username=username,
+            reason="user_not_found",
+            error_message="User not found",
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
@@ -296,7 +345,22 @@ async def login(request: Request):
             }
         )
         
-    if not verify_password(password, user.password_hash):
+    try:
+        is_valid_password = verify_password(password, user.password_hash)
+    except (UnknownHashError, ValueError, TypeError):
+        # Some legacy seeded users have non-passlib hashes; treat as invalid creds.
+        is_valid_password = False
+
+    if not is_valid_password:
+        _safe_log_auth_event(
+            db,
+            status="failed",
+            request=request,
+            user_id=user.id,
+            username=username,
+            reason="invalid_password",
+            error_message="Invalid username or password",
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -308,6 +372,15 @@ async def login(request: Request):
             }
         )
     
+    _safe_log_auth_event(
+        db,
+        status="success",
+        request=request,
+        user_id=user.id,
+        username=username,
+        reason="authenticated",
+    )
+
     return {
         "id": user.id,
         "username": user.username,
