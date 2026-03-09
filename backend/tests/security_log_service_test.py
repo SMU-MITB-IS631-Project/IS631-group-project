@@ -5,6 +5,7 @@ from starlette.requests import Request
 from app.services.security_log_service import (
     SecurityEventType,
     log_auth_event,
+    log_genai_access_event,
     log_otp_event,
     log_security_event,
     mask_sensitive_fields,
@@ -126,3 +127,26 @@ def test_log_otp_event_uses_convention_and_masks_details() -> None:
     assert record.details["reason"] == "otp_mismatch"
     assert record.details["otp"] == "***"
     assert record.details["attempt"] == 2
+
+
+def test_log_genai_access_event_uses_convention_and_masks_details() -> None:
+    db = MagicMock()
+    request = _make_request()
+
+    record = log_genai_access_event(
+        db,
+        status="success",
+        source="recommendation.explain",
+        request=request,
+        user_id=9,
+        endpoint="/api/v1/recommendation/explain",
+        details={"category": "Food", "token": "abc123"},
+    )
+
+    assert record.event_type == SecurityEventType.GENAI_ACCESS
+    assert record.source == "recommendation.explain"
+    assert record.event_status == "success"
+    assert record.user_id == 9
+    assert record.details["endpoint"] == "/api/v1/recommendation/explain"
+    assert record.details["category"] == "Food"
+    assert record.details["token"] == "***"

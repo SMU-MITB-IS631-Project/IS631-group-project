@@ -7,7 +7,9 @@ Endpoints:
 """
 
 from decimal import Decimal
-from fastapi import APIRouter, HTTPException, status, Depends
+import logging
+
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
@@ -19,6 +21,7 @@ from app.services.card_reasoner_service import (
     save_audit_log
 )
 from app.services.explanation_service import ExplanationService
+from app.services.security_log_service import log_genai_access_event
 from app.schemas.ai_schemas import ExplanationRequest, ExplanationResponse
 from pydantic import BaseModel, Field
 
@@ -26,6 +29,41 @@ router = APIRouter(
     prefix="/api/v1/card-reasoner",
     tags=["card-reasoner"]
 )
+logger = logging.getLogger(__name__)
+
+
+def _safe_log_genai_event(
+    db: Session,
+    *,
+    status: str,
+    request: Request,
+    source: str,
+    user_id: int | None = None,
+    endpoint: str,
+    details: dict | None = None,
+    error_message: str | None = None,
+) -> None:
+    # Security logging must never block explanation flows.
+    try:
+        log_genai_access_event(
+            db,
+            status=status,
+            source=source,
+            request=request,
+            user_id=user_id,
+            endpoint=endpoint,
+            details=details,
+            error_message=error_message,
+        )
+    except Exception:
+        logger.exception("Failed to write GenAI security log")
+
+
+def _header_user_id(request: Request) -> int | None:
+    value = request.headers.get("x-user-id")
+    if value and value.strip().isdigit():
+        return int(value.strip())
+    return None
 
 
 # =============================================================================
@@ -47,7 +85,11 @@ class ExplainFromDBRequest(BaseModel):
 
 
 @router.post("/explain", response_model=LegacyExplanationResponse)
-def explain_recommendation(request: LegacyExplanationRequest) -> LegacyExplanationResponse:
+def explain_recommendation(
+    payload: LegacyExplanationRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> LegacyExplanationResponse:
     """
     Generate a natural language explanation for why a credit card was recommended.
     
@@ -92,14 +134,43 @@ def explain_recommendation(request: LegacyExplanationRequest) -> LegacyExplanati
             ]
         }
     """
+    source = "card_reasoner.explain"
+    user_id = _header_user_id(request)
     try:
-        response = generate_explanation(request)
+        response = generate_explanation(payload)
         
         # Optionally persist audit log (can be enhanced to write to database)
         save_audit_log(response.audit_log_entry)
+
+        _safe_log_genai_event(
+            db,
+            status="success",
+            request=request,
+            source=source,
+            user_id=user_id,
+            endpoint="/api/v1/card-reasoner/explain",
+            details={
+                "category": payload.transaction.category,
+                "merchant_name": payload.transaction.merchant_name,
+                "recommended_card_id": payload.recommended_card.Card_ID,
+                "comparison_count": len(payload.comparison_cards),
+                "model_used": response.audit_log_entry.model_used,
+                "is_fallback": bool(response.audit_log_entry.error),
+            },
+        )
         
         return response
     except ValueError as e:
+        _safe_log_genai_event(
+            db,
+            status="failed",
+            request=request,
+            source=source,
+            user_id=user_id,
+            endpoint="/api/v1/card-reasoner/explain",
+            details={"reason": "validation_error"},
+            error_message=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -111,6 +182,16 @@ def explain_recommendation(request: LegacyExplanationRequest) -> LegacyExplanati
             }
         )
     except Exception as e:
+        _safe_log_genai_event(
+            db,
+            status="failed",
+            request=request,
+            source=source,
+            user_id=user_id,
+            endpoint="/api/v1/card-reasoner/explain",
+            details={"reason": "genai_error"},
+            error_message=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -124,18 +205,51 @@ def explain_recommendation(request: LegacyExplanationRequest) -> LegacyExplanati
 
 
 @router.post("/explain-async", response_model=LegacyExplanationResponse)
-async def explain_recommendation_async(request: LegacyExplanationRequest) -> LegacyExplanationResponse:
+async def explain_recommendation_async(
+    payload: LegacyExplanationRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> LegacyExplanationResponse:
     """
     Async variant for non-blocking LLM calls.
     Recommended for high-concurrency scenarios.
     
     Same request/response schema as /explain.
     """
+    source = "card_reasoner.explain_async"
+    user_id = _header_user_id(request)
     try:
-        response = await generate_explanation_async(request)
+        response = await generate_explanation_async(payload)
         save_audit_log(response.audit_log_entry)
+
+        _safe_log_genai_event(
+            db,
+            status="success",
+            request=request,
+            source=source,
+            user_id=user_id,
+            endpoint="/api/v1/card-reasoner/explain-async",
+            details={
+                "category": payload.transaction.category,
+                "merchant_name": payload.transaction.merchant_name,
+                "recommended_card_id": payload.recommended_card.Card_ID,
+                "comparison_count": len(payload.comparison_cards),
+                "model_used": response.audit_log_entry.model_used,
+                "is_fallback": bool(response.audit_log_entry.error),
+            },
+        )
         return response
     except ValueError as e:
+        _safe_log_genai_event(
+            db,
+            status="failed",
+            request=request,
+            source=source,
+            user_id=user_id,
+            endpoint="/api/v1/card-reasoner/explain-async",
+            details={"reason": "validation_error"},
+            error_message=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -147,6 +261,16 @@ async def explain_recommendation_async(request: LegacyExplanationRequest) -> Leg
             }
         )
     except Exception as e:
+        _safe_log_genai_event(
+            db,
+            status="failed",
+            request=request,
+            source=source,
+            user_id=user_id,
+            endpoint="/api/v1/card-reasoner/explain-async",
+            details={"reason": "genai_error"},
+            error_message=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -165,7 +289,8 @@ async def explain_recommendation_async(request: LegacyExplanationRequest) -> Leg
 
 @router.post("/explain-db", response_model=ExplanationResponse, status_code=status.HTTP_200_OK)
 def explain_from_database(
-    request: ExplainFromDBRequest,
+    payload: ExplainFromDBRequest,
+    request: Request,
     db: Session = Depends(get_db)
 ) -> ExplanationResponse:
     """
@@ -202,34 +327,66 @@ def explain_from_database(
     - Bonus caps automatically applied
     - No possibility of rate hallucination
     """
+    source = "card_reasoner.explain_db"
+    user_id = payload.user_id if payload.user_id is not None else _header_user_id(request)
     try:
         # Initialize service with DB session
         service = ExplanationService(db)
         
         # Build context from database (ground truth)
         context = service.build_context_from_db(
-            card_id=request.card_id,
-            category=request.category,
-            transaction_amount=request.transaction_amount,
-            merchant_name=request.merchant_name
+            card_id=payload.card_id,
+            category=payload.category,
+            transaction_amount=payload.transaction_amount,
+            merchant_name=payload.merchant_name
         )
         
         # Generate explanation
         explanation_request = ExplanationRequest(
             recommendation=context,
             comparison_cards=[],
-            user_id=request.user_id
+            user_id=payload.user_id
         )
         response = service.generate_explanation(explanation_request)
         
         # Optional: Create audit log
-        if request.user_id:
-            audit = service.create_audit_log(response, user_id=request.user_id)
+        if payload.user_id:
+            audit = service.create_audit_log(response, user_id=payload.user_id)
             # TODO: Persist audit log to database or file
+
+        _safe_log_genai_event(
+            db,
+            status="success",
+            request=request,
+            source=source,
+            user_id=user_id,
+            endpoint="/api/v1/card-reasoner/explain-db",
+            details={
+                "card_id": payload.card_id,
+                "category": payload.category,
+                "model_used": response.model_used,
+                "is_fallback": response.is_fallback,
+                "generation_time_ms": response.generation_time_ms,
+            },
+        )
         
         return response
     
     except ValueError as e:
+        _safe_log_genai_event(
+            db,
+            status="failed",
+            request=request,
+            source=source,
+            user_id=user_id,
+            endpoint="/api/v1/card-reasoner/explain-db",
+            details={
+                "card_id": payload.card_id,
+                "category": payload.category,
+                "reason": "not_found_or_invalid_input",
+            },
+            error_message=str(e),
+        )
         # Card not found or invalid input
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -237,11 +394,25 @@ def explain_from_database(
                 "error": {
                     "code": "NOT_FOUND",
                     "message": f"Card or bonus data not found: {str(e)}",
-                    "details": {"card_id": request.card_id}
+                    "details": {"card_id": payload.card_id}
                 }
             }
         )
     except Exception as e:
+        _safe_log_genai_event(
+            db,
+            status="failed",
+            request=request,
+            source=source,
+            user_id=user_id,
+            endpoint="/api/v1/card-reasoner/explain-db",
+            details={
+                "card_id": payload.card_id,
+                "category": payload.category,
+                "reason": "internal_error",
+            },
+            error_message=str(e),
+        )
         # Unexpected error
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

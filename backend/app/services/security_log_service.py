@@ -16,6 +16,7 @@ class SecurityEventType:
     AUTH_LOGIN = "auth.login"
     OTP_REQUEST = "otp.request"
     OTP_VERIFY = "otp.verify"
+    GENAI_ACCESS = "genai.access"
 
 
 SENSITIVE_KEYS = {
@@ -143,4 +144,35 @@ def log_otp_event(
         user_id=user_id,
         request=request,
         details=merged_details,
+    )
+
+
+def log_genai_access_event(
+    db: Session,
+    *,
+    status: str,
+    source: str,
+    request: Optional[Request],
+    user_id: Optional[int] = None,
+    endpoint: Optional[str] = None,
+    details: Optional[Dict[str, Any]] = None,
+    error_message: Optional[str] = None,
+) -> SecurityLog:
+    """Convenience logger for GenAI explanation endpoint access events."""
+    merged_details: Dict[str, Any] = {
+        "endpoint": endpoint,
+        "outcome": status,
+    }
+    if details:
+        merged_details.update(details)
+
+    return log_security_event(
+        db,
+        event_type=SecurityEventType.GENAI_ACCESS,
+        source=source,
+        event_status=status,
+        user_id=user_id,
+        request=request,
+        details=merged_details,
+        error_message=error_message,
     )
