@@ -2,6 +2,9 @@ import os
 import sys
 
 from dotenv import load_dotenv
+from fastapi import FastAPI, Request
+from slowapi.errors import RateLimitExceeded
+from fastapi.responses import JSONResponse
 
 # Add backend directory to path
 sys.path.insert(0, os.path.dirname(__file__))
@@ -20,12 +23,12 @@ from contextlib import asynccontextmanager
 
 from app.routes import (
     transactions_router,
-    wallet_router,
     catalog_router,
     user_card_router,
     recommendation_router,
     card_reasoner_router,
     user_profile_router,
+    rewards_earned_router,
 )
 from app.services import init_sample_data
 
@@ -100,16 +103,21 @@ async def general_exception_handler(request, exc: Exception):  # type: ignore[ov
         }
     )
 
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded. Try again later."}
+    )
 
 # Register routers
 app.include_router(transactions_router)
 app.include_router(catalog_router)
-app.include_router(wallet_router)
 app.include_router(user_card_router)
 app.include_router(user_profile_router)
 app.include_router(recommendation_router)
 app.include_router(card_reasoner_router)
-app.include_router(user_profile_router)
+app.include_router(rewards_earned_router)
 
 
 if __name__ == "__main__":

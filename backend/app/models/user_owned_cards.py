@@ -1,4 +1,4 @@
-from alembic.environment import Optional
+from typing import Optional
 from sqlalchemy import Column, Date, Integer, String, DateTime, Enum as SAEnum, ForeignKey
 from app.db.db import Base
 from pydantic import BaseModel, ConfigDict, field_validator, Field
@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, date
 from enum import Enum as PyEnum
 
 class UserOwnedCardStatus(PyEnum):
+    # Backward-compatible aliases (older code/tests used title-case names)
     Active = "Active"
     Inactive = "Suspended"
     Closed = "Expired"
@@ -28,7 +29,7 @@ class UserOwnedCard(Base):
     card_id = Column(Integer, ForeignKey("card_catalogue.card_id", ondelete="CASCADE"), nullable=False)
     card_expiry_date = Column(Date, default=lambda: date(9999,1,1), nullable=False)
     billing_cycle_refresh_date = Column(Date, default=get_billing_cycle_date, nullable=False)
-    status = Column(SAEnum(UserOwnedCardStatus), nullable=False, default=UserOwnedCardStatus.Active)
+    status = Column(SAEnum(UserOwnedCardStatus), nullable=False, default=UserOwnedCardStatus.active)
     cycle_spend_sgd: float = Field(0, ge=0)
 
     # Relationship with UserProfile
@@ -42,7 +43,7 @@ class UserOwnedCardBase(BaseModel):
     card_id: int
     card_expiry_date: date = date(9999,1,1)
     billing_cycle_refresh_date: date = Field(default_factory=get_billing_cycle_date)
-    status: UserOwnedCardStatus = UserOwnedCardStatus.Active
+    status: UserOwnedCardStatus = UserOwnedCardStatus.active
     cycle_spend_sgd: float = Field(0, ge=0)
 
 
@@ -56,4 +57,9 @@ class UserOwnedCardUpdate(BaseModel):
     status: Optional[UserOwnedCardStatus] = None
 
 class UserOwnedCardResponse(UserOwnedCardBase):
-    pass
+    id: int | None = None  # Optional for JSON-backed wallet
+
+class UserOwnedCardWrappedResponse(BaseModel):
+    """Envelope response for wallet endpoints."""
+
+    wallet: list[UserOwnedCardResponse]

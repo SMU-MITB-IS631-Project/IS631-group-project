@@ -1,8 +1,18 @@
 #routes user_profile.py
-from fastapi import APIRouter, HTTPException, status
+import logging
+
+from fastapi import APIRouter, HTTPException, status, Depends, Request
+from passlib.exc import UnknownHashError
 from typing import Dict, Any
 from app.services.user_profile import verify_password
 from app.db.db import SessionLocal
+from app.dependencies.db import get_db
+from app.services.user_card_services import get_required_user_id
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from sqlalchemy.orm import Session
+
+from app.services.security_log_service import log_auth_event
 
 from app.models.user_profile import (
     UserProfileResponse,
@@ -23,19 +33,67 @@ router = APIRouter(
     tags=["user_profile"]
 )
 
+limiter = Limiter(key_func=get_remote_address)
+logger = logging.getLogger(__name__)
+
+
+def _safe_log_auth_event(
+    db: Session,
+    *,
+    status: str,
+    request: Request,
+    user_id: int | None = None,
+    username: str | None = None,
+    reason: str | None = None,
+    error_message: str | None = None,
+) -> None:
+    # Security logging must never block auth flow.
+    try:
+        log_auth_event(
+            db,
+            status=status,
+            request=request,
+            user_id=user_id,
+            username=username,
+            reason=reason,
+            error_message=error_message,
+        )
+    except Exception:
+        logger.exception("Failed to write authentication security log")
 
 @router.get("", response_model=UserProfileResponse)
-def get_user_profile() -> Dict[str, Any]:
+def get_user_profile(user_id: str = Depends(get_required_user_id)) -> Dict[str, Any]:
     """
     Return the current user's profile.
     
     Returns:
     - user_profile: List of fields personal particulars in the user's profile
-
+    
+    Security:
+    - Requires x-user-id header from authenticated session
     """
-    user_id = 1  # TODO: Get from auth token
     users = get_users()
-    user = users.get(user_id)
+
+    # Normalize the incoming user identifier to match the int keys used by get_users().
+    user = None
+    try:
+        int_user_id = int(user_id)
+    except (TypeError, ValueError):
+        int_user_id = None
+
+    if int_user_id is not None:
+        user = users.get(int_user_id)
+
+    # If no user was found by integer ID, fall back to matching by username.
+    if not user:
+        # Handle "u_###" format (e.g. "u_001" -> 1)
+        if user_id.startswith("u_") and user_id[2:].isdigit():
+            user = users.get(int(user_id[2:]))
+        else:
+            for u in users.values():
+                if u.get("username") == user_id:
+                    user = u
+                    break
     
     if not user:
         raise HTTPException(
@@ -225,42 +283,41 @@ def update_user_profile(user_id: str, payload: UserProfileUpdate) -> Dict[str, A
         "created_date": user["created_date"],
     }
 
-@router.post("/login", response_model=UserProfileResponse, tags=["user_profile"])
-def login_user(payload: Dict[str, Any]) -> Dict[str, Any]:
+@router.post("/login", response_model=LoginResponse)
+@limiter.limit("5/minute")
+async def login(request: Request, db: Session = Depends(get_db)):
     """
-    Login endpoint to check if user exists by username.
+    Login endpoint to authenticate user credentials.
     
     Request body:
     - username: str
     - password: str
     
     Returns:
-    - User profile if credentials are valid
+    - Login response with user profile if credentials are valid
+    - 400 error if username or password is missing
     - 404 error if user doesn't exist
     - 401 error if password is invalid
     """
-    username = payload.get("username", "").strip()
-    password = payload.get("password", "")
+    data = await request.json()
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
     
-    if not username:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": {
-                    "code": "INVALID_REQUEST",
-                    "message": "Username is required.",
-                    "details": {}
-                }
-            }
+    if not username or not password:
+        _safe_log_auth_event(
+            db,
+            status="failed",
+            request=request,
+            username=username or None,
+            reason="missing_fields",
+            error_message="Missing username or password",
         )
-        
-    if not password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "error": {
                     "code": "INVALID_REQUEST",
-                    "message": "Password is required.",
+                    "message": "Missing username or password",
                     "details": {}
                 }
             }
@@ -269,6 +326,14 @@ def login_user(payload: Dict[str, Any]) -> Dict[str, Any]:
     user = get_user_by_username(username)
     
     if not user:
+        _safe_log_auth_event(
+            db,
+            status="failed",
+            request=request,
+            username=username,
+            reason="user_not_found",
+            error_message="User not found",
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
@@ -280,7 +345,22 @@ def login_user(payload: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
         
-    if not verify_password(password, user.password_hash):
+    try:
+        is_valid_password = verify_password(password, user.password_hash)
+    except (UnknownHashError, ValueError, TypeError):
+        # Some legacy seeded users have non-passlib hashes; treat as invalid creds.
+        is_valid_password = False
+
+    if not is_valid_password:
+        _safe_log_auth_event(
+            db,
+            status="failed",
+            request=request,
+            user_id=user.id,
+            username=username,
+            reason="invalid_password",
+            error_message="Invalid username or password",
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -292,6 +372,15 @@ def login_user(payload: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
     
+    _safe_log_auth_event(
+        db,
+        status="success",
+        request=request,
+        user_id=user.id,
+        username=username,
+        reason="authenticated",
+    )
+
     return {
         "id": user.id,
         "username": user.username,

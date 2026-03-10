@@ -28,3 +28,6 @@ backend/.env
 
 # SQLite DB (local only)
 *.db
+# Local SQLite databases
+app.db
+backend/app.db

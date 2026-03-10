@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from enum import Enum
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -13,9 +14,46 @@ from app.models.card_bonus_category import BonusCategory
 from app.services.recommendation_service import RecommendationService
 from app.services.explanation_service import ExplanationService
 from app.schemas.ai_schemas import ExplanationRequest, ExplanationResponse
+from app.services.security_log_service import log_genai_access_event
+
+import logging
 
 
 router = APIRouter(prefix="/api/v1", tags=["recommendation"])
+logger = logging.getLogger(__name__)
+
+
+def _safe_log_genai_event(
+    db: Session,
+    *,
+    status: str,
+    request: Request,
+    source: str,
+    user_id: Optional[int] = None,
+    details: Optional[dict[str, Any]] = None,
+    error_message: Optional[str] = None,
+) -> None:
+    # Security logging must never block request processing.
+    try:
+        log_genai_access_event(
+            db,
+            status=status,
+            source=source,
+            request=request,
+            user_id=user_id,
+            endpoint="/api/v1/recommendation/explain",
+            details=details,
+            error_message=error_message,
+        )
+    except Exception:
+        logger.exception("Failed to write GenAI security log")
+
+
+class RewardPreference(str, Enum):
+    miles = "miles"
+    cashback = "cashback"
+    points = "points"
+    no_preference = "no_preference"
 
 
 class RecommendationCard(BaseModel):
@@ -45,6 +83,7 @@ class RecommendationExplainRequest(BaseModel):
     category: Optional[BonusCategory] = None
     merchant_name: Optional[str] = None
     user_id: Optional[int] = None  # optional; can also be passed via x-user-id header
+    preference: Optional[RewardPreference] = None
 
 
 class RecommendationExplainResponse(RecommendationResponse):
@@ -66,6 +105,7 @@ def get_recommendation(
     user_id: Optional[int] = Query(default=None),
     category: Optional[BonusCategory] = Query(default=None),
     amount_sgd: Optional[Decimal] = Query(default=None),
+    preference: Optional[RewardPreference] = Query(default=None),
 ):
     """Recommend the best owned card for a given spend context.
 
@@ -87,20 +127,27 @@ def get_recommendation(
             },
         )
 
-    if amount_sgd is not None and amount_sgd <= 0:
+    # Allow amount_sgd=0 (frontend may omit spend context by sending 0).
+    # Negative amounts are invalid.
+    if amount_sgd is not None and amount_sgd < 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "error": {
                     "code": "VALIDATION_ERROR",
-                    "message": "amount_sgd must be > 0 when provided.",
+                    "message": "amount_sgd must be >= 0 when provided.",
                     "details": {"amount_sgd": str(amount_sgd)},
                 }
             },
         )
 
     service = RecommendationService(db)
-    best, ranked = service.recommend(user_id=resolved_user_id, category=category, amount_sgd=amount_sgd)
+    best, ranked = service.recommend(
+        user_id=resolved_user_id,
+        category=category,
+        amount_sgd=amount_sgd,
+        preference=(preference.value if preference is not None else None),
+    )
     if not ranked:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -169,10 +216,20 @@ def recommend_and_explain(
     request: Request,
     db: Session = Depends(get_db),
 ):
+    source = "recommendation.explain"
     # Resolve user_id from body or header
     try:
         resolved_user_id = _parse_user_id(request, payload.user_id)
     except ValueError as exc:
+        _safe_log_genai_event(
+            db,
+            status="failed",
+            request=request,
+            source=source,
+            user_id=payload.user_id,
+            details={"reason": "missing_or_invalid_user_id"},
+            error_message=str(exc),
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -185,6 +242,18 @@ def recommend_and_explain(
         )
 
     if payload.amount_sgd <= 0:
+        _safe_log_genai_event(
+            db,
+            status="failed",
+            request=request,
+            source=source,
+            user_id=resolved_user_id,
+            details={
+                "reason": "invalid_amount",
+                "amount_sgd": str(payload.amount_sgd),
+            },
+            error_message="amount_sgd must be > 0",
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -197,12 +266,34 @@ def recommend_and_explain(
         )
 
     rec_service = RecommendationService(db)
-    best, ranked = rec_service.recommend(
-        user_id=resolved_user_id,
-        category=payload.category,
-        amount_sgd=payload.amount_sgd,
-    )
+    try:
+        best, ranked = rec_service.recommend(
+            user_id=resolved_user_id,
+            category=payload.category,
+            amount_sgd=payload.amount_sgd,
+            preference=(payload.preference.value if payload.preference is not None else None),
+        )
+    except Exception as exc:
+        _safe_log_genai_event(
+            db,
+            status="failed",
+            request=request,
+            source=source,
+            user_id=resolved_user_id,
+            details={"reason": "recommendation_error"},
+            error_message=str(exc),
+        )
+        raise
     if not ranked or best is None:
+        _safe_log_genai_event(
+            db,
+            status="failed",
+            request=request,
+            source=source,
+            user_id=resolved_user_id,
+            details={"reason": "no_active_cards_or_preference_mismatch"},
+            error_message="User has no active cards (or none match the user preference).",
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -281,6 +372,38 @@ def recommend_and_explain(
         )
 
     exp_request = ExplanationRequest(recommendation=primary_ctx, comparison_cards=comparison_ctxs)
-    explanation = exp_service.generate_explanation(exp_request)
+    try:
+        explanation = exp_service.generate_explanation(exp_request)
+    except Exception as exc:
+        _safe_log_genai_event(
+            db,
+            status="failed",
+            request=request,
+            source=source,
+            user_id=resolved_user_id,
+            details={
+                "card_id": best.card_id,
+                "category": category_str,
+                "comparison_count": len(comparison_ctxs),
+            },
+            error_message=str(exc),
+        )
+        raise
+
+    _safe_log_genai_event(
+        db,
+        status="success",
+        request=request,
+        source=source,
+        user_id=resolved_user_id,
+        details={
+            "card_id": best.card_id,
+            "category": category_str,
+            "comparison_count": len(comparison_ctxs),
+            "model_used": explanation.model_used,
+            "is_fallback": explanation.is_fallback,
+            "generation_time_ms": explanation.generation_time_ms,
+        },
+    )
 
     return explanation

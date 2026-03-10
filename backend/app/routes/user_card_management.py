@@ -17,7 +17,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
@@ -35,7 +35,8 @@ class WalletCard(BaseModel):
     annual_fee_billing_date: str  # YYYY-MM-DD
     cycle_spend_sgd: float = Field(0, ge=0)
 
-    @validator("annual_fee_billing_date")
+    @field_validator("annual_fee_billing_date")
+    @classmethod
     def validate_annual_fee_billing_date(cls, v: str) -> str:
         """Ensure date is in ISO YYYY-MM-DD format, per API contract."""
         try:
@@ -48,12 +49,6 @@ class WalletCard(BaseModel):
 
 class WalletCardCreate(BaseModel):
     wallet_card: WalletCard
-
-
-class WalletCardUpdate(BaseModel):
-    refresh_day_of_month: Optional[int] = Field(None, ge=1, le=31)
-    annual_fee_billing_date: Optional[str] = None
-    cycle_spend_sgd: Optional[float] = Field(None, ge=0)
 
 
 class UserCardPut(BaseModel):
@@ -77,10 +72,6 @@ class ProfileRequest(BaseModel):
 
 class ProfileResponse(BaseModel):
     profile: Profile
-
-
-class WalletResponse(BaseModel):
-    wallet: List[WalletCard]
 
 
 class WalletCardResponse(BaseModel):
@@ -151,24 +142,6 @@ def get_user_cards(request: Request, db: Session = Depends(get_db)):
         return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
 
 
-@router.get("/wallet", response_model=WalletResponse, tags=["wallet"])
-def get_wallet_alias(request: Request, db: Session = Depends(get_db)):
-    """Backward-compatible alias to preserve existing wallet endpoint."""
-    result = get_user_cards(request, db)
-    if isinstance(result, JSONResponse):
-        return result
-    wallet_only = [
-        {
-            "card_id": card.get("card_id"),
-            "refresh_day_of_month": card.get("refresh_day_of_month"),
-            "annual_fee_billing_date": card.get("annual_fee_billing_date"),
-            "cycle_spend_sgd": card.get("cycle_spend_sgd", 0),
-        }
-        for card in result["user_cards"]
-    ]
-    return {"wallet": wallet_only}
-
-
 @router.get("/profile", response_model=ProfileResponse, tags=["profile"])
 def get_profile(request: Request, db: Session = Depends(get_db)):
     """Contract endpoint: return current user profile with wallet cards."""
@@ -223,12 +196,6 @@ def add_user_card(payload: WalletCardCreate, request: Request, db: Session = Dep
         return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
 
 
-@router.post("/wallet", status_code=status.HTTP_201_CREATED, response_model=WalletCardResponse, tags=["wallet"])
-def add_wallet_alias(payload: WalletCardCreate, request: Request, db: Session = Depends(get_db)):
-    """Backward-compatible alias for add card endpoint."""
-    return add_user_card(payload, request, db)
-
-
 @router.put("/user_cards/{card_id}", response_model=WalletCardResponse, tags=["user-cards"])
 def put_user_card(card_id: str, payload: UserCardPut, request: Request, db: Session = Depends(get_db)):
     """Edit user-owned card details (full replacement of editable fields)."""
@@ -254,44 +221,6 @@ def put_user_card(card_id: str, payload: UserCardPut, request: Request, db: Sess
         return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
 
 
-@router.patch("/wallet/{card_id}", response_model=WalletCardResponse, tags=["wallet"])
-def patch_wallet_alias(card_id: str, payload: WalletCardUpdate, request: Request, db: Session = Depends(get_db)):
-    """Backward-compatible partial update endpoint."""
-    user_id = _get_user_id_from_request(request)
-    if not user_id:
-        return _unauthorized_response()
-    updates = payload.model_dump(exclude_none=True)
-    if not updates:
-        return _error_response(status_code=400, code="VALIDATION_ERROR", message="No fields to update.", details={})
-
-    try:
-        _, card_service = _services(db)
-        current_cards = card_service.list_user_cards(user_id)
-        current = next((c for c in current_cards if c.get("id") == card_id), None)
-        if not current:
-            return _error_response(status_code=404, code="NOT_FOUND", message=f"user_card_id '{card_id}' not found.", details={})
-        merged = {
-            "card_id": current.get("card_id"),
-            "refresh_day_of_month": updates.get("refresh_day_of_month", current.get("refresh_day_of_month")),
-            "annual_fee_billing_date": updates.get("annual_fee_billing_date", current.get("annual_fee_billing_date")),
-            "cycle_spend_sgd": updates.get("cycle_spend_sgd", current.get("cycle_spend_sgd", 0)),
-        }
-        saved = card_service.replace_user_card(user_id, card_id, merged)
-        return {
-            "wallet_card": {
-                "card_id": saved.get("card_id"),
-                "refresh_day_of_month": saved.get("refresh_day_of_month"),
-                "annual_fee_billing_date": saved.get("annual_fee_billing_date"),
-                "cycle_spend_sgd": saved.get("cycle_spend_sgd", 0),
-            }
-        }
-    except ServiceError as exc:
-        return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
-    except Exception:
-        logger.exception("Unhandled exception in patch_wallet_alias")
-        return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
-
-
 @router.delete("/user_cards/{card_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["user-cards"])
 def delete_user_card(card_id: str, request: Request, db: Session = Depends(get_db)):
     """Delete (soft-delete) a user-owned card and write an audit event."""
@@ -308,9 +237,3 @@ def delete_user_card(card_id: str, request: Request, db: Session = Depends(get_d
     except Exception:
         logger.exception("Unhandled exception in delete_user_card")
         return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
-
-
-@router.delete("/wallet/{card_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["wallet"])
-def delete_wallet_alias(card_id: str, request: Request, db: Session = Depends(get_db)):
-    """Backward-compatible alias for delete endpoint."""
-    return delete_user_card(card_id, request, db)

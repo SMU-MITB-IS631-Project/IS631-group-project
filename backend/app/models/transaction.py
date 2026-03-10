@@ -8,12 +8,11 @@ from decimal import Decimal
 from typing import Optional
 
 class TransactionCategory(PyEnum):
-    food = "food"
-    travel = "travel"
-    shopping = "shopping"
-    bills = "bills"
-    entertainment = "entertainment"
-    others = "others"
+    food = "Food"
+    transport = "Transport"
+    fashion = "Fashion"
+    entertainment = "Entertainment"
+    others = "Others"
 
 class TransactionChannel(PyEnum):
     online = "online"
@@ -79,6 +78,31 @@ class TransactionResponse(TransactionCreate):
     """Transaction response model"""
     id: int
     created_date: datetime
+
+class TransactionUpdate(BaseModel):
+    """Transaction update request - all fields optional"""
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    card_id: int | None = None
+    amount_sgd: Decimal | None = None
+    item: str | None = None
+    channel: TransactionChannel | None = None
+    is_overseas: bool | None = None
+    transaction_date: date | None = Field(default=None, alias="date")
+    category: TransactionCategory | None = None
+
+    @field_validator("item")
+    @classmethod
+    def item_not_empty(cls, v):
+        if v is not None and len(v.strip()) == 0:
+            raise ValueError("item cannot be empty")
+        return v
+
+    @field_validator("amount_sgd")
+    @classmethod
+    def amount_positive_if_provided(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError("amount_sgd must be greater than 0")
+        return v
 
 class TransactionRequest(BaseModel):
     """Wrapper for API contract - POST body"""
