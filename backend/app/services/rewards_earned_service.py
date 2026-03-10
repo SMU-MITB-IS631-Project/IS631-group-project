@@ -35,7 +35,7 @@ class RewardsEarnedService:
             self.db_session.query(UserOwnedCard)
             .filter(
                 UserOwnedCard.user_id == user_id,
-                UserOwnedCard.status == UserOwnedCardStatus.active
+                UserOwnedCard.status == UserOwnedCardStatus.Active
                 )
             .all()
         )
