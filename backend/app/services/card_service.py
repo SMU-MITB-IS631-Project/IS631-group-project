@@ -5,6 +5,7 @@ import logging
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple, cast
 
+from sqlalchemy import String, cast as sa_cast, func, or_
 from sqlalchemy.orm import Session
 
 from app.models.card_catalogue import CardCatalogue
@@ -35,6 +36,13 @@ class CardService:
 
     def _get_card_catalogue(self, card_id: int) -> Optional[CardCatalogue]:
         return self.db.query(CardCatalogue).filter(CardCatalogue.card_id == card_id).first()
+
+    def _active_status_filter(self):
+        # Compatibility for legacy rows where status may be stored as "Active".
+        return or_(
+            UserOwnedCard.status == UserOwnedCardStatus.Active,
+            func.lower(sa_cast(UserOwnedCard.status, String)) == "active",
+        )
 
     def _benefit_to_reward_type(self, card: Optional[CardCatalogue]) -> str:
         if not card or not getattr(card, "benefit_type", None):
@@ -71,6 +79,31 @@ class CardService:
             "refresh_day_of_month": card.billing_cycle_refresh_date.day,
             "annual_fee_billing_date": card.card_expiry_date.date().isoformat(),
         }
+
+    def _normalize_date_string(self, raw_value: Any) -> str:
+        if raw_value is None:
+            return ""
+        text = str(raw_value)
+        # Accept values like YYYY-MM-DD and YYYY-MM-DD HH:MM:SS(.ffffff).
+        try:
+            parsed = datetime.fromisoformat(text)
+            return parsed.date().isoformat()
+        except ValueError:
+            return text[:10]
+
+    def _extract_day_of_month(self, raw_value: Any) -> int:
+        if raw_value is None:
+            return 1
+        text = str(raw_value)
+        try:
+            parsed = datetime.fromisoformat(text)
+            return parsed.day
+        except ValueError:
+            # Fallback for date-only values or malformed legacy values.
+            try:
+                return int(text[8:10])
+            except (ValueError, TypeError):
+                return 1
 
     def _story_user_card(self, card: UserOwnedCard, catalog: Optional[CardCatalogue]) -> Dict[str, Any]:
         data = self._public_wallet_card(card)
@@ -114,26 +147,61 @@ class CardService:
             raise ServiceError(404, "NOT_FOUND", "Profile not found.", {})
 
         rows = (
-            self.db.query(UserOwnedCard, CardCatalogue)
+            self.db.query(
+                UserOwnedCard.id,
+                UserOwnedCard.card_id,
+                sa_cast(UserOwnedCard.billing_cycle_refresh_date, String).label("billing_cycle_refresh_date"),
+                sa_cast(UserOwnedCard.card_expiry_date, String).label("card_expiry_date"),
+                sa_cast(CardCatalogue.benefit_type, String).label("benefit_type"),
+            )
             .outerjoin(CardCatalogue, UserOwnedCard.card_id == CardCatalogue.card_id)
             .filter(
                 UserOwnedCard.user_id == resolved_user_id,
-                UserOwnedCard.status == UserOwnedCardStatus.Active,
+                self._active_status_filter(),
             )
             .all()
         )
-        return [self._story_user_card(card, catalog) for card, catalog in rows]
+
+        results: List[Dict[str, Any]] = []
+        for row in rows:
+            benefit_type = str(row.benefit_type).lower() if row.benefit_type else "unknown"
+            reward_type = benefit_type if benefit_type in {"miles", "cashback"} else "unknown"
+            results.append({
+                "id": str(row.id),
+                "card_id": str(row.card_id),
+                "refresh_day_of_month": self._extract_day_of_month(row.billing_cycle_refresh_date),
+                "annual_fee_billing_date": self._normalize_date_string(row.card_expiry_date),
+                "reward_rules": {
+                    "reward_type": reward_type,
+                    "rule_summary": "See issuer terms for reward computation.",
+                },
+            })
+        return results
 
     def get_wallet_cards(self, user_id: int) -> List[Dict[str, Any]]:
         cards = (
-            self.db.query(UserOwnedCard)
+            self.db.query(
+                UserOwnedCard.id,
+                UserOwnedCard.card_id,
+                sa_cast(UserOwnedCard.billing_cycle_refresh_date, String).label("billing_cycle_refresh_date"),
+                sa_cast(UserOwnedCard.card_expiry_date, String).label("card_expiry_date"),
+            )
             .filter(
                 UserOwnedCard.user_id == user_id,
-                UserOwnedCard.status == UserOwnedCardStatus.Active,
+                self._active_status_filter(),
             )
             .all()
         )
-        return [self._public_wallet_card(card) for card in cards]
+
+        return [
+            {
+                "id": row.id,
+                "card_id": str(row.card_id),
+                "refresh_day_of_month": self._extract_day_of_month(row.billing_cycle_refresh_date),
+                "annual_fee_billing_date": self._normalize_date_string(row.card_expiry_date),
+            }
+            for row in cards
+        ]
 
     # ------------------------------------------------------------------
     # Write operations
@@ -151,7 +219,7 @@ class CardService:
             .filter(
                 UserOwnedCard.user_id == resolved_user_id,
                 UserOwnedCard.card_id == parsed_card_id,
-                UserOwnedCard.status == UserOwnedCardStatus.Active,
+                self._active_status_filter(),
             )
             .first()
         )
