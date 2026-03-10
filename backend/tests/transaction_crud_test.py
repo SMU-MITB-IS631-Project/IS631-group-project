@@ -108,7 +108,7 @@ class TransactionCRUDTests(unittest.TestCase):
                     "amount_sgd": 120.50,
                     "item": "GrabFood",
                     "channel": "online",
-                    "category": "food",
+                    "category": "Food",
                     "is_overseas": False,
                     "date": "2026-03-04",
                 }
@@ -181,8 +181,8 @@ class TransactionCRUDTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 400)  # Validation error
         data = resp.json()
-        self.assertIn("detail", data)
-        # Should be caught by Pydantic validation
+        self.assertIn("error", data)
+        self.assertEqual(data["error"]["code"], "VALIDATION_ERROR")
 
     # ========== GET TESTS ==========
 
@@ -216,7 +216,7 @@ class TransactionCRUDTests(unittest.TestCase):
                 "transaction": {
                     "item": "Updated Item",
                     "amount_sgd": 75.00,
-                    "category": "shopping",
+                    "category": "Fashion",
                 }
             },
         )
@@ -226,7 +226,7 @@ class TransactionCRUDTests(unittest.TestCase):
         txn = data["transaction"]
         self.assertEqual(txn["item"], "Updated Item")
         self.assertEqual(float(txn["amount_sgd"]), 75.00)
-        self.assertEqual(txn["category"], "shopping")
+        self.assertEqual(txn["category"].lower(), "fashion")
         # Unchanged fields should remain
         self.assertEqual(txn["channel"], "online")
 
@@ -378,7 +378,7 @@ class TransactionCRUDTests(unittest.TestCase):
                     "amount_sgd": 200.00,
                     "item": "CRUD Test",
                     "channel": "offline",
-                    "category": "entertainment",
+                    "category": "Entertainment",
                     "is_overseas": False,
                 }
             },
