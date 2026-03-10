@@ -7,6 +7,8 @@ import Register from './pages/Register';
 import Recommend from './pages/Recommend';
 import Dashboard from './pages/Dashboard';
 import Creating from './pages/Creating';
+import TransactionHistory from './pages/TransactionHistory';
+import CardReward from './pages/CardReward';
 import { loadUserProfile } from './utils/dataAdapter';
 
 function DefaultRedirect() {
@@ -34,6 +36,8 @@ function AppContent() {
           <Route path="/creating" element={<Creating />} />
           <Route path="/recommend" element={<RequireProfile><Recommend /></RequireProfile>} />
           <Route path="/dashboard" element={<RequireProfile><Dashboard /></RequireProfile>} />
+          <Route path="/transactions/history" element={<RequireProfile><TransactionHistory /></RequireProfile>} />
+          <Route path="/cards/reward" element={<RequireProfile><CardReward /></RequireProfile>} />
         </Routes>
       </div>
       {!hideNav && <BottomNav />}
