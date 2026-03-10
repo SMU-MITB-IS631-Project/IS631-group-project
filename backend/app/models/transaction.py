@@ -7,20 +7,37 @@ from enum import Enum as PyEnum
 from decimal import Decimal
 from typing import Optional
 
+
+def _enum_values(enum_cls):
+    # Persist enum .value strings in DB instead of member names.
+    return [member.value for member in enum_cls]
+
 class TransactionCategory(PyEnum):
     food = "Food"
     transport = "Transport"
     fashion = "Fashion"
     entertainment = "Entertainment"
     others = "Others"
+    # Backward-compatible legacy names in persisted enum strings.
+    Food = "Food"
+    Transport = "Transport"
+    Fashion = "Fashion"
+    Entertainment = "Entertainment"
+    Others = "Others"
 
 class TransactionChannel(PyEnum):
     online = "online"
     offline = "offline"
+    # Backward-compatible legacy values found in older data.
+    Online = "Online"
+    Offline = "Offline"
 
 class TransactionStatus(PyEnum):
     Active = "active"
     DeletedWithCard = "deleted_with_card"
+    # Backward-compatible legacy values found in older data.
+    ActiveLegacy = "Active"
+    DeletedWithCardLegacy = "DeletedWithCard"
 
 class UserTransaction(Base):
     __tablename__ = "transactions"
@@ -29,11 +46,11 @@ class UserTransaction(Base):
     card_id = Column(Integer, ForeignKey("card_catalogue.card_id", ondelete="CASCADE"), nullable=False)
     amount_sgd = Column(Numeric(10,2), nullable=False)
     item = Column(String, nullable=False)
-    channel = Column(SAEnum(TransactionChannel), nullable=False)
-    category = Column(SAEnum(TransactionCategory), nullable=True)
+    channel = Column(SAEnum(TransactionChannel, values_callable=_enum_values), nullable=False)
+    category = Column(SAEnum(TransactionCategory, values_callable=_enum_values), nullable=True)
     is_overseas = Column(Boolean, nullable=False)
     transaction_date = Column(Date, default=date.today, nullable=False)
-    status = Column(SAEnum(TransactionStatus), default=TransactionStatus.Active, nullable=False)
+    status = Column(SAEnum(TransactionStatus, values_callable=_enum_values), default=TransactionStatus.Active, nullable=False)
     created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationship with UserProfile

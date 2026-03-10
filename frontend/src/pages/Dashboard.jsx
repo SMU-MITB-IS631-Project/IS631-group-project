@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import CardSurface from '../components/CardSurface';
 import { CardThumbnail } from '../components/CardAutocomplete';
 import {
@@ -14,6 +14,14 @@ function formatDateDMonYYYY(dateStr) {
   const day = d.getDate();
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return `${day}-${months[d.getMonth()]}-${d.getFullYear()}`;
+}
+
+function isCardExpired(dateStr) {
+  if (!dateStr) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const expiry = new Date(`${dateStr}T00:00:00`);
+  return expiry < today;
 }
 
 export default function Dashboard() {
@@ -411,10 +419,18 @@ export default function Dashboard() {
 
       {/* Transactions List */}
       <CardSurface className="mb-4">
-        <h2 className="text-xs font-semibold text-muted mb-3 uppercase tracking-wide">Transactions</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xs font-semibold text-muted uppercase tracking-wide">Transactions</h2>
+          <Link
+            to="/transactions/history"
+            className="text-xs font-semibold text-amber-600 hover:text-amber-700 bg-amber-100/70 border border-amber-200 px-2.5 py-1 rounded-full transition-colors"
+          >
+            History
+          </Link>
+        </div>
 
         {displayTxns.length === 0 ? (
-          <p className="text-sm text-muted text-center py-4">No transactions yet. Log a transaction from Recommend.</p>
+          <p className="text-sm text-muted text-center py-4">No transaction for this month. To view past transaction click on History.</p>
         ) : (
           <div className="divide-y divide-gray-200/60">
             {displayTxns.map(txn => {
@@ -445,39 +461,51 @@ export default function Dashboard() {
         <CardSurface className="mb-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-xs font-semibold text-muted uppercase tracking-wide">Card Overview</h2>
-            <button
-              type="button"
-              onClick={() => setAddCardModal({ show: true, selectedCardId: '', refreshDay: 1, billingDate: '', cycleSpend: '', isAdding: false })}
-              className="text-sm font-medium text-purple-500 hover:text-purple-600 transition-colors flex items-center gap-1"
-              title="Add new card"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              Add Card
-            </button>
+            <div className="flex items-center gap-3">
+              <Link
+                to="/cards/reward"
+                className="text-sm font-medium text-cyan-600 hover:text-cyan-700 transition-colors"
+              >
+                Card Reward
+              </Link>
+              <button
+                type="button"
+                onClick={() => setAddCardModal({ show: true, selectedCardId: '', refreshDay: 1, billingDate: '', cycleSpend: '', isAdding: false })}
+                className="text-sm font-medium text-purple-500 hover:text-purple-600 transition-colors flex items-center gap-1"
+                title="Add new card"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Add Card
+              </button>
+            </div>
           </div>
           {profile.wallet && profile.wallet.length > 0 ? (
             <div className="space-y-3">
               {profile.wallet.map(wc => {
                 const card = cardsMaster.find(c => c.card_id === wc.card_id);
                 const spend = getCardSpendForMonth(monthTxns, wc.card_id);
+                const expired = isCardExpired(wc.annual_fee_billing_date);
                 return (
-                  <div key={wc.card_id} className="flex items-center gap-3 group">
+                  <div
+                    key={wc.card_id}
+                    className={`flex items-center gap-3 group rounded-[12px] px-2 py-2 ${expired ? 'bg-gray-200/65 border border-gray-300/80' : ''}`}
+                  >
                     <CardThumbnail imagePath={card?.image_path} name={card?.card_name} size="md" />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-text truncate">{card?.card_name || wc.card_id}</div>
-                      <div className="text-xs text-muted">
-                        Annual fee: {wc.annual_fee_billing_date || 'Not set'}
+                      <div className={`text-sm font-medium truncate ${expired ? 'text-gray-600' : 'text-text'}`}>{card?.card_name || wc.card_id}</div>
+                      <div className={`text-xs ${expired ? 'text-gray-500' : 'text-muted'}`}>
+                        {wc.annual_fee_billing_date || 'Not set'}{expired ? ' (Expired)' : ''}
                       </div>
                     </div>
-                    <div className="text-sm font-semibold text-text">
+                    <div className={`text-sm font-semibold ${expired ? 'text-gray-600' : 'text-text'}`}>
                       ${spend.toFixed(2)}
                     </div>
                     <button
                       type="button"
-                      className="ml-2 p-2 rounded-lg text-muted hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
+                      className={`ml-2 p-2 rounded-lg transition-all opacity-0 group-hover:opacity-100 ${expired ? 'text-gray-500 hover:text-red-500 hover:bg-red-100' : 'text-muted hover:text-red-500 hover:bg-red-50'}`}
                       title="Delete card"
                       onClick={() => {
                         setDeleteCardModal({ show: true, cardId: wc.id, cardName: card?.card_name || wc.card_id });

@@ -3,7 +3,7 @@ import { parseCSV } from './csv';
 const PROFILE_KEY = 'cardtrack_user_profile';
 const TXN_KEY = 'cardtrack_transactions';
 const USER_ID_KEY = 'cardtrack_user_id';
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // --- User Context ---
 // TODO: Replace with actual user authentication/context
@@ -176,6 +176,16 @@ async function fetchUserCards(userId) {
     refresh_day_of_month: card.refresh_day_of_month,
     annual_fee_billing_date: card.annual_fee_billing_date,
   }));
+}
+
+export async function loadUserOwnedCards() {
+  try {
+    const userId = getCurrentUserId();
+    return await fetchUserCards(userId);
+  } catch (error) {
+    console.error('Error loading user owned cards:', error);
+    return [];
+  }
 }
 
 
@@ -364,7 +374,8 @@ export async function loginUser(username, password) {
 
 // --- Transactions ---
 
-export async function loadTransactions() {
+export async function loadTransactions(options = {}) {
+  const { allowLocalFallback = true, includeDeleted = false } = options;
   try {
     const userId = getCurrentUserId();
     const response = await fetch(`${API_BASE_URL}/api/v1/transactions`, {
@@ -382,19 +393,26 @@ export async function loadTransactions() {
     const data = await response.json();
     const transactions = data.transactions || [];
     
-    // Filter out deleted_with_card transactions and convert card IDs
-    return transactions
-      .filter(txn => {
-        const status = (txn.status || '').toLowerCase();
-        return status !== 'deleted_with_card' && status !== 'deletedwithcard';
-      })
-      .map(txn => ({
-        ...txn,
-        card_id: convertBackendCardId(txn.card_id)
-      }));
+    const mappedTransactions = transactions.map(txn => ({
+      ...txn,
+      card_id: convertBackendCardId(txn.card_id)
+    }));
+
+    if (includeDeleted) {
+      return mappedTransactions;
+    }
+
+    // Default behavior for dashboard and existing flows.
+    return mappedTransactions.filter(txn => {
+      const status = (txn.status || '').toLowerCase();
+      return status !== 'deleted_with_card' && status !== 'deletedwithcard';
+    });
   } catch (error) {
     console.error('Error loading transactions:', error);
-    // Fallback to localStorage if API fails
+    if (!allowLocalFallback) {
+      throw error;
+    }
+    // Optional fallback for legacy flows; disable when strict server data is required.
     const raw = localStorage.getItem(TXN_KEY);
     return raw ? JSON.parse(raw) : [];
   }
@@ -455,6 +473,50 @@ export async function appendTransaction(txn) {
     txns.push(txn);
     saveTransactions(txns);
     return txn;
+  }
+}
+
+export async function updateTransactionById(transactionId, transactionPatch) {
+  const userId = getCurrentUserId();
+  const payload = { ...transactionPatch };
+
+  if (payload.card_id !== undefined && payload.card_id !== null) {
+    payload.card_id = convertCardId(payload.card_id);
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/transactions/${transactionId}`, {
+    method: 'PUT',
+    headers: {
+      'x-user-id': userId,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ transaction: payload }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to update transaction: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return {
+    ...data.transaction,
+    card_id: convertBackendCardId(data.transaction.card_id),
+  };
+}
+
+export async function deleteTransactionById(transactionId) {
+  const userId = getCurrentUserId();
+  const response = await fetch(`${API_BASE_URL}/api/v1/transactions/${transactionId}/status`, {
+    method: 'PUT',
+    headers: {
+      'x-user-id': userId,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ status: 'deleted_with_card' }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to delete transaction: ${response.statusText}`);
   }
 }
 

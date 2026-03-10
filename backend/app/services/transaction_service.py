@@ -1,6 +1,7 @@
 from datetime import date
 from typing import Any, Dict, List, Optional, cast
 
+from sqlalchemy import String, cast as sa_cast, func, or_
 from sqlalchemy.orm import Session
 
 from app.models.transaction import TransactionCreate, UserTransaction, TransactionStatus
@@ -46,23 +47,31 @@ class TransactionService:
             .filter(
                 UserOwnedCard.user_id == user_id,
                 UserOwnedCard.card_id == card_id,
-                UserOwnedCard.status == UserOwnedCardStatus.Active,
+                or_(
+                    UserOwnedCard.status == UserOwnedCardStatus.Active,
+                    func.lower(sa_cast(UserOwnedCard.status, String)) == "active",
+                ),
             )
             .first()
             is not None
         )
 
     def _transaction_to_dict(self, txn: UserTransaction) -> Dict[str, Any]:
+        channel_value = str(txn.channel.value if hasattr(txn.channel, "value") else txn.channel).lower()
+        status_value = str(txn.status.value if hasattr(txn.status, "value") else txn.status).lower()
+        category_raw = txn.category.value if txn.category else None
+        category_value = str(category_raw).lower() if category_raw else None
+
         return {
             "id": str(txn.id),
             "date": txn.transaction_date.isoformat(),
             "item": txn.item,
             "amount_sgd": float(txn.amount_sgd),
             "card_id": str(txn.card_id),
-            "channel": txn.channel.value,
-            "category": txn.category.value if txn.category else None,
+            "channel": channel_value,
+            "category": category_value,
             "is_overseas": txn.is_overseas,
-            "status": txn.status.value,
+            "status": status_value,
             "user_id": self._format_user_id(cast(int, txn.user_id)),
         }
 
