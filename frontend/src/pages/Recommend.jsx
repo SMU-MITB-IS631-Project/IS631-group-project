@@ -4,7 +4,7 @@ import CardSurface from '../components/CardSurface';
 import SegmentedControl from '../components/SegmentedControl';
 import { CardThumbnail } from '../components/CardAutocomplete';
 import { loadCardsMaster, loadUserProfile, loadTransactions, appendTransaction } from '../utils/dataAdapter';
-import { getRecommendation } from '../utils/recommendation';
+import { getRecommendationWithAIExplanation } from '../utils/recommendation';
 
 export default function Recommend() {
   const navigate = useNavigate();
@@ -67,9 +67,15 @@ export default function Recommend() {
 
     setIsLoading(true);
     try {
-      const txn = { item: item.trim(), amount_sgd: parseFloat(amount), channel, is_overseas: false };
+      const txn = {
+        item: item.trim(),
+        amount_sgd: parseFloat(amount),
+        channel,
+        category,
+        is_overseas: false,
+      };
       const transactions = await loadTransactions();
-      const rec = getRecommendation({ userProfile: profile, txn, transactions, cardsMaster });
+      const rec = await getRecommendationWithAIExplanation({ userProfile: profile, txn, transactions, cardsMaster });
       setResult(rec);
       setCursor(0);
       setExhausted(false);
