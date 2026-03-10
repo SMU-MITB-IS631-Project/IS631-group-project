@@ -8,29 +8,32 @@ from decimal import Decimal
 
 # Python Enums for type safety
 class BankEnum(str, PyEnum):
-    dbs = "DBS"
-    citi = "CITI"
-    standard_chartered = "Standard Chartered"
+    # Canonical values
     DBS = "DBS"
     CITI = "CITI"
     Standard_Chartered = "Standard_Chartered"
     UOB = "UOB"
 
+    # Legacy serialized names/values for backward compatibility
+    dbs = "dbs"
+    citi = "citi"
+    standard_chartered = "standard_chartered"
+
 class BenefitTypeEnum(str, PyEnum):
     miles = "miles"
     cashback = "cashback"
     both = "both"
-    # Backward-compatible aliases (older code/tests used uppercase names)
-    MILES = "miles"
-    CASHBACK = "cashback"
-    BOTH = "both"
+    # Backward-compatible legacy names that may exist in older DB rows.
+    MILES = "MILES"
+    CASHBACK = "CASHBACK"
+    BOTH = "BOTH"
 
 class StatusEnum(str, PyEnum):
     valid = "valid"
     invalid = "invalid"
-    # Backward-compatible aliases (older code/tests used uppercase names)
-    VALID = "valid"
-    INVALID = "invalid"
+    # Backward-compatible legacy names that may exist in older DB rows.
+    VALID = "VALID"
+    INVALID = "INVALID"
 
 # SQLAlchemy ORM Model
 class CardCatalogue(Base):

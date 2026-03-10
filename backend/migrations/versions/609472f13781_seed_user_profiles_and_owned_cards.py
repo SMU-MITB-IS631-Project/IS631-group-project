@@ -22,7 +22,7 @@ def upgrade() -> None:
     op.execute(
         """
         INSERT INTO user_profile (id, username, password_hash, name, email, benefits_preference, created_date)
-        SELECT 1, 'user1', 'hashed_password_1', 'Alice', 'alice@example.com', 'Cashback', '2026-02-21 11:26:57.648370'
+        SELECT 1, 'user1', 'hashed_password_1', 'Alice', 'alice@example.com', 'cashback', '2026-02-21 11:26:57.648370'
         WHERE NOT EXISTS (
             SELECT 1 FROM user_profile WHERE id = 1 OR username = 'user1' OR email = 'alice@example.com'
         )
@@ -31,7 +31,7 @@ def upgrade() -> None:
     op.execute(
         """
         INSERT INTO user_profile (id, username, password_hash, name, email, benefits_preference, created_date)
-        SELECT 2, 'user2', 'hashed_password_2', 'Bob', 'bob@example.com', 'Miles', '2026-02-21 11:26:57.648370'
+        SELECT 2, 'user2', 'hashed_password_2', 'Bob', 'bob@example.com', 'miles', '2026-02-21 11:26:57.648370'
         WHERE NOT EXISTS (
             SELECT 1 FROM user_profile WHERE id = 2 OR username = 'user2' OR email = 'bob@example.com'
         )
