@@ -1,5 +1,5 @@
 # Test scripts - temporary diagnostic files (created during development/debugging)
-test_*.py
+#test_*.py
 check_cards.py
 simple_test.py
 
@@ -26,6 +26,8 @@ Thumbs.db
 .env
 backend/.env
 
+# SQLite DB (local only)
+*.db
 # Local SQLite databases
 app.db
 backend/app.db
