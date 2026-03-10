@@ -31,6 +31,8 @@ class RewardsEarnedService:
                 UserOwnedCard.user_id == user_id,
                 func.lower(sa_cast(UserOwnedCard.status, String)) == "active",
             )
+                UserOwnedCard.status == UserOwnedCardStatus.Active
+                )
             .all()
         )
         if not active_cards:
