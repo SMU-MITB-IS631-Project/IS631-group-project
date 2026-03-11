@@ -561,17 +561,21 @@ export async function updateTransactionById(transactionId, transactionPatch) {
 
 export async function deleteTransactionById(transactionId) {
   const userId = getCurrentUserId();
-  const response = await fetch(`${API_BASE_URL}/api/v1/transactions/${transactionId}/status`, {
-    method: 'PUT',
+  const response = await fetch(`${API_BASE_URL}/api/v1/transactions/${transactionId}`, {
+    method: 'DELETE',
     headers: {
       'x-user-id': userId,
-      'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ status: 'deleted_with_card' }),
   });
 
   if (!response.ok) {
     throw new Error(`Failed to delete transaction: ${response.statusText}`);
+  }
+
+  try {
+    return await response.json();
+  } catch {
+    return null;
   }
 }
 

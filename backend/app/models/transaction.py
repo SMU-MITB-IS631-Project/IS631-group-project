@@ -12,6 +12,30 @@ def _enum_values(enum_cls):
     # Persist enum .value strings in DB instead of member names.
     return [member.value for member in enum_cls]
 
+
+def _normalize_enum_input(value, enum_cls):
+    """Normalize free-form enum strings from clients to enum members."""
+    if value is None or isinstance(value, enum_cls):
+        return value
+
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return value
+
+        lowered = raw.lower()
+        # Accept enum values case-insensitively.
+        for member in enum_cls:
+            if str(member.value).lower() == lowered:
+                return member
+
+        # Accept enum member names case-insensitively.
+        for member in enum_cls:
+            if member.name.lower() == lowered:
+                return member
+
+    return value
+
 class TransactionCategory(PyEnum):
     food = "Food"
     transport = "Transport"
@@ -86,6 +110,21 @@ class TransactionCreate(BaseModel):
             raise ValueError("amount_sgd must be greater than 0")
         return v
 
+    @field_validator("channel", mode="before")
+    @classmethod
+    def normalize_channel(cls, v):
+        return _normalize_enum_input(v, TransactionChannel)
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def normalize_category(cls, v):
+        return _normalize_enum_input(v, TransactionCategory)
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, v):
+        return _normalize_enum_input(v, TransactionStatus)
+
     @field_validator("transaction_date", mode="before")
     @classmethod
     def set_transaction_date(cls, v):
@@ -120,6 +159,16 @@ class TransactionUpdate(BaseModel):
         if v is not None and v <= 0:
             raise ValueError("amount_sgd must be greater than 0")
         return v
+
+    @field_validator("channel", mode="before")
+    @classmethod
+    def normalize_channel(cls, v):
+        return _normalize_enum_input(v, TransactionChannel)
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def normalize_category(cls, v):
+        return _normalize_enum_input(v, TransactionCategory)
 
 class TransactionRequest(BaseModel):
     """Wrapper for API contract - POST body"""
