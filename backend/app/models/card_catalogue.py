@@ -5,6 +5,8 @@ from app.db.db import Base
 from pydantic import BaseModel, ConfigDict, field_validator
 from enum import Enum as PyEnum
 from decimal import Decimal
+from datetime import date
+from app.models.card_bonus_category import BonusCategory
 
 # Python Enums for type safety
 class BankEnum(str, PyEnum):
@@ -128,3 +130,41 @@ class CardCatalogueResponse(CardCatalogueBase):
     """Schema for API responses"""
     model_config = ConfigDict(from_attributes=True)
     card_id: int
+
+
+class CardBonusRuleUpdate(BaseModel):
+    bonus_category: BonusCategory
+    bonus_benefit_rate: Decimal
+    bonus_cap_in_dollar: int = 99999999
+    bonus_minimum_spend_in_dollar: int = 0
+
+    @field_validator('bonus_benefit_rate')
+    @classmethod
+    def bonus_benefit_rate_non_negative(cls, v):
+        if v < 0:
+            raise ValueError('bonus_benefit_rate must be non-negative')
+        return v
+
+    @field_validator('bonus_cap_in_dollar', 'bonus_minimum_spend_in_dollar')
+    @classmethod
+    def bonus_non_negative(cls, v):
+        if v < 0:
+            raise ValueError('Values must be non-negative')
+        return v
+
+
+class CardRewardUpdatePayload(BaseModel):
+    base_benefit_rate: Decimal | None = None
+    bonus_rules: list[CardBonusRuleUpdate] | None = None
+    effective_date: date
+
+    @field_validator('base_benefit_rate')
+    @classmethod
+    def base_rate_non_negative(cls, v):
+        if v is not None and v < 0:
+            raise ValueError('base_benefit_rate must be non-negative')
+        return v
+
+
+class CardRewardUpdateRequest(BaseModel):
+    reward_update: CardRewardUpdatePayload
