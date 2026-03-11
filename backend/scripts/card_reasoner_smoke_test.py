@@ -1,16 +1,16 @@
 """
-Test script for card_reasoner_service.
+Manual smoke-test script for the card_reasoner_service.
 Run this to validate the service works end-to-end.
 
 Usage:
-    python backend/test_card_reasoner.py
+    python backend/scripts/card_reasoner_smoke_test.py
 """
 
 import sys
 import os
 
-# Add backend to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+# Add backend directory to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.services.card_reasoner_service import (
     ExplanationRequest,
@@ -50,32 +50,26 @@ test_request = ExplanationRequest(
 )
 
 
-def test_generate_explanation_smoke():
-    """Smoke test: service returns a shaped response for a valid request."""
-    response = generate_explanation(test_request)
-    assert response.explanation
-    assert response.audit_log_entry.recommended_card_id == test_request.recommended_card.Card_ID
-
 def main():
     print("=" * 80)
-    print("CARD REASONER SERVICE TEST")
+    print("CARD REASONER SERVICE SMOKE TEST")
     print("=" * 80)
-    
+
     print("\n📝 Input Request:")
     print(f"   Merchant: {test_request.transaction.merchant_name}")
     print(f"   Amount: SGD {test_request.transaction.amount:.2f}")
     print(f"   Category: {test_request.transaction.category}")
     print(f"   Recommended: {test_request.recommended_card.Bank} {test_request.recommended_card.Card_Name}")
     print(f"   Comparisons: {len(test_request.comparison_cards)}")
-    
+
     print("\n🔄 Generating explanation...")
     try:
         response = generate_explanation(test_request)
-        
+
         print("\n✅ SUCCESS!")
         print("\n📢 Explanation Generated:")
         print(f"   {response.explanation}")
-        
+
         print("\n📊 Audit Log:")
         print(f"   Event Type: {response.audit_log_entry.event_type}")
         print(f"   Model: {response.audit_log_entry.model_used}")
@@ -83,7 +77,7 @@ def main():
         print(f"   Merchant: {response.audit_log_entry.merchant_name}")
         print(f"   Card: {response.audit_log_entry.recommended_card_name}")
         print(f"   Comparisons Analyzed: {response.audit_log_entry.num_comparisons}")
-        
+
     except Exception as e:
         print(f"\n❌ ERROR: {e}")
         print("\n💡 Troubleshooting:")
@@ -91,11 +85,12 @@ def main():
         print("   2. Verify OpenAI account has credits")
         print("   3. Note: If OpenAI unavailable, fallback explanation is used")
         return 1
-    
+
     print("\n" + "=" * 80)
     print("✨ Service is working correctly!")
     print("=" * 80)
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

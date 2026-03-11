@@ -96,7 +96,7 @@ class TestExplanationFallback(unittest.TestCase):
                 UserOwnedCard(
                     user_id=1,
                     card_id=1,
-                    status=UserOwnedCardStatus.active
+                    status=UserOwnedCardStatus.Active
                 )
             )
             db.commit()
@@ -367,7 +367,7 @@ def test_client():
             UserOwnedCard(
                 user_id=1,
                 card_id=1,
-                status=UserOwnedCardStatus.active
+                status=UserOwnedCardStatus.Active
             )
         )
         db.commit()
