@@ -26,7 +26,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from app.db.db import Base
 from app.models.transaction import UserTransaction, TransactionCategory, TransactionChannel, TransactionStatus
 from app.models.user_owned_cards import UserOwnedCard, UserOwnedCardStatus
-from app.models.card_catalogue import CardCatalogue
+from app.models.card_catalogue import CardCatalogue, StatusEnum, BenefitTypeEnum, BankEnum
 from app.models.card_bonus_category import BonusCategory, CardBonusCategory
 from app.models.user_profile import UserProfile
 from app.services.transaction_service import TransactionService
@@ -65,19 +65,19 @@ def seed_test_data(test_db_session: Session):
     # Create test cards in catalogue
     card1 = CardCatalogue(
         card_id=101,
-        bank="DBS",
+        bank=BankEnum.DBS,
         card_name="DBS Black",
-        benefit_type="cashback",
+        benefit_type=BenefitTypeEnum.cashback,
         base_benefit_rate=0.01,  # 1% base rate
-        status="active"
+        status=StatusEnum.valid
     )
     card2 = CardCatalogue(
         card_id=102,
-        bank="CITI",
+        bank=BankEnum.CITI,
         card_name="CITI Premier Miles",
-        benefit_type="cashback",
+        benefit_type=BenefitTypeEnum.cashback,
         base_benefit_rate=0.015,  # 1.5% base rate
-        status="active"
+        status=StatusEnum.valid
     )
     test_db_session.add_all([card1, card2])
     

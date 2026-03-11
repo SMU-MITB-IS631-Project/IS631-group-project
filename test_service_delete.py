@@ -1,5 +1,11 @@
 import sys
-sys.path.insert(0, r"c:\Users\wenxu\IS631-group-project\backend")
+import os
+from pathlib import Path
+
+backend_dir = Path(__file__).resolve().parent
+if backend_dir.name != "backend":
+    backend_dir = backend_dir.parent / "backend"
+sys.path.insert(0, str(backend_dir))
 
 from app.services.user_card_services import UserCardManagementService
 import json
@@ -32,7 +38,8 @@ if cards:
         print(f"  - {card['id']}: card_id={card['card_id']} (is_active={card.get('is_active', True)})")
     
     # Check audit log
-    with open(r"c:\Users\wenxu\IS631-group-project\backend\data\user_card_audit_log.json") as f:
+    audit_log_file = backend_dir / "data" / "user_card_audit_log.json"
+    with open(audit_log_file) as f:
         audit = json.load(f)
         print(f"\nAudit log entries: {len(audit['events'])}")
         if audit['events']:

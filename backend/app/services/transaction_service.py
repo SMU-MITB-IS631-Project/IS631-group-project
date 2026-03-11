@@ -1,9 +1,13 @@
+import calendar as _calendar
 from datetime import date
+from decimal import Decimal
 from typing import Any, Dict, List, Optional, cast
 
 from sqlalchemy import String, cast as sa_cast, func, or_
 from sqlalchemy.orm import Session
 
+from app.models.card_bonus_category import CardBonusCategory
+from app.models.card_catalogue import CardCatalogue
 from app.models.transaction import TransactionCreate, UserTransaction, TransactionStatus
 from app.models.user_owned_cards import UserOwnedCard, UserOwnedCardStatus
 from app.models.user_profile import UserProfile
@@ -75,6 +79,102 @@ class TransactionService:
             "user_id": self._format_user_id(cast(int, txn.user_id)),
         }
 
+    def _billing_cycle_start(self, refresh_day: int, transaction_date: date) -> date:
+        """Return the start date of the billing cycle containing transaction_date."""
+        max_day_this_month = _calendar.monthrange(transaction_date.year, transaction_date.month)[1]
+        candidate = transaction_date.replace(day=min(refresh_day, max_day_this_month))
+        if candidate <= transaction_date:
+            return candidate
+        # refresh day falls after transaction_date in this month: use previous month
+        if transaction_date.month == 1:
+            prev_year, prev_month = transaction_date.year - 1, 12
+        else:
+            prev_year, prev_month = transaction_date.year, transaction_date.month - 1
+        max_day_prev = _calendar.monthrange(prev_year, prev_month)[1]
+        return date(prev_year, prev_month, min(refresh_day, max_day_prev))
+
+    def _calculate_transaction_reward(
+        self,
+        user_id: int,
+        card_id: int,
+        amount_sgd: Decimal,
+        category: Any,
+        transaction_date: date,
+    ) -> Decimal:
+        """Calculate and return the reward for a single transaction at write time."""
+        card = self.db.query(CardCatalogue).filter(CardCatalogue.card_id == card_id).first()
+        if not card:
+            return Decimal("0")
+
+        base_rate = float(card.base_benefit_rate)
+        amount = float(amount_sgd)
+
+        # Resolve the transaction category string
+        if category is None:
+            txn_category_value = None
+        elif hasattr(category, "value"):
+            txn_category_value = category.value
+        else:
+            txn_category_value = str(category)
+
+        # Find a matching bonus category (exact category or catch-all "All")
+        bonus_categories = (
+            self.db.query(CardBonusCategory)
+            .filter(CardBonusCategory.card_id == card_id)
+            .all()
+        )
+        matching_bonus = next(
+            (
+                bc
+                for bc in bonus_categories
+                if bc.bonus_category.value in (txn_category_value, "All")
+            ),
+            None,
+        )
+
+        if not matching_bonus:
+            return Decimal(str(round(amount * base_rate, 2)))
+
+        bonus_rate = float(matching_bonus.bonus_benefit_rate)
+        bonus_cap = float(matching_bonus.bonus_cap_in_dollar)
+
+        # Determine the billing cycle start date from the user's card refresh day
+        user_card = (
+            self.db.query(UserOwnedCard)
+            .filter(UserOwnedCard.user_id == user_id, UserOwnedCard.card_id == card_id)
+            .first()
+        )
+        refresh_day = (
+            user_card.billing_cycle_refresh_date.day
+            if user_card and user_card.billing_cycle_refresh_date
+            else 1
+        )
+        billing_start = self._billing_cycle_start(refresh_day, transaction_date)
+
+        # Sum prior bonus-category spend already committed in this billing cycle
+        prior_filter = [
+            UserTransaction.user_id == user_id,
+            UserTransaction.card_id == card_id,
+            UserTransaction.transaction_date >= billing_start,
+            UserTransaction.transaction_date <= transaction_date,
+        ]
+        if matching_bonus.bonus_category.value != "All":
+            prior_filter.append(
+                sa_cast(UserTransaction.category, String) == txn_category_value
+            )
+
+        prior_spend_raw = self.db.query(func.sum(UserTransaction.amount_sgd)).filter(
+            *prior_filter
+        ).scalar()
+        prior_bonus_spend = float(prior_spend_raw) if prior_spend_raw is not None else 0.0
+
+        remaining_cap = max(0.0, bonus_cap - prior_bonus_spend)
+        bonus_amount = min(amount, remaining_cap)
+        base_amount = amount - bonus_amount
+
+        reward = bonus_amount * bonus_rate + base_amount * base_rate
+        return Decimal(str(round(reward, 2)))
+
     def create_transaction(self, user_id: Optional[str], payload: TransactionCreate) -> Dict[str, Any]:
         raw_user_id = user_id
         if not raw_user_id and payload.user_id is not None:
@@ -91,6 +191,13 @@ class TransactionService:
             )
 
         transaction_date = payload.transaction_date or date.today()
+        total_reward = self._calculate_transaction_reward(
+            user_id=resolved_user_id,
+            card_id=card_id,
+            amount_sgd=payload.amount_sgd,
+            category=payload.category,
+            transaction_date=transaction_date,
+        )
         record = UserTransaction(
             user_id=resolved_user_id,
             card_id=card_id,
@@ -100,6 +207,7 @@ class TransactionService:
             category=payload.category,
             is_overseas=payload.is_overseas,
             transaction_date=transaction_date,
+            total_reward=total_reward,
         )
 
         self.db.add(record)

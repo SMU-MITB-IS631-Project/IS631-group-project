@@ -1,13 +1,14 @@
+import calendar as _calendar
 from datetime import date, timedelta
 from typing import Optional
 
-from sqlalchemy import String, cast as sa_cast, func
+from sqlalchemy import extract as sa_extract, func
 from sqlalchemy.orm import Session
 
 from app.models.card_bonus_category import CardBonusCategory
 from app.models.card_catalogue import CardCatalogue
 from app.models.transaction import UserTransaction
-from app.models.user_owned_cards import UserOwnedCard
+from app.models.user_owned_cards import UserOwnedCard, UserOwnedCardStatus
 
 # Attempt to import ServiceException; provide fallback if module not available
 try:
@@ -29,10 +30,8 @@ class RewardsEarnedService:
             self.db_session.query(UserOwnedCard)
             .filter(
                 UserOwnedCard.user_id == user_id,
-                func.lower(sa_cast(UserOwnedCard.status, String)) == "active",
+                UserOwnedCard.status == UserOwnedCardStatus.Active,
             )
-                UserOwnedCard.status == UserOwnedCardStatus.Active
-                )
             .all()
         )
         if not active_cards:
@@ -50,14 +49,18 @@ class RewardsEarnedService:
                 if not card:
                     continue
 
-                day_of_month = getattr(user_card, "billing_cycle_refresh_day_of_mth", 1)
+                refresh_date = user_card.billing_cycle_refresh_date
+                day_of_month = refresh_date.day if refresh_date else 1
                 today = date.today()
                 if today.day >= day_of_month:
                     billing_cycle_start_date = today.replace(day=day_of_month)
                 else:
-                    first_of_month = today.replace(day=1)
-                    prev_month_last = first_of_month - timedelta(days=1)
-                    billing_cycle_start_date = prev_month_last.replace(day=day_of_month)
+                    if today.month == 1:
+                        prev_year, prev_month = today.year - 1, 12
+                    else:
+                        prev_year, prev_month = today.year, today.month - 1
+                    max_day = _calendar.monthrange(prev_year, prev_month)[1]
+                    billing_cycle_start_date = date(prev_year, prev_month, min(day_of_month, max_day))
 
                 bonus_categories_all = (
                     self.db_session.query(CardBonusCategory)
@@ -131,22 +134,23 @@ class RewardsEarnedService:
             if end_date is not None:
                 base_query = base_query.filter(UserTransaction.transaction_date <= end_date)
 
-            period_expr = func.strftime("%Y-%m", UserTransaction.transaction_date)
-
             if group_by == "month":
+                year_expr = sa_extract("year", UserTransaction.transaction_date)
+                month_expr = sa_extract("month", UserTransaction.transaction_date)
                 rows = (
                     base_query.with_entities(
-                        period_expr.label("period"),
+                        year_expr.label("year"),
+                        month_expr.label("month"),
                         func.sum(UserTransaction.total_reward).label("total_reward"),
                         func.count(UserTransaction.id).label("transaction_count"),
                     )
-                    .group_by(period_expr)
-                    .order_by(period_expr)
+                    .group_by(year_expr, month_expr)
+                    .order_by(year_expr, month_expr)
                     .all()
                 )
                 return [
                     {
-                        "period": row.period,
+                        "period": f"{int(row.year):04d}-{int(row.month):02d}",
                         "total_reward": round(float(row.total_reward), 2),
                         "transaction_count": int(row.transaction_count),
                     }
@@ -174,20 +178,23 @@ class RewardsEarnedService:
                 ]
 
             if group_by in ("month_card", "card_month"):
+                year_expr = sa_extract("year", UserTransaction.transaction_date)
+                month_expr = sa_extract("month", UserTransaction.transaction_date)
                 rows = (
                     base_query.with_entities(
-                        period_expr.label("period"),
+                        year_expr.label("year"),
+                        month_expr.label("month"),
                         UserTransaction.card_id.label("card_id"),
                         func.sum(UserTransaction.total_reward).label("total_reward"),
                         func.count(UserTransaction.id).label("transaction_count"),
                     )
-                    .group_by(period_expr, UserTransaction.card_id)
-                    .order_by(period_expr, UserTransaction.card_id)
+                    .group_by(year_expr, month_expr, UserTransaction.card_id)
+                    .order_by(year_expr, month_expr, UserTransaction.card_id)
                     .all()
                 )
                 return [
                     {
-                        "period": row.period,
+                        "period": f"{int(row.year):04d}-{int(row.month):02d}",
                         "card_id": int(row.card_id),
                         "total_reward": round(float(row.total_reward), 2),
                         "transaction_count": int(row.transaction_count),
