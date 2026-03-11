@@ -267,6 +267,11 @@ async function postUserCards(userId, walletCards) {
  */
 export async function registerUser(username, password, name, email, preference, wallet) {
   try {
+    // Convert preference to proper enum format (capitalize first letter)
+    const normalizedPreference = preference 
+      ? preference.charAt(0).toUpperCase() + preference.slice(1)
+      : 'No preference';
+    
     const response = await fetch(`${API_BASE_URL}/api/v1/user_profile`, {
       method: 'POST',
       headers: {
@@ -277,7 +282,7 @@ export async function registerUser(username, password, name, email, preference, 
         password: password.trim(),
         name: name || null,
         email: email || null,
-        benefits_preference: preference || 'no preference',
+        benefits_preference: normalizedPreference,
       }),
     });
 
