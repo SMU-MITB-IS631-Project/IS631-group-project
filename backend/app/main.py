@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from slowapi.errors import RateLimitExceeded
 from fastapi.responses import JSONResponse
-from app.routes import auth
 
 # Add backend directory to path
 sys.path.insert(0, os.path.dirname(__file__))
@@ -30,6 +29,7 @@ from app.routes import (
     card_reasoner_router,
     user_profile_router,
     rewards_earned_router,
+    auth_router
 )
 from app.services import init_sample_data
 
@@ -119,7 +119,7 @@ app.include_router(user_profile_router)
 app.include_router(recommendation_router)
 app.include_router(card_reasoner_router)
 app.include_router(rewards_earned_router)
-app.include_router(auth.router, prefix="", tags=["Auth"])
+app.include_router(auth_router, prefix="", tags=["Auth"])
 
 
 if __name__ == "__main__":
