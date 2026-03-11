@@ -64,7 +64,7 @@ class RecommendationApiTests(unittest.TestCase):
                     bonus_minimum_spend_in_dollar=0,
                 )
             )
-            db.add(UserOwnedCard(user_id=1, card_id=10, status=UserOwnedCardStatus.active))
+            db.add(UserOwnedCard(user_id=1, card_id=10, status=UserOwnedCardStatus.Active))
             db.commit()
 
         def override_get_db():
