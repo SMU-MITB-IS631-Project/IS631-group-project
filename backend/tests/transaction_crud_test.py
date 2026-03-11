@@ -230,6 +230,23 @@ class TransactionCRUDTests(unittest.TestCase):
         # Unchanged fields should remain
         self.assertEqual(txn["channel"], "online")
 
+    def test_update_transaction_accepts_lowercase_category(self):
+        """Frontend sends lowercase category labels; update should still pass."""
+        resp = self.client.put(
+            "/api/v1/transactions/100",
+            headers={"x-user-id": "1"},
+            json={
+                "transaction": {
+                    "item": "Updated Item Lowercase Category",
+                    "category": "food",
+                }
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        txn = resp.json()["transaction"]
+        self.assertEqual(txn["item"], "Updated Item Lowercase Category")
+        self.assertEqual(txn["category"], "food")
+
     def test_update_transaction_not_found(self):
         """Test updating non-existent transaction"""
         resp = self.client.put(
