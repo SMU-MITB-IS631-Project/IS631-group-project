@@ -120,11 +120,8 @@ app.include_router(user_profile_router)
 app.include_router(recommendation_router)
 app.include_router(card_reasoner_router)
 app.include_router(rewards_earned_router)
-<<<<<<< HEAD
 app.include_router(auth_router, prefix="", tags=["Auth"])
-=======
 app.include_router(notifications_router)
->>>>>>> 256b6f8 (feat: add card reward change notifications with update flow)
 
 
 if __name__ == "__main__":
