@@ -45,6 +45,44 @@ def _unauthorized_response() -> JSONResponse:
     )
 
 
+def _forbidden_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_403_FORBIDDEN,
+        content={
+            "error": {
+                "code": "FORBIDDEN",
+                "message": "Cannot access transactions for another user.",
+                "details": {},
+            }
+        },
+    )
+
+
+def _parse_sort_to_desc(sort: str) -> Optional[bool]:
+    sort_value = sort.lower()
+    if sort_value == "none":
+        return None
+    return sort_value != "date_asc"
+
+
+def _list_transactions_for_user(
+    *,
+    target_user_id: str,
+    requester_user_id: str,
+    sort: str,
+    db: Session,
+) -> Dict[str, Any] | JSONResponse:
+    service = TransactionService(db)
+    if service._resolve_user_id(requester_user_id) != service._resolve_user_id(target_user_id):
+        return _forbidden_response()
+
+    transactions = service.get_user_transactions(
+        target_user_id,
+        sort_by_date_desc=_parse_sort_to_desc(sort),
+    )
+    return {"transactions": transactions}
+
+
 @router.post("", status_code=201)
 def create_transaction(
     request: TransactionRequest,
@@ -153,17 +191,49 @@ def get_user_transactions_by_id(
     header_user_id = request.headers.get("x-user-id")
     if not header_user_id:
         return _unauthorized_response()
-    
-    sort_value = sort.lower()
-    if sort_value == "none":
-        sort_desc = None
-    else:
-        sort_desc = sort_value != "date_asc"
-    
+
     try:
-        service = TransactionService(db)
-        transactions = service.get_user_transactions(user_id, sort_by_date_desc=sort_desc)
-        return {"transactions": transactions}
+        return _list_transactions_for_user(
+            target_user_id=user_id,
+            requester_user_id=header_user_id,
+            sort=sort,
+            db=db,
+        )
+    except ServiceError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "details": exc.details,
+                }
+            },
+        )
+
+
+@router.get("/user/{user_id}")
+def list_transactions_by_user_id(
+    user_id: str,
+    request: Request,
+    sort: str = "date_desc",
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """List all transactions for the specified user_id.
+
+    Requires x-user-id header and only allows requesting your own transactions.
+    """
+    header_user_id = request.headers.get("x-user-id")
+    if not header_user_id:
+        return _unauthorized_response()
+
+    try:
+        return _list_transactions_for_user(
+            target_user_id=user_id,
+            requester_user_id=header_user_id,
+            sort=sort,
+            db=db,
+        )
     except ServiceError as exc:
         raise HTTPException(
             status_code=exc.status_code,
