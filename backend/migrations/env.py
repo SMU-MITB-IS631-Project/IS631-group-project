@@ -13,6 +13,7 @@ from app.models.transaction import UserTransaction  # Import UserTransaction mod
 from app.models.card_bonus_category import CardBonusCategory  # Import CardBonusCategory model
 from app.models.card_catalogue import CardCatalogue  # Import CardCatalogue model
 from app.models.security_log import SecurityLog  # Import SecurityLog model
+from app.models.card_change_notification import CardChangeNotification  # Import CardChangeNotification model
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
