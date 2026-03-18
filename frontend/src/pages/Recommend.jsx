@@ -143,8 +143,23 @@ export default function Recommend() {
     navigate('/dashboard');
   }
 
+  function formatCurrency(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return '$0.00';
+    return new Intl.NumberFormat('en-SG', {
+      style: 'currency',
+      currency: 'SGD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(numeric);
+  }
+
   const currentCard = result && !exhausted ? result.ranked_cards[cursor] : null;
   const currentCardMaster = currentCard ? cardsMaster.find(c => c.card_id === currentCard.card_id) : null;
+  const minSpendRequired = Number(
+    currentCard?.min_spend_required_sgd ?? currentCard?.reward_breakdown?.min_spend_required_sgd ?? 0
+  );
+  const currentCycleSpend = Number(currentCard?.current_cycle_spend_sgd ?? 0);
 
   return (
     <div className="pb-6 px-4 pt-6 relative">
@@ -317,6 +332,19 @@ export default function Recommend() {
             <span className="inline-flex items-center gap-1 text-xs font-medium bg-success/10 text-success px-3 py-1.5 rounded-full">
               &#10003; {currentCard.effective_rate_str}
             </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <div className="rounded-[12px] border border-border bg-white/70 px-3 py-2">
+              <div className="text-[11px] font-medium uppercase tracking-wide text-muted">Minimum Spend</div>
+              <div className="text-sm font-semibold text-text mt-1">
+                {minSpendRequired > 0 ? formatCurrency(minSpendRequired) : 'No minimum'}
+              </div>
+            </div>
+            <div className="rounded-[12px] border border-border bg-white/70 px-3 py-2">
+              <div className="text-[11px] font-medium uppercase tracking-wide text-muted">Current Spend</div>
+              <div className="text-sm font-semibold text-text mt-1">{formatCurrency(currentCycleSpend)}</div>
+            </div>
           </div>
 
           {/* Explanations */}
