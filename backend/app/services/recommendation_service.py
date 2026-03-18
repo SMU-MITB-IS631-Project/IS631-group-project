@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import calendar
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from typing import Iterable, Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 # Import models to ensure SQLAlchemy relationship targets are registered.
@@ -46,6 +49,8 @@ class CardRecommendationDTO:
     effective_benefit_rate: Decimal
     applied_bonus_category: Optional[str]
     bonus_rules: list[BonusRuleDTO]
+    min_spend_required_sgd: int
+    current_cycle_spend_sgd: Decimal
 
     reward_unit: str
     estimated_reward_value: Decimal
@@ -110,6 +115,15 @@ class RecommendationService:
         )
         if not active_cards:
             return None, []
+
+        current_cycle_spend_by_card = {
+            uc.card_id: self._get_current_cycle_spend(
+                user_id=user_id,
+                card_id=uc.card_id,
+                cycle_start_date=self._latest_cycle_start_date(uc.billing_cycle_refresh_date.day),
+            )
+            for uc in active_cards
+        }
 
         card_ids = [uc.card_id for uc in active_cards]
         catalog_rows = (
@@ -214,6 +228,8 @@ class RecommendationService:
                         )
                         for r in rules
                     ],
+                    min_spend_required_sgd=min_spend_required,
+                    current_cycle_spend_sgd=current_cycle_spend_by_card.get(card.card_id, Decimal("0")),
 
                     reward_unit=reward_unit,
                     estimated_reward_value=estimated_reward_value,
@@ -251,6 +267,35 @@ class RecommendationService:
         else:
             ranked.sort(key=lambda c: (c.effective_benefit_rate, c.base_benefit_rate), reverse=True)
         return (ranked[0] if ranked else None), ranked
+
+    def _get_current_cycle_spend(self, *, user_id: int, card_id: int, cycle_start_date: date) -> Decimal:
+        total = (
+            self.db.query(func.coalesce(func.sum(UserTransaction.amount_sgd), 0))
+            .filter(UserTransaction.user_id == user_id)
+            .filter(UserTransaction.card_id == card_id)
+            .filter(UserTransaction.transaction_date >= cycle_start_date)
+            .scalar()
+        )
+        return Decimal(str(total or 0))
+
+    @staticmethod
+    def _latest_cycle_start_date(refresh_day_of_month: int) -> date:
+        today = date.today()
+        # Clamp configured billing day to the current month's last day.
+        current_month_last_day = calendar.monthrange(today.year, today.month)[1]
+        current_month_day = min(max(refresh_day_of_month, 1), current_month_last_day)
+
+        if today.day >= current_month_day:
+            return date(today.year, today.month, current_month_day)
+
+        if today.month == 1:
+            prev_year, prev_month = today.year - 1, 12
+        else:
+            prev_year, prev_month = today.year, today.month - 1
+
+        prev_month_last_day = calendar.monthrange(prev_year, prev_month)[1]
+        prev_month_day = min(max(refresh_day_of_month, 1), prev_month_last_day)
+        return date(prev_year, prev_month, prev_month_day)
 
     @staticmethod
     def _matching_bonus_rules(

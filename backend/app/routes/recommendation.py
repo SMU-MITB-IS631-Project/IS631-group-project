@@ -65,6 +65,8 @@ class RecommendationCard(BaseModel):
     effective_benefit_rate: float
     applied_bonus_category: Optional[str] = None
     bonus_rules: list[dict[str, Any]]
+    min_spend_required_sgd: int
+    current_cycle_spend_sgd: float
 
     reward_unit: str
     estimated_reward_value: float
@@ -184,6 +186,8 @@ def get_recommendation(
                 }
                 for r in dto.bonus_rules
             ],
+            min_spend_required_sgd=dto.min_spend_required_sgd,
+            current_cycle_spend_sgd=float(dto.current_cycle_spend_sgd),
 
             reward_unit=dto.reward_unit,
             estimated_reward_value=as_json_number(dto.estimated_reward_value, reward_unit=unit),
@@ -329,6 +333,8 @@ def recommend_and_explain(
                 }
                 for r in dto.bonus_rules
             ],
+            min_spend_required_sgd=dto.min_spend_required_sgd,
+            current_cycle_spend_sgd=float(dto.current_cycle_spend_sgd),
             reward_unit=dto.reward_unit,
             estimated_reward_value=as_json_number(dto.estimated_reward_value, reward_unit=unit),
             effective_rate_str=dto.effective_rate_str,

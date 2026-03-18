@@ -15,6 +15,8 @@ class BankEnum(str, PyEnum):
     UOB = "UOB"
 
     # Legacy serialized names/values for backward compatibility
+    Citi = "Citi"
+    StandardChartered = "StandardChartered"
     dbs = "dbs"
     citi = "citi"
     standard_chartered = "standard_chartered"
@@ -24,6 +26,8 @@ class BenefitTypeEnum(str, PyEnum):
     cashback = "cashback"
     both = "both"
     # Backward-compatible legacy names that may exist in older DB rows.
+    Miles = "Miles"
+    Cashback = "Cashback"
     MILES = "MILES"
     CASHBACK = "CASHBACK"
     BOTH = "BOTH"
