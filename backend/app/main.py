@@ -19,6 +19,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
 from app.routes import (
@@ -122,6 +123,9 @@ app.include_router(card_reasoner_router)
 app.include_router(rewards_earned_router)
 app.include_router(auth_router, prefix="", tags=["Auth"])
 app.include_router(notifications_router)
+
+# Mount the built frontend after API routes so /api endpoints keep priority.
+app.mount("/", StaticFiles(directory="backend/static", html=True), name="static")
 
 
 if __name__ == "__main__":
