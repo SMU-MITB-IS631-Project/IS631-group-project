@@ -38,4 +38,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: your-docker-id/book_app_backend:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/is631-backend:latest
