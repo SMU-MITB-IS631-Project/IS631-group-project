@@ -42,4 +42,35 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/is631-backend:latest
+          tags: wenxuanalex/is631-backend:latest
+
+  deploy:
+    needs: build-and-push
+    if: ${{ needs.build-and-push.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+            docker stop my-app || true && docker rm my-app || true
+            docker pull wenxuanalex/is631-backend:latest
+            docker run -d --name my-app --restart unless-stopped -p 80:8000 \
+              -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
+              -e COGNITO_REGION="${{ secrets.COGNITO_REGION }}" \
+              -e COGNITO_USER_POOL_ID="${{ secrets.COGNITO_USER_POOL_ID }}" \
+              -e COGNITO_CLIENT_ID="${{ secrets.COGNITO_CLIENT_ID }}" \
+              -e COGNITO_CLIENT_SECRET="${{ secrets.COGNITO_CLIENT_SECRET }}" \
+              -e COGNITO_ADMIN_ROLE="${{ secrets.COGNITO_ADMIN_ROLE }}" \
+              -e COGNITO_USER_ROLE="${{ secrets.COGNITO_USER_ROLE }}" \
+              -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+              -e LLM_MODEL="${{ secrets.LLM_MODEL }}" \
+              -e LLM_TEMPERATURE="${{ secrets.LLM_TEMPERATURE }}" \
+              -e LLM_MAX_TOKENS="${{ secrets.LLM_MAX_TOKENS }}" \
+              -e LLM_TIMEOUT="${{ secrets.LLM_TIMEOUT }}" \
+              -e LLM_MAX_RETRIES="${{ secrets.LLM_MAX_RETRIES }}" \
+              wenxuanalex/is631-backend:latest
