@@ -28,6 +28,7 @@ jobs:
           pytest backend/tests
   build-and-push:
     needs: test
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
