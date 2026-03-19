@@ -46,7 +46,7 @@ jobs:
 
   deploy:
     needs: build-and-push
-    if: ${{ needs.build-and-push.result == 'success' }}
+    if: ${{ !cancelled() && needs.build-and-push.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to EC2 via SSH
