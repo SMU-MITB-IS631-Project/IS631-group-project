@@ -1,12 +1,12 @@
 from typing import Dict, Any
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, logger, status, Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
-
+from app.exceptions import ServiceException
 from app.dependencies.db import get_db
 from app.dependencies.services import get_user_profile_service
-from app.models.user_profile import UserProfile, UserProfileResponse, UserProfileUpdate, UserProfileCreate
+from app.models.user_profile import UserProfile, UserProfileResponse, UserProfileUpdate
 from app.services.cognito_service import CognitoService
 from app.services.user_profile_service import UserProfileService
 
@@ -34,8 +34,7 @@ def get_user_profiles(
     service: UserProfileService = Depends(get_user_profile_service),
 ):
     _get_cognito_sub(auth)
-    users_by_id = service.get_all_user_profiles()
-    return list(users_by_id.values())
+    return service.get_all_user_profiles()
 
 @router.get("/me", response_model=UserProfileResponse)
 def get_my_profile(
@@ -64,24 +63,10 @@ def update_my_profile(
             benefits_preference=update.benefits_preference
         )
         return updated_profile
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    
+    except ServiceException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    except Exception:
+        logger.exception("Unexpected error updating profile")
+        raise HTTPException(status_code=500, detail="Internal server error.")
 
-@router.post("/create", response_model=UserProfileResponse, status_code=status.HTTP_201_CREATED)
-def create_user_profile(
-    profile: UserProfileCreate,
-    auth: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    service: UserProfileService = Depends(get_user_profile_service),
-):
-    cognito_sub = _get_cognito_sub(auth)
-    try:
-        created_profile = service.create_user_profile(
-            username=profile.username,
-            email=profile.email,
-            cognitosub=cognito_sub,
-            name=profile.name,
-            benefits_preference=profile.benefits_preference
-        )
-        return created_profile
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

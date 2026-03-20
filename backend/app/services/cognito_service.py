@@ -164,7 +164,14 @@ class CognitoService:
             return response
 
         except self.client.exceptions.UsernameExistsException:
-            raise ServiceException(status_code=400, detail="User already exists.")
+            raise ServiceException(status_code=409, detail="Username already exists.")
+        except self.client.exceptions.AliasExistsException:
+            raise ServiceException(status_code=409, detail="Email already exists.")
+        except self.client.exceptions.InvalidParameterException as e:
+            message = str(e)
+            if "email" in message.lower() and "exist" in message.lower():
+                raise ServiceException(status_code=409, detail="Email already exists.")
+            raise ServiceException(status_code=400, detail=message)
         except Exception as e:
             raise ServiceException(status_code=500, detail=f"Registration failed: {str(e)}")
     
@@ -192,6 +199,18 @@ class CognitoService:
             raise ServiceException(status_code=404, detail="User not found.")
         except Exception as e:
             raise ServiceException(status_code=500, detail=f"Confirmation failed: {str(e)}")
+
+    def delete_user(self, username: str) -> None:
+        """Delete a Cognito user from the user pool (admin operation)."""
+        try:
+            self.client.admin_delete_user(
+                UserPoolId=self.user_pool_id,
+                Username=username,
+            )
+        except self.client.exceptions.UserNotFoundException:
+            return
+        except Exception as e:
+            raise ServiceException(status_code=500, detail=f"Cognito cleanup failed: {str(e)}")
 
 class RoleChecker:
     def __init__(self, allowed_role: str):

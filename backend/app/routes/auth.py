@@ -59,13 +59,18 @@ def register(payload: RegistrationPayload, db: Session = Depends(get_db)):
         cognito_sub = response["UserSub"]
 
         user_profile_service = UserProfileService(db)
-        user = user_profile_service.create_user_profile(
-            username=payload.username,
-            cognitosub=cognito_sub,
-            email=payload.email,
-            name=payload.name,
-            benefits_preference=payload.benefits_preference,
-        )
+        try:
+            user = user_profile_service.create_user_profile(
+                username=payload.username,
+                cognitosub=cognito_sub,
+                email=payload.email,
+                name=payload.name,
+                benefits_preference=payload.benefits_preference,
+            )
+        except Exception:
+            cognito_service.delete_user(payload.username)
+            raise
+
         return {
             "message": "User registration successful.",
             "user_sub": response["UserSub"],

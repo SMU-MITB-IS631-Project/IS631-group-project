@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Any, cast
 
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.models.user_profile import BenefitsPreference, UserProfile
 from app.exceptions import ServiceException
@@ -11,10 +12,9 @@ class UserProfileService:
         self.db = db
 
     # Admin role
-    def get_all_user_profiles(self) -> Dict[int, UserProfile]:
+    def get_all_user_profiles(self):
         """Return all users as a dictionary keyed by user_id."""
-        users = self.db.query(UserProfile).all()
-        return {cast(int, user.id): user.to_dict() for user in users}
+        return self.db.query(UserProfile).all()
 
     # User role
     def get_user_profile(self, cognitosub: str) -> Optional[UserProfile]:
@@ -40,7 +40,16 @@ class UserProfileService:
         """Create a new user profile linked to a Cognito user."""
         existing_user = self.get_user_profile(cognitosub)
         if existing_user:
-            raise ServiceException(status_code=400, detail="This username already exists.")
+            raise ServiceException(status_code=409, detail="User profile already exists for this Cognito user.")
+
+        username_conflict = self.db.query(UserProfile).filter(UserProfile.username == username).first()
+        if username_conflict:
+            raise ServiceException(status_code=409, detail="Username already exists.")
+
+        if email:
+            email_conflict = self.db.query(UserProfile).filter(UserProfile.email == email).first()
+            if email_conflict:
+                raise ServiceException(status_code=409, detail="Email already exists.")
 
         new_user = UserProfile(
             username=username,
@@ -50,7 +59,11 @@ class UserProfileService:
             cognito_sub=cognitosub
         )
         self.db.add(new_user)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            raise ServiceException(status_code=409, detail="Username or email already exists.")
         self.db.refresh(new_user)
         return new_user
     
