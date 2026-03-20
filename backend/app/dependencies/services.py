@@ -2,12 +2,11 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
-from app.models.user_profile import UserProfile
-from app.services.card_service import CardService
+from app.services.user_profile_service import UserProfileService
+from app.services.cognito_service import CognitoService
 from app.services.catalog_service import CatalogService
 from app.services.transaction_service import TransactionService
-from app.services.user_card_services import UserCardManagementService
-from app.services.user_service import UserService
+from app.services.user_card_service import UserCardManagementService
 from app.services.rewards_earned_service import RewardsEarnedService
 
 def get_catalog_service(db: Session = Depends(get_db)) -> CatalogService:
@@ -16,16 +15,9 @@ def get_catalog_service(db: Session = Depends(get_db)) -> CatalogService:
 def get_rewards_earned_service(db: Session = Depends(get_db)) -> RewardsEarnedService:
     return RewardsEarnedService(db)
 
-def get_user_profile_service(db: Session = Depends(get_db)) -> UserProfile:
+def get_user_profile_service(db: Session = Depends(get_db)) -> UserProfileService:
     # Creates and returns a UserProfile service instance using the injected database session.
-    return UserProfile(db)
-
-def get_user_service(db: Session = Depends(get_db)) -> UserService:
-    return UserService(db)
-
-def get_card_service(db: Session = Depends(get_db)) -> CardService:
-    user_service = UserService(db)
-    return CardService(db, user_service)
+    return UserProfileService(db)
 
 def get_user_card_management_service(db: Session = Depends(get_db)) -> UserCardManagementService:
     # Creates and returns a UserCardManagementService instance using the injected database session.
