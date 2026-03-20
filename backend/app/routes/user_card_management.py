@@ -18,7 +18,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 router = APIRouter(prefix="/user/cards", tags=["User Card Management"])
 
-@router.get("/", response_model=Dict[int, UserOwnedCardResponse])
+@router.get("/", response_model=list[UserOwnedCardResponse])
 def get_user_cards(
     auth: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
@@ -28,7 +28,7 @@ def get_user_cards(
     """
     try:
         if not auth:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing Authorization header.")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthenticated. Missing Authorization header.")
 
         claims = cognito_service.validate_token(
             auth
@@ -55,14 +55,14 @@ def add_user_card(
     """
     try:
         if not auth:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing Authorization header.")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthenticated. Missing Authorization header.")
 
         claims = cognito_service.validate_token(
             auth
         )
         cognito_sub = claims.get("sub")
         if not cognito_sub:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload.")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthenticated. Invalid token payload.")
 
         return service.add_user_card(cognito_sub, card_data.card_id, card_data)
     except ServiceError as e:

@@ -19,11 +19,10 @@ class UserCardManagementService:
             raise ServiceException(status_code=404, detail="User not found.")
         return user_id
 
-    def get_user_cards(self, cognitosub: str) -> Dict[int, UserOwnedCard]:
+    def get_user_cards(self, cognitosub: str):
         """Return all cards owned by a user as a dictionary keyed by card_id."""
         user_id = self._require_user_id(cognitosub)
-        cards = self.db.query(UserOwnedCard).filter(UserOwnedCard.user_id == user_id).all()
-        return {cast(int, card.id): card for card in cards}
+        return self.db.query(UserOwnedCard).filter(UserOwnedCard.user_id == user_id).all()
 
     def add_user_card(self, cognitosub: str, card_id: int, card_data: UserOwnedCardCreate) -> UserOwnedCard:
         """Add a card to a user's collection."""
