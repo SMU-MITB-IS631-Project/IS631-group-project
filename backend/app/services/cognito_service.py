@@ -10,7 +10,7 @@ import requests
 from app.exceptions import ServiceException
 from dotenv import load_dotenv
 
-load_dotenv()
+# load_dotenv()
 
 
 CognitoUserRole = os.getenv("COGNITO_USER_ROLE", "Users")
