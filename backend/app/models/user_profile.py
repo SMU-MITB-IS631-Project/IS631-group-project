@@ -11,11 +11,6 @@ class BenefitsPreference(PyEnum):
     miles = "Miles"
     cashback = "Cashback"
     no_preference = "No preference"
-    # Backward-compatible aliases (older code/tests referenced this casing)
-    Miles = "Miles"
-    Cashback = "Cashback"
-    # Backward-compatible alias (older code/tests referenced this casing)
-    No_preference = "No preference"
 
 class UserProfile(Base):
     __tablename__ = "user_profile"
