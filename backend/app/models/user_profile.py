@@ -21,9 +21,9 @@ class UserProfile(Base):
     __tablename__ = "user_profile"
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, nullable=False, unique=True)
-    password_hash = Column(String, nullable=False)
     name = Column(String, nullable=True)
     email = Column(String, nullable=True, unique=True)
+    cognito_sub = Column(String, nullable=True, unique=True)  # Store Cognito user ID
     benefits_preference = Column(SAEnum(BenefitsPreference), nullable=False, default=BenefitsPreference.no_preference)
     created_date = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
@@ -37,6 +37,7 @@ class UserProfile(Base):
             "username": self.username,
             "name": self.name,
             "email": self.email,
+            "cognito_sub": self.cognito_sub,
             "benefits_preference": self.benefits_preference.value if self.benefits_preference else None,
             "created_date": self.created_date,
         }
@@ -44,30 +45,17 @@ class UserProfile(Base):
 # Pydantic Models for Request/Response Validation
 class UserProfileBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    username: str
     name: str | None = None
-    email: str | None = None
     benefits_preference: BenefitsPreference = BenefitsPreference.no_preference
 
 # password in a separate model for creation because if it is in the base model, it will be exposed in responses
 class UserProfileCreate(UserProfileBase):
-    password: str
+    username: str
+    email: str | None = None
 
 class UserProfileResponse(UserProfileBase):
     id: int
     created_date: datetime
 
 class UserProfileUpdate(UserProfileBase):
-    password: str
-
-class LoginPayload(BaseModel):
-    username: str
-    password: str
-
-class LoginResponse(BaseModel):
-    id: int
-    username: str
-    name: str | None = None
-    email: str | None = None
-    benefits_preference: BenefitsPreference | str
-    created_date: datetime
+    pass
