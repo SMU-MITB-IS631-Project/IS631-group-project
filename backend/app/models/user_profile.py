@@ -22,7 +22,7 @@ class UserProfile(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, nullable=False, unique=True)
     # Backward-compatible: some tests/fixtures still provide password_hash.
-    password_hash = Column(String, nullable=True)
+    password_hash = Column(String, nullable=False, default="", server_default="")
     name = Column(String, nullable=True)
     email = Column(String, nullable=True, unique=True)
     cognito_sub = Column(String, nullable=True, unique=True)  # Store Cognito user ID

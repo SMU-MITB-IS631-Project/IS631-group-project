@@ -9,6 +9,7 @@ from app.models.user_owned_cards import (
     UserOwnedCardResponse,
     UserOwnedCardUpdate,
 )
+from app.exceptions import ServiceException
 from app.services.cognito_service import CognitoService
 from app.services.errors import ServiceError
 from app.services.user_card_service import UserCardManagementService
@@ -22,6 +23,7 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 try:
     cognito_service = CognitoService()
 except Exception:
+    logger.exception("Failed to initialize CognitoService")
     class _CognitoServiceFallback:
         def validate_token(self, *_args, **_kwargs):
             raise RuntimeError("CognitoService unavailable")
@@ -38,7 +40,16 @@ def get_cognito_sub_from_auth_header(
             detail="Unauthenticated. Missing Authorization header.",
         )
 
-    claims = cognito_service.validate_token(auth)
+    try:
+        claims = cognito_service.validate_token(auth)
+    except ServiceException as exc:
+        # Translate Cognito validation errors into expected HTTP semantics.
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    except RuntimeError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable.",
+        )
     cognito_sub = claims.get("sub") if isinstance(claims, dict) else None
     if not cognito_sub:
         raise HTTPException(

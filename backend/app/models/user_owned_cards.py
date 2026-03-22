@@ -34,10 +34,19 @@ class UserOwnedCard(Base):
     card_id = Column(Integer, ForeignKey("card_catalogue.card_id", ondelete="CASCADE"), nullable=False)
     card_expiry_date = Column(Date, default=lambda: date(9999,1,1), nullable=False)
     billing_cycle_refresh_date = Column(Date, default=get_billing_cycle_date, nullable=False)
-    billing_cycle_refresh_day_of_month = Column(Integer, nullable=False, default=1)
+    # DB column created by Alembic is `billing_cycle_refresh_day_of_mth`.
+    # Keep the Python attribute name for API/test compatibility.
+    billing_cycle_refresh_day_of_month = Column(
+        "billing_cycle_refresh_day_of_mth",
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
     status = Column(SAEnum(UserOwnedCardStatus), nullable=False, default=UserOwnedCardStatus.Active)
-    # Persisted spend tracker (some tests/logic expect this to exist on the ORM model)
-    cycle_spend_sgd = Column(Float, nullable=False, default=0.0)
+
+    # In-memory spend tracker (not persisted; avoids DB schema drift).
+    cycle_spend_sgd: float = 0.0
 
     # Backward-compatible attribute alias: older code/tests used the shortened name.
     @property
