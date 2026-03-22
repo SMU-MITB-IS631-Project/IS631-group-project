@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
+from app.dependencies.user_context import get_x_user_id
 from app.models.transaction import TransactionRequest, TransactionUpdate, TransactionStatus
 from app.services.errors import ServiceError
 from app.services.transaction_service import TransactionService
@@ -88,6 +89,7 @@ def create_transaction(
     request: TransactionRequest,
     http_request: Request,
     db: Session = Depends(get_db),
+    user_id: Optional[str] = Depends(get_x_user_id),
 ) -> Dict[str, Any]:
     """
     Create a new transaction.
@@ -105,7 +107,6 @@ def create_transaction(
         }
     }
     """
-    user_id = http_request.headers.get("x-user-id")
     if not user_id:
         return _unauthorized_response()
     
@@ -141,11 +142,11 @@ def create_transaction(
 def list_transactions(
     request: Request,
     db: Session = Depends(get_db),
+    user_id: Optional[str] = Depends(get_x_user_id),
 ) -> Dict[str, Any]:
     """
     List all transactions for current user.
     """
-    user_id = request.headers.get("x-user-id")
     if not user_id:
         return _unauthorized_response()
     
@@ -172,6 +173,7 @@ def get_user_transactions_by_id(
     request: Request,
     sort: str = "date_desc",
     db: Session = Depends(get_db),
+    header_user_id: Optional[str] = Depends(get_x_user_id),
 ) -> Dict[str, Any]:
     """
     Get all transactions for a specific user.
@@ -188,7 +190,6 @@ def get_user_transactions_by_id(
     Security:
     - Only returns transactions for the specified user
     """
-    header_user_id = request.headers.get("x-user-id")
     if not header_user_id:
         return _unauthorized_response()
 
@@ -218,12 +219,12 @@ def list_transactions_by_user_id(
     request: Request,
     sort: str = "date_desc",
     db: Session = Depends(get_db),
+    header_user_id: Optional[str] = Depends(get_x_user_id),
 ) -> Dict[str, Any]:
     """List all transactions for the specified user_id.
 
     Requires x-user-id header and only allows requesting your own transactions.
     """
-    header_user_id = request.headers.get("x-user-id")
     if not header_user_id:
         return _unauthorized_response()
 
@@ -253,6 +254,7 @@ def update_transaction(
     request: TransactionUpdateRequest,
     http_request: Request,
     db: Session = Depends(get_db),
+    user_id: Optional[str] = Depends(get_x_user_id),
 ) -> Dict[str, Any]:
     """
     Update a transaction's fields (item, amount, category, etc.).
@@ -272,7 +274,6 @@ def update_transaction(
         }
     }
     """
-    user_id = http_request.headers.get("x-user-id")
     if not user_id:
         return _unauthorized_response()
     
@@ -311,6 +312,7 @@ def update_transaction_status(
     status_update: TransactionStatusUpdate,
     http_request: Request,
     db: Session = Depends(get_db),
+    user_id: Optional[str] = Depends(get_x_user_id),
 ) -> Dict[str, Any]:
     """
     Update only a transaction's status (e.g., mark as deleted_with_card).
@@ -323,7 +325,6 @@ def update_transaction_status(
         "status": "deleted_with_card"
     }
     """
-    user_id = http_request.headers.get("x-user-id")
     if not user_id:
         return _unauthorized_response()
     
@@ -360,6 +361,7 @@ def bulk_update_transaction_status(
     bulk_update: BulkTransactionStatusUpdate,
     http_request: Request,
     db: Session = Depends(get_db),
+    user_id: Optional[str] = Depends(get_x_user_id),
 ) -> Dict[str, Any]:
     """
     Bulk update multiple transactions' status.
@@ -373,7 +375,6 @@ def bulk_update_transaction_status(
     Returns:
     - count: Number of transactions updated
     """
-    user_id = http_request.headers.get("x-user-id")
     if not user_id:
         return _unauthorized_response()
     
@@ -410,6 +411,7 @@ def delete_transaction(
     transaction_id: int,
     http_request: Request,
     db: Session = Depends(get_db),
+    user_id: Optional[str] = Depends(get_x_user_id),
 ) -> Dict[str, Any]:
     """
     Delete a transaction that was mistakenly added.
@@ -420,7 +422,6 @@ def delete_transaction(
     Returns:
     - The deleted transaction object
     """
-    user_id = http_request.headers.get("x-user-id")
     if not user_id:
         return _unauthorized_response()
     
