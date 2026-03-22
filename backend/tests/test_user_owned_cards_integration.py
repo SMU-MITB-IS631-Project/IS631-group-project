@@ -154,6 +154,7 @@ def test_update_user_card(client: TestClient):
     assert response.status_code == 200
     updated = response.json()
     assert updated["card_id"] == 101
+    assert updated["billing_cycle_refresh_day_of_month"] == 20
     assert updated["card_expiry_date"] == "2028-02-02"
 
 

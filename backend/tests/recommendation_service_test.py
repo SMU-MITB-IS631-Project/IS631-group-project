@@ -38,7 +38,7 @@ class RecommendationServiceTests(unittest.TestCase):
                     id=1,
                     username="u1",
                     cognito_sub="test-cognito-sub-reco-svc-1",
-                    benefits_preference=BenefitsPreference.No_preference,
+                    benefits_preference=BenefitsPreference.no_preference,
                 )
             )
 
@@ -124,7 +124,7 @@ class RecommendationServiceTests(unittest.TestCase):
             # Ensure we recommend within cashback cards (miles vs cashback is otherwise not comparable).
             profile = db.query(UserProfile).filter(UserProfile.id == 1).first()
             self.assertIsNotNone(profile)
-            profile.benefits_preference = BenefitsPreference.Cashback
+            profile.benefits_preference = BenefitsPreference.cashback
 
             db.add(
                 CardCatalogue(

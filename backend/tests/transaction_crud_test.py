@@ -46,7 +46,7 @@ class TransactionCRUDTests(unittest.TestCase):
                     id=1,
                     username="testuser",
                     cognito_sub="test-cognito-sub-crud-1",
-                    benefits_preference=BenefitsPreference.Cashback,
+                    benefits_preference=BenefitsPreference.cashback,
                 )
             )
             # Card in catalog

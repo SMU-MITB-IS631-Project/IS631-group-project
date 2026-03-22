@@ -49,6 +49,7 @@ class UserOwnedCardCreate(UserOwnedCardBase):
 
 class UserOwnedCardUpdate(BaseModel):
     billing_cycle_refresh_date: Optional[date] = None
+    billing_cycle_refresh_day_of_month: Optional[int] = Field(None, ge=1, le=31)
     billing_cycle_day_of_month: Optional[int] = Field(None, ge=1, le=31)
     card_expiry_date: Optional[date] = None
     status: Optional[UserOwnedCardStatus] = None
