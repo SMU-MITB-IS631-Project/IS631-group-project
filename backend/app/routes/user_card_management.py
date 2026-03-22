@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/user/cards", tags=["User Card Management"])
 
 @router.get("/", response_model=list[UserOwnedCardResponse])
+@router.get("/", response_model=list[UserOwnedCardResponse])
 def get_user_cards(
     cognito_sub: str = Depends(get_cognito_sub),
     db: Session = Depends(get_db),
@@ -24,6 +25,16 @@ def get_user_cards(
     Get all cards owned by the authenticated user.
     """
     try:
+        if not auth:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthenticated. Missing Authorization header.")
+
+        claims = cognito_service.validate_token(
+            auth
+        )
+        cognito_sub = claims.get("sub")
+        if not cognito_sub:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload.")
+
         service = UserCardManagementService(db)
         return service.get_user_cards(cognito_sub)
     except ServiceError as e:
@@ -41,6 +52,16 @@ def add_user_card(
     Add a card to the authenticated user's collection.
     """
     try:
+        if not auth:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthenticated. Missing Authorization header.")
+
+        claims = cognito_service.validate_token(
+            auth
+        )
+        cognito_sub = claims.get("sub")
+        if not cognito_sub:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthenticated. Invalid token payload.")
+
         return service.add_user_card(cognito_sub, card_data.card_id, card_data)
     except ServiceError as e:
         logger.error(f"Error adding user card: {e}")
