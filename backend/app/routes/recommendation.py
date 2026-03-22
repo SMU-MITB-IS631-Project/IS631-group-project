@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
 from app.dependencies.user_context import get_x_user_id
+from app.dependencies.auth import required_authenticated
 from app.models.card_bonus_category import BonusCategory
 from app.services.recommendation_service import RecommendationService
 from app.services.explanation_service import ExplanationService
@@ -100,7 +101,7 @@ def _resolve_user_id(user_id: Optional[int], x_user_id: Optional[str]) -> int:
     raise ValueError("user_id is required (query param) or x-user-id header must be an integer")
 
 
-@router.get("/recommendation", response_model=RecommendationResponse)
+@router.get("/recommendation", response_model=RecommendationResponse, dependencies=[Depends(required_authenticated)])
 def get_recommendation(
     request: Request,
     db: Session = Depends(get_db),
@@ -215,7 +216,7 @@ def get_recommendation(
         ranked_cards=[to_model(c) for c in ranked],
     )
 
-@router.post("/recommendation/explain", response_model=ExplanationResponse)
+@router.post("/recommendation/explain", response_model=ExplanationResponse, dependencies=[Depends(required_authenticated)])
 def recommend_and_explain(
     payload: RecommendationExplainRequest,
     request: Request,

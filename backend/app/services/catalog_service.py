@@ -1,10 +1,11 @@
 from decimal import Decimal
 from typing import Any, Dict
 
+from alembic.util import status
 from sqlalchemy.orm import Session
 
 from app.models.card_bonus_category import CardBonusCategory
-from app.models.card_catalogue import CardCatalogue, CardRewardUpdatePayload
+from app.models.card_catalogue import CardCatalogue, CardCatalogueCreate, CardRewardUpdatePayload
 from app.models.card_change_notification import CardChangeNotification
 from app.models.user_owned_cards import UserOwnedCard
 from app.services.errors import ServiceError
@@ -160,3 +161,26 @@ class CatalogService:
             "changed_fields": changed_fields,
             "notifications_created": notifications_created,
         }
+    
+    def create_card(self, card_data: CardCatalogueCreate) -> CardCatalogue:
+        new_card = CardCatalogue(**card_data.model_dump())
+        existing_card = self.db.query(CardCatalogue).filter(CardCatalogue.card_id == new_card.card_id).first()
+        if existing_card:
+            raise ServiceError(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                code="CARD_EXISTS",
+                message="A card with this ID already exists.",
+                details={"card_id": new_card.card_id}
+            )
+        self.db.add(new_card)
+        self.db.commit()
+        self.db.refresh(new_card)
+        return new_card
+    
+    def delete_card(self, card_id: int) -> bool:
+        card = self.db.query(CardCatalogue).filter(CardCatalogue.card_id == card_id).first()
+        if not card:
+            return False
+        self.db.delete(card)
+        self.db.commit()
+        return True
