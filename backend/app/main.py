@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -125,7 +126,9 @@ app.include_router(auth_router, prefix="", tags=["Auth"])
 app.include_router(notifications_router)
 
 # Mount the built frontend after API routes so /api endpoints keep priority.
-app.mount("/", StaticFiles(directory="backend/static", html=True), name="static")
+static_dir = (Path(__file__).resolve().parents[1] / "static")
+if static_dir.is_dir():
+    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 
 
 if __name__ == "__main__":
