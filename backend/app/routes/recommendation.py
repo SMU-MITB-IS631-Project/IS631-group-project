@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
-from app.dependencies.user_context import get_x_user_id
+from app.dependencies.user_context import get_x_user_id_int
 from app.models.card_bonus_category import BonusCategory
 from app.services.recommendation_service import RecommendationService
 from app.services.explanation_service import ExplanationService
@@ -92,19 +92,32 @@ class RecommendationExplainRequest(BaseModel):
 class RecommendationExplainResponse(RecommendationResponse):
     explanation: ExplanationResponse
 
-def _resolve_user_id(user_id: Optional[int], x_user_id: Optional[str]) -> int:
-    if user_id is not None:
-        return user_id
-    if x_user_id and x_user_id.isdigit():
-        return int(x_user_id)
-    raise ValueError("user_id is required (query param) or x-user-id header must be an integer")
+
+def _unauthorized_detail() -> dict[str, Any]:
+    return {
+        "error": {
+            "code": "UNAUTHORIZED",
+            "message": "Missing or invalid user context.",
+            "details": {"required_header": "x-user-id"},
+        }
+    }
+
+
+def _forbidden_detail() -> dict[str, Any]:
+    return {
+        "error": {
+            "code": "FORBIDDEN",
+            "message": "Cannot access recommendations for another user.",
+            "details": {},
+        }
+    }
 
 
 @router.get("/recommendation", response_model=RecommendationResponse)
 def get_recommendation(
     request: Request,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Depends(get_x_user_id),
+    header_user_id: int | None = Depends(get_x_user_id_int),
     user_id: Optional[int] = Query(default=None),
     category: Optional[BonusCategory] = Query(default=None),
     amount_sgd: Optional[Decimal] = Query(default=None),
@@ -116,18 +129,17 @@ def get_recommendation(
     - Queries active user cards from DB.
     - Queries reward rules (bonus categories) from DB.
     """
-    try:
-        resolved_user_id = _resolve_user_id(user_id, x_user_id)
-    except ValueError as exc:
+    if user_id is not None and header_user_id is not None and user_id != header_user_id:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": {
-                    "code": "VALIDATION_ERROR",
-                    "message": str(exc),
-                    "details": {},
-                }
-            },
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_forbidden_detail(),
+        )
+
+    resolved_user_id = user_id if user_id is not None else header_user_id
+    if resolved_user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_unauthorized_detail(),
         )
 
     # Allow amount_sgd=0 (frontend may omit spend context by sending 0).
@@ -220,31 +232,38 @@ def recommend_and_explain(
     payload: RecommendationExplainRequest,
     request: Request,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Depends(get_x_user_id),
+    header_user_id: int | None = Depends(get_x_user_id_int),
 ):
     source = "recommendation.explain"
-    # Resolve user_id from body or header
-    try:
-        resolved_user_id = _resolve_user_id(payload.user_id, x_user_id)
-    except ValueError as exc:
+    if payload.user_id is not None and header_user_id is not None and payload.user_id != header_user_id:
         _safe_log_genai_event(
             db,
             status="failed",
             request=request,
             source=source,
-            user_id=payload.user_id,
-            details={"reason": "missing_or_invalid_user_id"},
-            error_message=str(exc),
+            user_id=header_user_id,
+            details={"reason": "forbidden_user_mismatch"},
+            error_message="Cannot access recommendations for another user.",
         )
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": {
-                    "code": "VALIDATION_ERROR",
-                    "message": str(exc),
-                    "details": {},
-                }
-            },
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_forbidden_detail(),
+        )
+
+    resolved_user_id = payload.user_id if payload.user_id is not None else header_user_id
+    if resolved_user_id is None:
+        _safe_log_genai_event(
+            db,
+            status="failed",
+            request=request,
+            source=source,
+            user_id=None,
+            details={"reason": "missing_or_invalid_user_id"},
+            error_message="Missing or invalid user context.",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_unauthorized_detail(),
         )
 
     if payload.amount_sgd <= 0:
