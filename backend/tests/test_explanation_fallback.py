@@ -62,7 +62,6 @@ class TestExplanationFallback(unittest.TestCase):
                 UserProfile(
                     id=1,
                     username="test_user",
-                    password_hash="hash123",
                     benefits_preference=BenefitsPreference.cashback,
                 )
             )
@@ -96,7 +95,7 @@ class TestExplanationFallback(unittest.TestCase):
                 UserOwnedCard(
                     user_id=1,
                     card_id=1,
-                    status=UserOwnedCardStatus.active
+                    status=UserOwnedCardStatus.Active
                 )
             )
             db.commit()
@@ -333,7 +332,6 @@ def test_client():
             UserProfile(
                 id=1,
                 username="test_user",
-                password_hash="hash123",
                 benefits_preference=BenefitsPreference.cashback,
             )
         )
@@ -367,7 +365,7 @@ def test_client():
             UserOwnedCard(
                 user_id=1,
                 card_id=1,
-                status=UserOwnedCardStatus.active
+                    status=UserOwnedCardStatus.Active
             )
         )
         db.commit()

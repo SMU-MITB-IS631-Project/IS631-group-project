@@ -1,9 +1,9 @@
 from typing import Optional
-from sqlalchemy import Column, Date, Integer, String, DateTime, Enum as SAEnum, ForeignKey
+from sqlalchemy import Column, Date, Integer, Enum as SAEnum, ForeignKey, Float
 from app.db.db import Base
-from pydantic import BaseModel, ConfigDict, field_validator, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import relationship
-from datetime import datetime, timedelta, date
+from datetime import timedelta, date
 from enum import Enum as PyEnum
 
 class UserOwnedCardStatus(PyEnum):
@@ -31,7 +31,7 @@ class UserOwnedCard(Base):
     billing_cycle_refresh_date = Column(Date, default=get_billing_cycle_date, nullable=False)
     billing_cycle_refresh_day_of_month = Column(Integer, nullable=False, default=1)
     status = Column(SAEnum(UserOwnedCardStatus), nullable=False, default=UserOwnedCardStatus.Active)
-    cycle_spend_sgd: float = Field(0, ge=0)
+    cycle_spend_sgd = Column(Float, nullable=False, default=0.0)
 
     # Relationship with UserProfile
     user_profile = relationship("UserProfile", back_populates="user_owned_cards")

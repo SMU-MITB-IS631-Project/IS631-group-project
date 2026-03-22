@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import Mock
-from fastapi import HTTPException
 #from app.exceptions import ServiceException
 from app.services.catalog_service import CatalogService
 from app.models.card_catalogue import CardCatalogue

@@ -1,17 +1,10 @@
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-# Attempt to import ServiceException; provide fallback if module not available
-try:
-    from app.exceptions import ServiceException
-except ImportError:
-    class ServiceException(Exception):
-        """Fallback exception used when app.exceptions is missing (e.g., during tests)"""
-        pass
+from app.services.errors import ServiceError
 from app.models.transaction import UserTransaction
 from app.models.user_owned_cards import UserOwnedCard, UserOwnedCardStatus
 from app.models.card_catalogue import CardCatalogue
-from app.models.card_bonus_category import BonusCategory, CardBonusCategory
+from app.models.card_bonus_category import CardBonusCategory
 
 class RewardsEarnedService:
     def __init__(self, db_session: Session):
@@ -88,8 +81,6 @@ class RewardsEarnedService:
                 bonus_txn_amount = 0.0
                 total_txn_amount = 0.0
                 for txn in transactions:
-                    reward_rate = card.base_benefit_rate
-                    
                     # Check if transaction category matches any bonus category
                     if txn.category.value in bonus_categories:
                         bonus_txn_amount += float(txn.amount_sgd)
@@ -118,4 +109,9 @@ class RewardsEarnedService:
             return rewards_by_card
             
         except Exception as e:
-            raise ServiceException(f"Error calculating rewards earned: {str(e)}")
+            raise ServiceError(
+                status_code=500,
+                code="INTERNAL_SERVER_ERROR",
+                message="Error calculating rewards earned.",
+                details={"cause": str(e)},
+            )

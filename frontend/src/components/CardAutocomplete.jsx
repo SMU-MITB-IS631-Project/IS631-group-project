@@ -9,17 +9,13 @@ export default function CardAutocomplete({ cards, value, onChange, placeholder =
   const selectedCard = cards.find(c => c.card_id === value);
   const isVerified = !!selectedCard;
 
+  const inputValue = isOpen ? query : (selectedCard?.card_name || query);
+
   const filtered = cards.filter(c =>
     c.card_name.toLowerCase().includes(query.toLowerCase()) ||
     c.card_id.toLowerCase().includes(query.toLowerCase()) ||
     c.issuer.toLowerCase().includes(query.toLowerCase())
   );
-
-  useEffect(() => {
-    if (selectedCard && !query) {
-      setQuery(selectedCard.card_name);
-    }
-  }, [value]);
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -37,7 +33,7 @@ export default function CardAutocomplete({ cards, value, onChange, placeholder =
         <div className="relative flex-1">
           <input
             type="text"
-            value={query}
+            value={inputValue}
             placeholder={placeholder}
             onChange={e => {
               setQuery(e.target.value);

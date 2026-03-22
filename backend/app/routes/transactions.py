@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
 from app.dependencies.user_context import get_x_user_id
-from app.models.transaction import TransactionRequest, TransactionUpdate, TransactionStatus
+from app.models.transaction import TransactionRequest, TransactionUpdate
 from app.services.errors import ServiceError
 from app.services.transaction_service import TransactionService
 
@@ -54,6 +54,19 @@ def _forbidden_response() -> JSONResponse:
                 "code": "FORBIDDEN",
                 "message": "Cannot access transactions for another user.",
                 "details": {},
+            }
+        },
+    )
+
+
+def _service_error_response(exc: ServiceError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "details": exc.details or {},
             }
         },
     )
@@ -114,27 +127,7 @@ def create_transaction(
         transaction = service.create_transaction(user_id, request.transaction)
         return {"transaction": transaction}
     except ServiceError as exc:
-        raise HTTPException(
-            status_code=exc.status_code,
-            detail={
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details,
-                }
-            },
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": {
-                    "code": "INTERNAL_ERROR",
-                    "message": "Internal server error.",
-                    "details": {}
-                }
-            }
-        )
+        return _service_error_response(exc)
 
 
 @router.get("")
@@ -154,16 +147,7 @@ def list_transactions(
         transactions = service.get_user_transactions(user_id, sort_by_date_desc=True)
         return {"transactions": transactions}
     except ServiceError as exc:
-        raise HTTPException(
-            status_code=exc.status_code,
-            detail={
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details,
-                }
-            },
-        )
+        return _service_error_response(exc)
 
 
 @router.get("/{user_id}")
@@ -200,16 +184,7 @@ def get_user_transactions_by_id(
             db=db,
         )
     except ServiceError as exc:
-        raise HTTPException(
-            status_code=exc.status_code,
-            detail={
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details,
-                }
-            },
-        )
+        return _service_error_response(exc)
 
 
 @router.get("/user/{user_id}")
@@ -235,27 +210,23 @@ def list_transactions_by_user_id(
             db=db,
         )
     except ServiceError as exc:
-        raise HTTPException(
-            status_code=exc.status_code,
-            detail={
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details,
-                }
-            },
-        )
+        return _service_error_response(exc)
 
 
 @router.put("/{transaction_id}")
 def update_transaction(
     transaction_id: int,
-    request: TransactionUpdateRequest,
+    request: TransactionUpdateRequest | TransactionStatusUpdate,
+    http_request: Request,
     db: Session = Depends(get_db),
     user_id: Optional[str] = Depends(get_x_user_id),
 ) -> Dict[str, Any]:
     """
-    Update a transaction's fields (item, amount, category, etc.).
+    Update a transaction.
+
+    Backward-compatible behavior:
+    - If body is {"status": "..."}, update only status.
+    - If body is {"transaction": {...}}, update transaction fields.
     
     Path Parameters:
     - transaction_id: The transaction ID to update
@@ -277,81 +248,15 @@ def update_transaction(
     
     try:
         service = TransactionService(db)
+        if isinstance(request, TransactionStatusUpdate):
+            transaction = service.update_transaction_status(user_id, transaction_id, request.status)
+            return {"transaction": transaction}
+
         updates = request.transaction.model_dump(exclude_unset=True, by_alias=False)
         transaction = service.update_transaction(user_id, transaction_id, updates)
         return {"transaction": transaction}
     except ServiceError as exc:
-        raise HTTPException(
-            status_code=exc.status_code,
-            detail={
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details,
-                }
-            },
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": {
-                    "code": "INTERNAL_ERROR",
-                    "message": "Internal server error.",
-                    "details": {}
-                }
-            }
-        )
-
-
-@router.put("/{transaction_id}/status")
-def update_transaction_status(
-    transaction_id: int,
-    status_update: TransactionStatusUpdate,
-    http_request: Request,
-    db: Session = Depends(get_db),
-    user_id: Optional[str] = Depends(get_x_user_id),
-) -> Dict[str, Any]:
-    """
-    Update only a transaction's status (e.g., mark as deleted_with_card).
-    
-    Path Parameters:
-    - transaction_id: The transaction ID to update
-    
-    Request body:
-    {
-        "status": "deleted_with_card"
-    }
-    """
-    if not user_id:
-        return _unauthorized_response()
-    
-    try:
-        service = TransactionService(db)
-        transaction = service.update_transaction_status(user_id, transaction_id, status_update.status)
-        return {"transaction": transaction}
-    except ServiceError as exc:
-        raise HTTPException(
-            status_code=exc.status_code,
-            detail={
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details,
-                }
-            },
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": {
-                    "code": "INTERNAL_ERROR",
-                    "message": "Internal server error.",
-                    "details": {}
-                }
-            }
-        )
+        return _service_error_response(exc)
 
 
 @router.put("/bulk/status")
@@ -381,27 +286,27 @@ def bulk_update_transaction_status(
         count = service.bulk_update_transaction_status(user_id, bulk_update.transaction_ids, bulk_update.status)
         return {"count": count, "status": bulk_update.status}
     except ServiceError as exc:
-        raise HTTPException(
-            status_code=exc.status_code,
-            detail={
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details,
-                }
-            },
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": {
-                    "code": "INTERNAL_ERROR",
-                    "message": "Internal server error.",
-                    "details": {}
-                }
-            }
-        )
+        return _service_error_response(exc)
+
+
+@router.put("/{transaction_id}/status")
+def update_transaction_status(
+    transaction_id: int,
+    status_update: TransactionStatusUpdate,
+    http_request: Request,
+    db: Session = Depends(get_db),
+    user_id: Optional[str] = Depends(get_x_user_id),
+) -> Dict[str, Any]:
+    """Update only a transaction's status (e.g., mark as deleted_with_card)."""
+    if not user_id:
+        return _unauthorized_response()
+
+    try:
+        service = TransactionService(db)
+        transaction = service.update_transaction_status(user_id, transaction_id, status_update.status)
+        return {"transaction": transaction}
+    except ServiceError as exc:
+        return _service_error_response(exc)
 
 
 @router.delete("/{transaction_id}")
@@ -428,25 +333,5 @@ def delete_transaction(
         deleted_transaction = service.delete_transaction(user_id, transaction_id)
         return {"transaction": deleted_transaction}
     except ServiceError as exc:
-        raise HTTPException(
-            status_code=exc.status_code,
-            detail={
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details,
-                }
-            },
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": {
-                    "code": "INTERNAL_ERROR",
-                    "message": "Internal server error.",
-                    "details": {}
-                }
-            }
-        )
+        return _service_error_response(exc)
 

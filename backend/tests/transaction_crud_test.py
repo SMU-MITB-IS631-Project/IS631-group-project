@@ -45,8 +45,7 @@ class TransactionCRUDTests(unittest.TestCase):
                 UserProfile(
                     id=1,
                     username="testuser",
-                    password_hash="hashed_pw",
-                    benefits_preference=BenefitsPreference.Cashback,
+                    benefits_preference=BenefitsPreference.cashback,
                 )
             )
             # Card in catalog
@@ -141,9 +140,9 @@ class TransactionCRUDTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 400)
         data = resp.json()
-        self.assertIn("detail", data)
-        self.assertEqual(data["detail"]["error"]["code"], "VALIDATION_ERROR")
-        self.assertIn("not found in user wallet", data["detail"]["error"]["message"])
+        error = data.get("error") or data.get("detail", {}).get("error", {})
+        self.assertEqual(error.get("code"), "VALIDATION_ERROR")
+        self.assertIn("not found in user wallet", error.get("message", ""))
 
     def test_create_transaction_no_user_header(self):
         """Test creating transaction without x-user-id header"""
@@ -260,7 +259,8 @@ class TransactionCRUDTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 404)
         data = resp.json()
-        self.assertEqual(data["detail"]["error"]["code"], "NOT_FOUND")
+        error = data.get("error") or data.get("detail", {}).get("error", {})
+        self.assertEqual(error.get("code"), "NOT_FOUND")
 
     def test_update_transaction_invalid_card(self):
         """Test updating transaction with invalid card_id"""
@@ -275,7 +275,8 @@ class TransactionCRUDTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 400)
         data = resp.json()
-        self.assertEqual(data["detail"]["error"]["code"], "VALIDATION_ERROR")
+        error = data.get("error") or data.get("detail", {}).get("error", {})
+        self.assertEqual(error.get("code"), "VALIDATION_ERROR")
 
     def test_update_transaction_clear_nullable_field(self):
         """Test clearing a nullable field (category) by setting to null"""
@@ -314,8 +315,9 @@ class TransactionCRUDTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 400)
         data = resp.json()
-        self.assertEqual(data["detail"]["error"]["code"], "VALIDATION_ERROR")
-        self.assertIn("cannot be null", data["detail"]["error"]["message"])
+        error = data.get("error") or data.get("detail", {}).get("error", {})
+        self.assertEqual(error.get("code"), "VALIDATION_ERROR")
+        self.assertIn("cannot be null", error.get("message", ""))
 
     # ========== PUT (STATUS ONLY) TESTS ==========
 
@@ -342,7 +344,8 @@ class TransactionCRUDTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 400)
         data = resp.json()
-        self.assertEqual(data["detail"]["error"]["code"], "VALIDATION_ERROR")
+        error = data.get("error") or data.get("detail", {}).get("error", {})
+        self.assertEqual(error.get("code"), "VALIDATION_ERROR")
 
     # ========== DELETE TESTS ==========
 
@@ -374,7 +377,8 @@ class TransactionCRUDTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 404)
         data = resp.json()
-        self.assertEqual(data["detail"]["error"]["code"], "NOT_FOUND")
+        error = data.get("error") or data.get("detail", {}).get("error", {})
+        self.assertEqual(error.get("code"), "NOT_FOUND")
 
     def test_delete_transaction_no_user_header(self):
         """Test deleting without user header"""
