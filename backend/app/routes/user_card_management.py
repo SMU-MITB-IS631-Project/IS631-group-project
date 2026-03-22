@@ -31,6 +31,20 @@ except Exception:
     cognito_service = _CognitoServiceFallback()
 
 
+def _raise_http_from_service_exception(exc: ServiceException | ServiceError) -> None:
+    if isinstance(exc, ServiceException):
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+    raise HTTPException(
+        status_code=exc.status_code,
+        detail={
+            "code": exc.code,
+            "message": exc.message,
+            "details": exc.details,
+        },
+    )
+
+
 def get_cognito_sub_from_auth_header(
     auth: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ) -> str:
@@ -68,9 +82,9 @@ def get_user_cards(
     """
     try:
         return service.get_user_cards(cognito_sub)
-    except ServiceError as e:
-        logger.error(f"Error fetching user cards: {e}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    except (ServiceException, ServiceError) as exc:
+        logger.error("Error fetching user cards: %s", exc)
+        _raise_http_from_service_exception(exc)
     
 
 @router.post("", response_model=UserOwnedCardResponse, status_code=status.HTTP_201_CREATED)
@@ -84,9 +98,9 @@ def add_user_card(
     """
     try:
         return service.add_user_card(cognito_sub, card_data.card_id, card_data)
-    except ServiceError as e:
-        logger.error(f"Error adding user card: {e}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)    
+    except (ServiceException, ServiceError) as exc:
+        logger.error("Error adding user card: %s", exc)
+        _raise_http_from_service_exception(exc)
 
     
 @router.put("/{card_id}", response_model=UserOwnedCardResponse)
@@ -101,9 +115,9 @@ def update_user_card(
     """
     try:
         return service.update_user_card(cognito_sub, card_id, card_data)
-    except ServiceError as e:
-        logger.error(f"Error updating user card: {e}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    except (ServiceException, ServiceError) as exc:
+        logger.error("Error updating user card: %s", exc)
+        _raise_http_from_service_exception(exc)
     
 
 @router.delete("/{card_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -117,6 +131,6 @@ def remove_user_card(
     """
     try:
         service.remove_user_card(cognito_sub, card_id)
-    except ServiceError as e:
-        logger.error(f"Error removing user card: {e}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    except (ServiceException, ServiceError) as exc:
+        logger.error("Error removing user card: %s", exc)
+        _raise_http_from_service_exception(exc)
