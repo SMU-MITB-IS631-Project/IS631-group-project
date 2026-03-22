@@ -8,11 +8,13 @@ pypdf==5.1.0
 langchain-community==0.3.14
 langchain-openai==0.2.14
 python-dotenv==1.0.1
-
+boto3==1.28.13
+python-jose==3.3.0
 slowapi
 
 # Testing dependencies
 pytest==8.3.4
+pytest-cov==7.0.0
 pytest-mock==3.14.0
 pytest-asyncio==0.24.0
 

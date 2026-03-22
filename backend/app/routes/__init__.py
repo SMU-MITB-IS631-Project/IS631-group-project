@@ -5,6 +5,8 @@ from .user_profile import router as user_profile_router
 from .recommendation import router as recommendation_router
 from .card_reasoner import router as card_reasoner_router
 from .rewards_earned import router as rewards_earned_router
+from .auth import router as auth_router
+from .notifications import router as notifications_router
 
 __all__ = [
     "transactions_router",
@@ -14,4 +16,6 @@ __all__ = [
     "recommendation_router",
     "card_reasoner_router",
     "rewards_earned_router",
+    "auth_router",
+    "notifications_router",
 ]

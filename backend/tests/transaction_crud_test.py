@@ -108,7 +108,7 @@ class TransactionCRUDTests(unittest.TestCase):
                     "amount_sgd": 120.50,
                     "item": "GrabFood",
                     "channel": "online",
-                    "category": "food",
+                    "category": "Food",
                     "is_overseas": False,
                     "date": "2026-03-04",
                 }
@@ -181,8 +181,8 @@ class TransactionCRUDTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 400)  # Validation error
         data = resp.json()
-        self.assertIn("detail", data)
-        # Should be caught by Pydantic validation
+        self.assertIn("error", data)
+        self.assertEqual(data["error"]["code"], "VALIDATION_ERROR")
 
     # ========== GET TESTS ==========
 
@@ -216,7 +216,7 @@ class TransactionCRUDTests(unittest.TestCase):
                 "transaction": {
                     "item": "Updated Item",
                     "amount_sgd": 75.00,
-                    "category": "shopping",
+                    "category": "Fashion",
                 }
             },
         )
@@ -226,9 +226,26 @@ class TransactionCRUDTests(unittest.TestCase):
         txn = data["transaction"]
         self.assertEqual(txn["item"], "Updated Item")
         self.assertEqual(float(txn["amount_sgd"]), 75.00)
-        self.assertEqual(txn["category"], "shopping")
+        self.assertEqual(txn["category"].lower(), "fashion")
         # Unchanged fields should remain
         self.assertEqual(txn["channel"], "online")
+
+    def test_update_transaction_accepts_lowercase_category(self):
+        """Frontend sends lowercase category labels; update should still pass."""
+        resp = self.client.put(
+            "/api/v1/transactions/100",
+            headers={"x-user-id": "1"},
+            json={
+                "transaction": {
+                    "item": "Updated Item Lowercase Category",
+                    "category": "food",
+                }
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        txn = resp.json()["transaction"]
+        self.assertEqual(txn["item"], "Updated Item Lowercase Category")
+        self.assertEqual(txn["category"], "food")
 
     def test_update_transaction_not_found(self):
         """Test updating non-existent transaction"""
@@ -378,7 +395,7 @@ class TransactionCRUDTests(unittest.TestCase):
                     "amount_sgd": 200.00,
                     "item": "CRUD Test",
                     "channel": "offline",
-                    "category": "entertainment",
+                    "category": "Entertainment",
                     "is_overseas": False,
                 }
             },

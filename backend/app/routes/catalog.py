@@ -1,11 +1,8 @@
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
 
-from app.models.card_catalogue import CardCatalogue, CardCatalogueResponse
-from app.models.user_owned_cards import UserOwnedCardResponse
+from app.models.card_catalogue import CardCatalogueResponse, CardRewardUpdateRequest
 from app.services.catalog_service import CatalogService
+from app.services.errors import ServiceError
 from app.dependencies.services import get_catalog_service
 
 router = APIRouter(
@@ -13,48 +10,40 @@ router = APIRouter(
     tags=["catalog"]
 )
 
-def _unauthorized_response() -> JSONResponse:
-    return JSONResponse(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        content={
-            "error": {
-                "code": "UNAUTHORIZED",
-                "message": "Missing or invalid user context.",
-                "details": {"required_header": "x-user-id"},
-            }
-        },
-    )
-
 @router.get("/", response_model=list[CardCatalogueResponse])
 def get_catalog(service: CatalogService = Depends(get_catalog_service)):
     return service.get_catalog()
 
-@router.post("/{card_id}/add", response_model=UserOwnedCardResponse, status_code=status.HTTP_201_CREATED)
-def add_user_owned_card(
+
+@router.put("/{card_id}/rewards")
+def update_card_rewards(
     card_id: int,
-    user_id: int,
-    card_expiry_date: datetime | None = None,
-    billing_cycle_refresh_date: datetime | None = None,
+    request: CardRewardUpdateRequest,
     service: CatalogService = Depends(get_catalog_service),
 ):
-    if not user_id:
-        return _unauthorized_response()
-    
     try:
-        return service.add_user_owned_card(
-            user_id=user_id,
-            card_id=card_id,
-            card_expiry_date=card_expiry_date,
-            billing_cycle_refresh_date=billing_cycle_refresh_date
-        )
-    except ValueError as exc:
+        return {
+            "update_result": service.update_card_rewards(card_id, request.reward_update)
+        }
+    except ServiceError as exc:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=exc.status_code,
             detail={
                 "error": {
-                    "code": "NOT_FOUND",
-                    "message": str(exc),
-                    "details": {"user_id": user_id, "card_id": card_id},
+                    "code": exc.code,
+                    "message": exc.message,
+                    "details": exc.details,
+                }
+            },
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": "Internal server error.",
+                    "details": {},
                 }
             },
         )

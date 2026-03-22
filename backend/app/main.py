@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -19,6 +20,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
 from app.routes import (
@@ -29,6 +31,8 @@ from app.routes import (
     card_reasoner_router,
     user_profile_router,
     rewards_earned_router,
+    auth_router,
+    notifications_router,
 )
 from app.services import init_sample_data
 
@@ -118,6 +122,13 @@ app.include_router(user_profile_router)
 app.include_router(recommendation_router)
 app.include_router(card_reasoner_router)
 app.include_router(rewards_earned_router)
+app.include_router(auth_router, prefix="", tags=["Auth"])
+app.include_router(notifications_router)
+
+# Mount the built frontend after API routes so /api endpoints keep priority.
+static_dir = (Path(__file__).resolve().parents[1] / "static")
+if static_dir.is_dir():
+    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 
 
 if __name__ == "__main__":

@@ -6,8 +6,9 @@ import {
   loadCardsMaster, loadUserProfileFromAPI, loadTransactions,
   getCurrentMonthKey, shiftMonth, formatMonthLabel,
   filterTransactionsByMonth, getMonthSummary, getCardSpendForMonth,
-  getAvailableMonths, convertCardId, postRegistrationTransactions,
+  getAvailableMonths, convertCardId, postRegistrationTransactions, saveTransactions,
 } from '../utils/dataAdapter';
+import API_BASE_URL from '../utils/apiBaseUrl';
 
 function formatDateDMonYYYY(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
@@ -84,7 +85,7 @@ export default function Dashboard() {
         return;
       }
 
-      const response = await fetch(`http://localhost:8000/api/v1/user_cards/${cardId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/user_cards/${cardId}`, {
         method: 'DELETE',
         headers: {
           'x-user-id': userId,
@@ -133,7 +134,7 @@ export default function Dashboard() {
         },
       };
 
-      const response = await fetch('http://localhost:8000/api/v1/user_cards', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/user_cards`, {
         method: 'POST',
         headers: {
           'x-user-id': userId,
@@ -147,14 +148,17 @@ export default function Dashboard() {
         const updatedProfile = await loadUserProfileFromAPI();
         setProfile(updatedProfile);
 
+        let registrationTransactionCreated = false;
+
         // Create registration transaction for this card if cycle_spend > 0
         if (addCardModal.cycleSpend && parseFloat(addCardModal.cycleSpend) > 0) {
           try {
             const userId = localStorage.getItem('cardtrack_user_id');
-            await postRegistrationTransactions(userId, [{
+            const created = await postRegistrationTransactions(userId, [{
               card_id: addCardModal.selectedCardId,
               cycle_spend_sgd: addCardModal.cycleSpend,
             }]);
+            registrationTransactionCreated = Array.isArray(created) && created.length > 0;
           } catch (txnError) {
             console.warn('Failed to create registration transaction:', txnError);
           }
@@ -162,7 +166,35 @@ export default function Dashboard() {
 
         // Refresh transactions to show any new registration transaction
         const updatedTransactions = await loadTransactions();
-        setTransactions(updatedTransactions);
+
+        // Fallback: if backend did not return the registration transaction yet,
+        // keep the entered cycle spend visible in card overview immediately.
+        if (addCardModal.cycleSpend && parseFloat(addCardModal.cycleSpend) > 0 && !registrationTransactionCreated) {
+          const today = new Date().toISOString().split('T')[0];
+          const fallbackTxn = {
+            id: `local-reg-${Date.now()}`,
+            date: today,
+            item: 'registration',
+            amount_sgd: parseFloat(addCardModal.cycleSpend),
+            card_id: addCardModal.selectedCardId,
+            channel: 'online',
+            category: 'others',
+            is_overseas: false,
+            status: 'active',
+          };
+
+          const alreadyPresent = updatedTransactions.some((txn) =>
+            String(txn.card_id) === String(fallbackTxn.card_id) &&
+            Number(txn.amount_sgd) === Number(fallbackTxn.amount_sgd) &&
+            String(txn.item || '').trim().toLowerCase() === 'registration'
+          );
+
+          const mergedTransactions = alreadyPresent ? updatedTransactions : [...updatedTransactions, fallbackTxn];
+          saveTransactions(mergedTransactions);
+          setTransactions(mergedTransactions);
+        } else {
+          setTransactions(updatedTransactions);
+        }
 
         setAddCardModal({ show: false, selectedCardId: '', refreshDay: 1, billingDate: '', cycleSpend: '', isAdding: false });
       } else {
@@ -488,26 +520,41 @@ export default function Dashboard() {
                 const card = cardsMaster.find(c => c.card_id === wc.card_id);
                 const spend = getCardSpendForMonth(monthTxns, wc.card_id);
                 const expired = isCardExpired(wc.annual_fee_billing_date);
+                const handleOpenCardBonus = () => navigate(`/cards/bonus/${wc.card_id}`);
                 return (
                   <div
                     key={wc.card_id}
-                    className={`flex items-center gap-3 group rounded-[12px] px-2 py-2 ${expired ? 'bg-gray-200/65 border border-gray-300/80' : ''}`}
+                    className={`flex items-center gap-3 group rounded-[12px] px-2 py-2 transition-colors ${expired ? 'bg-gray-200/65 border border-gray-300/80 hover:bg-gray-200/80' : 'hover:bg-white/50'}`}
                   >
-                    <CardThumbnail imagePath={card?.image_path} name={card?.card_name} size="md" />
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-medium truncate ${expired ? 'text-gray-600' : 'text-text'}`}>{card?.card_name || wc.card_id}</div>
+                    <button
+                      type="button"
+                      onClick={handleOpenCardBonus}
+                      className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+                      aria-label={`View bonus details for ${card?.card_name || wc.card_id}`}
+                    >
+                      <CardThumbnail imagePath={card?.image_path} name={card?.card_name} size="md" />
+                    </button>
+                    <div className="flex-1 min-w-0 pr-2">
+                      <button
+                        type="button"
+                        onClick={handleOpenCardBonus}
+                        className={`block w-full text-sm font-medium truncate text-left hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 rounded-sm ${expired ? 'text-gray-600' : 'text-text'}`}
+                      >
+                        {card?.card_name || wc.card_id}
+                      </button>
                       <div className={`text-xs ${expired ? 'text-gray-500' : 'text-muted'}`}>
                         {wc.annual_fee_billing_date || 'Not set'}{expired ? ' (Expired)' : ''}
                       </div>
                     </div>
-                    <div className={`text-sm font-semibold ${expired ? 'text-gray-600' : 'text-text'}`}>
+                    <div className={`w-[88px] shrink-0 text-right text-sm font-semibold tabular-nums ${expired ? 'text-gray-600' : 'text-text'}`}>
                       ${spend.toFixed(2)}
                     </div>
                     <button
                       type="button"
                       className={`ml-2 p-2 rounded-lg transition-all opacity-0 group-hover:opacity-100 ${expired ? 'text-gray-500 hover:text-red-500 hover:bg-red-100' : 'text-muted hover:text-red-500 hover:bg-red-50'}`}
                       title="Delete card"
-                      onClick={() => {
+                      onClick={(event) => {
+                        event.stopPropagation();
                         setDeleteCardModal({ show: true, cardId: wc.id, cardName: card?.card_name || wc.card_id });
                       }}
                     >

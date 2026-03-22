@@ -29,6 +29,7 @@ class UserOwnedCard(Base):
     card_id = Column(Integer, ForeignKey("card_catalogue.card_id", ondelete="CASCADE"), nullable=False)
     card_expiry_date = Column(Date, default=lambda: date(9999,1,1), nullable=False)
     billing_cycle_refresh_date = Column(Date, default=get_billing_cycle_date, nullable=False)
+    billing_cycle_refresh_day_of_month = Column(Integer, nullable=False, default=1)
     status = Column(SAEnum(UserOwnedCardStatus), nullable=False, default=UserOwnedCardStatus.Active)
     cycle_spend_sgd: float = Field(0, ge=0)
 
@@ -39,25 +40,25 @@ class UserOwnedCard(Base):
 # Pydantic Models for Request/Response Validation
 class UserOwnedCardBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    user_id: int
     card_id: int
-    card_expiry_date: date = date(9999,1,1)
-    billing_cycle_refresh_date: date = Field(default_factory=get_billing_cycle_date)
-    status: UserOwnedCardStatus = UserOwnedCardStatus.Active
-    cycle_spend_sgd: float = Field(0, ge=0)
-
 
 class UserOwnedCardCreate(UserOwnedCardBase):
-    pass
+    card_expiry_date: date = date(9999,1,1)
+    billing_cycle_refresh_date: date = Field(default_factory=get_billing_cycle_date)
+    billing_cycle_refresh_day_of_month: int = Field(1, ge=1, le=31) 
 
 class UserOwnedCardUpdate(BaseModel):
     billing_cycle_refresh_date: Optional[date] = None
+    billing_cycle_refresh_day_of_month: Optional[int] = Field(None, ge=1, le=31)
     card_expiry_date: Optional[date] = None
-    cycle_spend_sgd: Optional[float] = Field(None, ge=0)
     status: Optional[UserOwnedCardStatus] = None
 
 class UserOwnedCardResponse(UserOwnedCardBase):
     id: int | None = None  # Optional for JSON-backed wallet
+    card_expiry_date: date
+    billing_cycle_refresh_date: date
+    billing_cycle_refresh_day_of_month: int
+    status: UserOwnedCardStatus
 
 class UserOwnedCardWrappedResponse(BaseModel):
     """Envelope response for wallet endpoints."""

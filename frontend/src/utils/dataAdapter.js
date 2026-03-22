@@ -1,9 +1,9 @@
 import { parseCSV } from './csv';
+import API_BASE_URL from './apiBaseUrl';
 
 const PROFILE_KEY = 'cardtrack_user_profile';
 const TXN_KEY = 'cardtrack_transactions';
 const USER_ID_KEY = 'cardtrack_user_id';
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // --- User Context ---
 // TODO: Replace with actual user authentication/context
@@ -206,19 +206,33 @@ export async function postRegistrationTransactions(userId, walletCards) {
     }));
 
   if (payloads.length === 0) {
-    return;
+    return [];
   }
 
-  await Promise.all(payloads.map(payload =>
-    fetch(`${API_BASE_URL}/api/v1/transactions`, {
+  const responses = await Promise.all(payloads.map(async (payload) => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/transactions`, {
       method: 'POST',
       headers: {
         'x-user-id': String(userId),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
-    })
-  ));
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create registration transaction: ${response.status} ${errorText}`);
+    }
+
+    try {
+      const data = await response.json();
+      return data?.transaction || null;
+    } catch {
+      return null;
+    }
+  }));
+
+  return responses.filter(Boolean);
 }
 
 async function postUserCards(userId, walletCards) {
@@ -253,6 +267,11 @@ async function postUserCards(userId, walletCards) {
  */
 export async function registerUser(username, password, name, email, preference, wallet) {
   try {
+    // Convert preference to proper enum format (capitalize first letter)
+    const normalizedPreference = preference 
+      ? preference.charAt(0).toUpperCase() + preference.slice(1)
+      : 'No preference';
+    
     const response = await fetch(`${API_BASE_URL}/api/v1/user_profile`, {
       method: 'POST',
       headers: {
@@ -263,7 +282,7 @@ export async function registerUser(username, password, name, email, preference, 
         password: password.trim(),
         name: name || null,
         email: email || null,
-        benefits_preference: preference || 'no preference',
+        benefits_preference: normalizedPreference,
       }),
     });
 
@@ -398,12 +417,15 @@ export async function loadTransactions(options = {}) {
       card_id: convertBackendCardId(txn.card_id)
     }));
 
+    const mergedTransactions = mergePendingLocalTransactions(mappedTransactions);
+    saveTransactions(mergedTransactions);
+
     if (includeDeleted) {
-      return mappedTransactions;
+      return mergedTransactions;
     }
 
     // Default behavior for dashboard and existing flows.
-    return mappedTransactions.filter(txn => {
+    return mergedTransactions.filter(txn => {
       const status = (txn.status || '').toLowerCase();
       return status !== 'deleted_with_card' && status !== 'deletedwithcard';
     });
@@ -420,6 +442,44 @@ export async function loadTransactions(options = {}) {
 
 export function saveTransactions(txns) {
   localStorage.setItem(TXN_KEY, JSON.stringify(txns));
+}
+
+function mergePendingLocalTransactions(serverTransactions) {
+  const raw = localStorage.getItem(TXN_KEY);
+  if (!raw) {
+    return serverTransactions;
+  }
+
+  let cachedTransactions = [];
+  try {
+    cachedTransactions = JSON.parse(raw);
+  } catch {
+    return serverTransactions;
+  }
+
+  const pendingLocalTransactions = (cachedTransactions || []).filter((txn) =>
+    typeof txn?.id === 'string' && txn.id.startsWith('local-reg-')
+  );
+
+  if (pendingLocalTransactions.length === 0) {
+    return serverTransactions;
+  }
+
+  const mergedTransactions = [...serverTransactions];
+  pendingLocalTransactions.forEach((pendingTxn) => {
+    const hasServerMatch = serverTransactions.some((serverTxn) =>
+      String(serverTxn.item || '').trim().toLowerCase() === 'registration' &&
+      String(pendingTxn.item || '').trim().toLowerCase() === 'registration' &&
+      String(serverTxn.card_id) === String(pendingTxn.card_id) &&
+      Number(serverTxn.amount_sgd) === Number(pendingTxn.amount_sgd)
+    );
+
+    if (!hasServerMatch) {
+      mergedTransactions.push(pendingTxn);
+    }
+  });
+
+  return mergedTransactions;
 }
 
 export async function appendTransaction(txn) {
@@ -506,17 +566,21 @@ export async function updateTransactionById(transactionId, transactionPatch) {
 
 export async function deleteTransactionById(transactionId) {
   const userId = getCurrentUserId();
-  const response = await fetch(`${API_BASE_URL}/api/v1/transactions/${transactionId}/status`, {
-    method: 'PUT',
+  const response = await fetch(`${API_BASE_URL}/api/v1/transactions/${transactionId}`, {
+    method: 'DELETE',
     headers: {
       'x-user-id': userId,
-      'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ status: 'deleted_with_card' }),
   });
 
   if (!response.ok) {
     throw new Error(`Failed to delete transaction: ${response.statusText}`);
+  }
+
+  try {
+    return await response.json();
+  } catch {
+    return null;
   }
 }
 

@@ -171,6 +171,27 @@ def test_get_transactions_for_specific_user(client: TestClient):
     assert transactions[0]["id"] == created["id"]
 
 
+def test_get_transactions_for_specific_user_new_endpoint(client: TestClient):
+    created = _create_transaction(client)
+
+    response = client.get("/api/v1/transactions/user/1", headers=USER_HEADERS)
+
+    assert response.status_code == 200
+    transactions = response.json()["transactions"]
+    assert len(transactions) == 1
+    assert transactions[0]["id"] == created["id"]
+
+
+def test_get_transactions_for_specific_user_forbidden_when_mismatch(client: TestClient):
+    _create_transaction(client)
+
+    response = client.get("/api/v1/transactions/user/2", headers=USER_HEADERS)
+
+    assert response.status_code == 403
+    error = response.json()["error"]
+    assert error["code"] == "FORBIDDEN"
+
+
 def test_update_transaction_status(client: TestClient):
     created = _create_transaction(client)
 

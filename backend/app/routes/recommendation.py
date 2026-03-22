@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
+from app.dependencies.user_context import get_x_user_id
 from app.models.card_bonus_category import BonusCategory
 from app.services.recommendation_service import RecommendationService
 from app.services.explanation_service import ExplanationService
@@ -65,6 +66,8 @@ class RecommendationCard(BaseModel):
     effective_benefit_rate: float
     applied_bonus_category: Optional[str] = None
     bonus_rules: list[dict[str, Any]]
+    min_spend_required_sgd: int
+    current_cycle_spend_sgd: float
 
     reward_unit: str
     estimated_reward_value: float
@@ -89,12 +92,11 @@ class RecommendationExplainRequest(BaseModel):
 class RecommendationExplainResponse(RecommendationResponse):
     explanation: ExplanationResponse
 
-def _parse_user_id(request: Request, user_id: Optional[int]) -> int:
+def _resolve_user_id(user_id: Optional[int], x_user_id: Optional[str]) -> int:
     if user_id is not None:
         return user_id
-    header = request.headers.get("x-user-id")
-    if header and header.strip().isdigit():
-        return int(header.strip())
+    if x_user_id and x_user_id.isdigit():
+        return int(x_user_id)
     raise ValueError("user_id is required (query param) or x-user-id header must be an integer")
 
 
@@ -102,6 +104,7 @@ def _parse_user_id(request: Request, user_id: Optional[int]) -> int:
 def get_recommendation(
     request: Request,
     db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Depends(get_x_user_id),
     user_id: Optional[int] = Query(default=None),
     category: Optional[BonusCategory] = Query(default=None),
     amount_sgd: Optional[Decimal] = Query(default=None),
@@ -114,7 +117,7 @@ def get_recommendation(
     - Queries reward rules (bonus categories) from DB.
     """
     try:
-        resolved_user_id = _parse_user_id(request, user_id)
+        resolved_user_id = _resolve_user_id(user_id, x_user_id)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -184,6 +187,8 @@ def get_recommendation(
                 }
                 for r in dto.bonus_rules
             ],
+            min_spend_required_sgd=dto.min_spend_required_sgd,
+            current_cycle_spend_sgd=float(dto.current_cycle_spend_sgd),
 
             reward_unit=dto.reward_unit,
             estimated_reward_value=as_json_number(dto.estimated_reward_value, reward_unit=unit),
@@ -215,11 +220,12 @@ def recommend_and_explain(
     payload: RecommendationExplainRequest,
     request: Request,
     db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Depends(get_x_user_id),
 ):
     source = "recommendation.explain"
     # Resolve user_id from body or header
     try:
-        resolved_user_id = _parse_user_id(request, payload.user_id)
+        resolved_user_id = _resolve_user_id(payload.user_id, x_user_id)
     except ValueError as exc:
         _safe_log_genai_event(
             db,
@@ -329,6 +335,8 @@ def recommend_and_explain(
                 }
                 for r in dto.bonus_rules
             ],
+            min_spend_required_sgd=dto.min_spend_required_sgd,
+            current_cycle_spend_sgd=float(dto.current_cycle_spend_sgd),
             reward_unit=dto.reward_unit,
             estimated_reward_value=as_json_number(dto.estimated_reward_value, reward_unit=unit),
             effective_rate_str=dto.effective_rate_str,

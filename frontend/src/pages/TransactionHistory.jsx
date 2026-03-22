@@ -4,6 +4,7 @@ import CardSurface from '../components/CardSurface';
 import { CardThumbnail } from '../components/CardAutocomplete';
 import {
   loadCardsMaster,
+  loadUserProfile,
   loadTransactions,
   loadUserOwnedCards,
   updateTransactionById,
@@ -32,7 +33,14 @@ export default function TransactionHistory() {
   const [cardsMaster, setCardsMaster] = useState([]);
   const [ownedCards, setOwnedCards] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [profile, setProfile] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [deleteTransactionModal, setDeleteTransactionModal] = useState({
+    show: false,
+    transactionId: null,
+    itemName: null,
+    isDeleting: false,
+  });
   const [form, setForm] = useState({
     item: '',
     amount_sgd: '',
@@ -53,6 +61,7 @@ export default function TransactionHistory() {
           loadCardsMaster(),
           loadUserOwnedCards(),
         ]);
+        setProfile(loadUserProfile());
         const filtered = (txns || []).filter(txn => (txn.item || '').trim().toLowerCase() !== 'registration');
         setTransactions(filtered);
         setCardsMaster(cards || []);
@@ -127,13 +136,16 @@ export default function TransactionHistory() {
 
   async function onDelete(transactionId) {
     try {
+      setDeleteTransactionModal(prev => ({ ...prev, isDeleting: true }));
       setError('');
       await deleteTransactionById(transactionId);
       setTransactions(prev => prev.filter(txn => txn.id !== transactionId));
       if (editingId === transactionId) {
         setEditingId(null);
       }
+      setDeleteTransactionModal({ show: false, transactionId: null, itemName: null, isDeleting: false });
     } catch (err) {
+      setDeleteTransactionModal(prev => ({ ...prev, isDeleting: false }));
       setError(err?.message || 'Failed to delete transaction.');
     }
   }
@@ -156,6 +168,40 @@ export default function TransactionHistory() {
         <CardSurface className="mb-4 border border-red-300/40">
           <p className="text-sm text-red-600">{error}</p>
         </CardSurface>
+      )}
+
+      {deleteTransactionModal.show && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="w-full max-w-[280px] p-6 bg-gradient-to-b from-gray-50 to-gray-100 rounded-[18px] shadow-[0_10px_32px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.5)]">
+            <h2 className="text-lg font-semibold text-primary-dark mb-2">Delete Transaction?</h2>
+            {deleteTransactionModal.isDeleting ? (
+              <div className="flex flex-col items-center justify-center py-6">
+                <div className="relative w-8 h-8 mb-3">
+                  <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-purple-500 border-r-purple-500 animate-spin"></div>
+                </div>
+                <p className="text-sm text-muted">Deleting in progress...</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-muted mb-6">{profile?.username || 'User'}, are you sure you want to delete <span className="font-medium">{deleteTransactionModal.itemName}</span>? This cannot be undone.</p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setDeleteTransactionModal({ show: false, transactionId: null, itemName: null, isDeleting: false })}
+                    className="flex-1 h-10 border border-border text-text font-medium rounded-lg hover:bg-white/60 transition-all text-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => onDelete(deleteTransactionModal.transactionId)}
+                    className="flex-1 h-10 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-all text-sm"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       <CardSurface className="mb-4">
@@ -213,7 +259,12 @@ export default function TransactionHistory() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => onDelete(txn.id)}
+                              onClick={() => setDeleteTransactionModal({
+                                show: true,
+                                transactionId: txn.id,
+                                itemName: txn.item || 'this transaction',
+                                isDeleting: false,
+                              })}
                               className="text-xs font-medium text-red-600 hover:text-red-700"
                             >
                               Delete

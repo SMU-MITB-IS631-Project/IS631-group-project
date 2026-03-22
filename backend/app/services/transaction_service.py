@@ -47,7 +47,7 @@ class TransactionService:
 
     def _card_exists_in_wallet(self, user_id: int, card_id: int) -> bool:
         return (
-            self.db.query(UserOwnedCard)
+            self.db.query(UserOwnedCard.card_id)
             .filter(
                 UserOwnedCard.user_id == user_id,
                 UserOwnedCard.card_id == card_id,
@@ -341,13 +341,16 @@ class TransactionService:
         # Validate card_id if being updated
         if "card_id" in updates and updates["card_id"] is not None:
             card_id = self._parse_card_id(updates["card_id"])
-            if not self._card_exists_in_wallet(resolved_user_id, card_id):
-                raise ServiceError(
-                    400,
-                    "VALIDATION_ERROR",
-                    f"card_id '{card_id}' not found in user wallet",
-                    {},
-                )
+            # Avoid wallet lookup when card is unchanged; this keeps updates resilient
+            # for legacy rows where unrelated wallet date fields may be malformed.
+            if card_id != transaction.card_id:
+                if not self._card_exists_in_wallet(resolved_user_id, card_id):
+                    raise ServiceError(
+                        400,
+                        "VALIDATION_ERROR",
+                        f"card_id '{card_id}' not found in user wallet",
+                        {},
+                    )
             updates["card_id"] = card_id
         
         # Apply updates (allow None for nullable fields, skip None for others)

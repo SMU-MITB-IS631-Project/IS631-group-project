@@ -1,239 +1,103 @@
-"""User card management routes.
-
-Implements Sprint 1 assigned user stories:
-- View user-owned cards (GET /api/v1/user_cards)
-- Edit user-owned cards (PUT /api/v1/user_cards/{id})
-- Delete user-owned cards (DELETE /api/v1/user_cards/{id})
-
-Route handlers keep local error response shaping and delegate business logic
-to service-layer classes (`UserService`, `CardService`). Card catalog
-validation is resolved by the services against the `card_catalogue`
-table/model in the application database.
-"""
-
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Dict
 import logging
 
-from fastapi import APIRouter, Depends, Request, Response, status
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
-from app.services.card_service import CardService
+from app.dependencies.user_context import get_cognito_sub
+from app.dependencies.services import get_user_card_management_service
 from app.services.errors import ServiceError
-from app.services.user_service import UserService
+from app.services.user_card_service import UserCardManagementService
+from app.models.user_owned_cards import UserOwnedCardResponse, UserOwnedCardUpdate, UserOwnedCardCreate
 
 logger = logging.getLogger(__name__)
 
+router = APIRouter(prefix="/user/cards", tags=["User Card Management"])
 
-class WalletCard(BaseModel):
-    id: Optional[int] = None  # UserOwnedCard primary key, for deleting/updating
-    card_id: str
-    refresh_day_of_month: int = Field(..., ge=1, le=31)
-    annual_fee_billing_date: str  # YYYY-MM-DD
-    cycle_spend_sgd: float = Field(0, ge=0)
-
-    @field_validator("annual_fee_billing_date")
-    @classmethod
-    def validate_annual_fee_billing_date(cls, v: str) -> str:
-        """Ensure date is in ISO YYYY-MM-DD format, per API contract."""
-        try:
-            # fromisoformat will raise ValueError if format is invalid
-            datetime.fromisoformat(v)
-        except ValueError as exc:
-            raise ValueError("annual_fee_billing_date must be YYYY-MM-DD") from exc
-        return v
-
-
-class WalletCardCreate(BaseModel):
-    wallet_card: WalletCard
-
-
-class UserCardPut(BaseModel):
-    user_card: WalletCard
-
-
-class UserCardsResponse(BaseModel):
-    user_cards: List[Dict[str, Any]]
-
-
-class Profile(BaseModel):
-    user_id: str
-    username: str
-    preference: str
-    wallet: List[WalletCard]
-
-
-class ProfileRequest(BaseModel):
-    profile: Profile
-
-
-class ProfileResponse(BaseModel):
-    profile: Profile
-
-
-class WalletCardResponse(BaseModel):
-    wallet_card: WalletCard
-
-
-class ErrorBody(BaseModel):
-    code: str
-    message: str
-    details: Dict[str, Any] = {}
-
-
-class ErrorEnvelope(BaseModel):
-    error: ErrorBody
-
-
-def _error_response(
-    *,
-    status_code: int,
-    code: str,
-    message: str,
-    details: Optional[Dict[str, Any]] = None,
-) -> JSONResponse:
-    body = ErrorEnvelope(
-        error=ErrorBody(code=code, message=message, details=details or {}),
-    )
-    return JSONResponse(status_code=status_code, content=body.model_dump())
-
-
-def _get_user_id_from_request(request: Request) -> Optional[str]:
-    user_id = request.headers.get("x-user-id")
-    return user_id.strip() if user_id else None
-
-
-def _services(db: Session) -> tuple[UserService, CardService]:
-    user_service = UserService(db)
-    card_service = CardService(db, user_service)
-    return user_service, card_service
-
-
-def _unauthorized_response() -> JSONResponse:
-    return _error_response(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        code="UNAUTHORIZED",
-        message="Missing or invalid user context.",
-        details={"required_header": "x-user-id"},
-    )
-
-
-router = APIRouter(
-    prefix="/api/v1"
-)
-
-
-@router.get("/user_cards", response_model=UserCardsResponse, tags=["user-cards"])
-def get_user_cards(request: Request, db: Session = Depends(get_db)):
-    """View user-owned active cards with reward-rules metadata."""
-    user_id = _get_user_id_from_request(request)
-    if not user_id:
-        return _unauthorized_response()
-
+@router.get("/", response_model=list[UserOwnedCardResponse])
+@router.get("/", response_model=list[UserOwnedCardResponse])
+def get_user_cards(
+    cognito_sub: str = Depends(get_cognito_sub),
+    db: Session = Depends(get_db),
+):
+    """
+    Get all cards owned by the authenticated user.
+    """
     try:
-        _, card_service = _services(db)
-        return {"user_cards": card_service.list_user_cards(user_id)}
-    except ServiceError as exc:
-        return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
-    except Exception:
-        return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
+        if not auth:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthenticated. Missing Authorization header.")
 
+        claims = cognito_service.validate_token(
+            auth
+        )
+        cognito_sub = claims.get("sub")
+        if not cognito_sub:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload.")
 
-@router.get("/profile", response_model=ProfileResponse, tags=["profile"])
-def get_profile(request: Request, db: Session = Depends(get_db)):
-    """Contract endpoint: return current user profile with wallet cards."""
+        service = UserCardManagementService(db)
+        return service.get_user_cards(cognito_sub)
+    except ServiceError as e:
+        logger.error(f"Error fetching user cards: {e}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    
+
+@router.post("", response_model=UserOwnedCardResponse, status_code=status.HTTP_201_CREATED)
+def add_user_card(
+    card_data: UserOwnedCardCreate,
+    cognito_sub: str = Depends(get_cognito_sub),
+    service: UserCardManagementService = Depends(get_user_card_management_service),
+):
+    """
+    Add a card to the authenticated user's collection.
+    """
     try:
-        user_id = _get_user_id_from_request(request) or "u_001"
-        user_service, card_service = _services(db)
-        profile = user_service.get_profile(user_id, card_service)
-        return {"profile": profile}
-    except ServiceError as exc:
-        return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
-    except Exception:
-        return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
+        if not auth:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthenticated. Missing Authorization header.")
 
+        claims = cognito_service.validate_token(
+            auth
+        )
+        cognito_sub = claims.get("sub")
+        if not cognito_sub:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthenticated. Invalid token payload.")
 
-@router.post("/profile", response_model=ProfileResponse, tags=["profile"])
-def save_profile(payload: ProfileRequest, request: Request, db: Session = Depends(get_db)):
-    """Contract endpoint: create/update profile and wallet."""
+        return service.add_user_card(cognito_sub, card_data.card_id, card_data)
+    except ServiceError as e:
+        logger.error(f"Error adding user card: {e}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)    
+
+    
+@router.put("/{card_id}", response_model=UserOwnedCardResponse)
+def update_user_card(
+    card_id: int,
+    card_data: UserOwnedCardUpdate,
+    cognito_sub: str = Depends(get_cognito_sub),
+    db: Session = Depends(get_db),
+):
+    """
+    Update details of a card in the authenticated user's collection.
+    """
     try:
-        user_id = _get_user_id_from_request(request) or "u_001"
-        user_service, card_service = _services(db)
-        profile = user_service.save_profile(user_id, payload.profile.model_dump(), card_service)
-        return {"profile": profile}
-    except ServiceError as exc:
-        return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
-    except Exception:
-        return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
+        service = UserCardManagementService(db)
+        return service.update_user_card(cognito_sub, card_id, card_data)
+    except ServiceError as e:
+        logger.error(f"Error updating user card: {e}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    
 
-
-@router.post("/user_cards", status_code=status.HTTP_201_CREATED, response_model=WalletCardResponse, tags=["user-cards"])
-def add_user_card(payload: WalletCardCreate, request: Request, db: Session = Depends(get_db)):
-    """Add a user-owned card."""
+@router.delete("/{card_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_user_card(
+    card_id: int,
+    cognito_sub: str = Depends(get_cognito_sub),
+    db: Session = Depends(get_db),
+):
+    """
+    Remove a card from the authenticated user's collection.
+    """
     try:
-        user_id = _get_user_id_from_request(request)
-        if not user_id:
-            return _unauthorized_response()
-
-        _, card_service = _services(db)
-        saved = card_service.add_user_card(user_id, payload.wallet_card.model_dump())
-
-        return {
-            "wallet_card": {
-                "card_id": saved.get("card_id"),
-                "refresh_day_of_month": saved.get("refresh_day_of_month"),
-                "annual_fee_billing_date": saved.get("annual_fee_billing_date"),
-                "cycle_spend_sgd": saved.get("cycle_spend_sgd", 0),
-            }
-        }
-    except ServiceError as exc:
-        return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
-    except Exception:
-        logger.exception("Unhandled exception in add_user_card")
-        return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
-
-
-@router.put("/user_cards/{card_id}", response_model=WalletCardResponse, tags=["user-cards"])
-def put_user_card(card_id: str, payload: UserCardPut, request: Request, db: Session = Depends(get_db)):
-    """Edit user-owned card details (full replacement of editable fields)."""
-    user_id = _get_user_id_from_request(request)
-    if not user_id:
-        return _unauthorized_response()
-
-    try:
-        _, card_service = _services(db)
-        saved = card_service.replace_user_card(user_id, card_id, payload.user_card.model_dump())
-        return {
-            "wallet_card": {
-                "card_id": saved.get("card_id"),
-                "refresh_day_of_month": saved.get("refresh_day_of_month"),
-                "annual_fee_billing_date": saved.get("annual_fee_billing_date"),
-                "cycle_spend_sgd": saved.get("cycle_spend_sgd", 0),
-            }
-        }
-    except ServiceError as exc:
-        return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
-    except Exception:
-        logger.exception("Unhandled exception in put_user_card")
-        return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
-
-
-@router.delete("/user_cards/{card_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["user-cards"])
-def delete_user_card(card_id: str, request: Request, db: Session = Depends(get_db)):
-    """Delete (soft-delete) a user-owned card and write an audit event."""
-    user_id = _get_user_id_from_request(request)
-    if not user_id:
-        return _unauthorized_response()
-
-    try:
-        _, card_service = _services(db)
-        card_service.delete_user_card(user_id, card_id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    except ServiceError as exc:
-        return _error_response(status_code=exc.status_code, code=exc.code, message=exc.message, details=exc.details)
-    except Exception:
-        logger.exception("Unhandled exception in delete_user_card")
-        return _error_response(status_code=500, code="INTERNAL_ERROR", message="Internal server error.", details={})
+        service = UserCardManagementService(db)
+        service.remove_user_card(cognito_sub, card_id)
+    except ServiceError as e:
+        logger.error(f"Error removing user card: {e}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
