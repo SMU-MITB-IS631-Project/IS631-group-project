@@ -95,7 +95,7 @@ def setup_and_teardown_db():
             UserProfile(
                 id=1,
                 username="alice",
-                password_hash="test-hash",
+                cognito_sub="test-cognito-sub-wallet-1",
                 benefits_preference=BenefitsPreference.no_preference,
             )
         )

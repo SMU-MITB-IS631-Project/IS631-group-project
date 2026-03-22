@@ -61,13 +61,13 @@ def setup_and_teardown_db():
                 UserProfile(
                     id=1,
                     username="owner_user",
-                    password_hash="hash1",
+                    cognito_sub="test-cognito-sub-owner-1",
                     benefits_preference=BenefitsPreference.no_preference,
                 ),
                 UserProfile(
                     id=2,
                     username="non_owner_user",
-                    password_hash="hash2",
+                    cognito_sub="test-cognito-sub-owner-2",
                     benefits_preference=BenefitsPreference.no_preference,
                 ),
             ]

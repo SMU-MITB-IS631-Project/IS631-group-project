@@ -62,7 +62,7 @@ class TestExplanationFallback(unittest.TestCase):
                 UserProfile(
                     id=1,
                     username="test_user",
-                    password_hash="hash123",
+                    cognito_sub="test-cognito-sub-explain-1",
                     benefits_preference=BenefitsPreference.cashback,
                 )
             )
@@ -333,7 +333,7 @@ def test_client():
             UserProfile(
                 id=1,
                 username="test_user",
-                password_hash="hash123",
+                cognito_sub="test-cognito-sub-explain-2",
                 benefits_preference=BenefitsPreference.cashback,
             )
         )
