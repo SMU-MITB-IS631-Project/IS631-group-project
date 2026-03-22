@@ -19,8 +19,8 @@ class UserCardManagementService:
             raise ServiceException(status_code=404, detail="User not found.")
         return user_id
 
-    def get_user_cards(self, cognitosub: str):
-        """Return all cards owned by a user as a dictionary keyed by card_id."""
+    def get_user_cards(self, cognitosub: str) -> list[UserOwnedCard]:
+        """Return all cards owned by a user as a list of UserOwnedCard instances."""
         user_id = self._require_user_id(cognitosub)
         return self.db.query(UserOwnedCard).filter(UserOwnedCard.user_id == user_id).all()
 

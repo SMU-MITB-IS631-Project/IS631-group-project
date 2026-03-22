@@ -31,3 +31,7 @@ backend/.env
 # Local SQLite databases
 app.db
 backend/app.db
+
+# Coverage artifacts
+.coverage
+htmlcov/
