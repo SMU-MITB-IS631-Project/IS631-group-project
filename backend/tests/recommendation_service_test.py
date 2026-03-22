@@ -37,7 +37,7 @@ class RecommendationServiceTests(unittest.TestCase):
                 UserProfile(
                     id=1,
                     username="u1",
-                    password_hash="x",
+                    cognito_sub="test-cognito-sub-reco-svc-1",
                     benefits_preference=BenefitsPreference.No_preference,
                 )
             )

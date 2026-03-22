@@ -304,7 +304,7 @@ def update_transaction(
         )
 
 
-@router.put("/{transaction_id}/status")
+@router.put("/{transaction_id:int}/status")
 def update_transaction_status(
     transaction_id: int,
     status_update: TransactionStatusUpdate,
@@ -404,7 +404,7 @@ def bulk_update_transaction_status(
         )
 
 
-@router.delete("/{transaction_id}")
+@router.delete("/{transaction_id:int}")
 def delete_transaction(
     transaction_id: int,
     http_request: Request,

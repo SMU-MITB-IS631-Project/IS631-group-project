@@ -45,7 +45,7 @@ class TransactionCRUDTests(unittest.TestCase):
                 UserProfile(
                     id=1,
                     username="testuser",
-                    password_hash="hashed_pw",
+                    cognito_sub="test-cognito-sub-crud-1",
                     benefits_preference=BenefitsPreference.Cashback,
                 )
             )

@@ -41,7 +41,7 @@ class GenAISecurityLoggingApiTests(unittest.TestCase):
                 UserProfile(
                     id=1,
                     username="u1",
-                    password_hash="x",
+                    cognito_sub="test-cognito-sub-genai-log-1",
                     benefits_preference=BenefitsPreference.no_preference,
                 )
             )

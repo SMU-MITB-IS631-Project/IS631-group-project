@@ -34,6 +34,7 @@ USER_HEADERS = {"x-user-id": "1"}
 
 
 def override_get_db():
+    # Provide an isolated DB session for each request handled by the TestClient.
     db = TestingSessionLocal()
     try:
         yield db
@@ -65,6 +66,7 @@ def _transaction_payload(
 
 
 def _create_transaction(client: TestClient, payload: dict | None = None) -> dict:
+    # Helper to keep tests focused on assertions instead of request boilerplate.
     response = client.post(
         "/api/v1/transactions",
         json=payload or _transaction_payload(),
@@ -82,6 +84,7 @@ def client():
 
 @pytest.fixture(autouse=True)
 def dependency_overrides():
+    # Route DB dependency to the test database for every test case.
     app.dependency_overrides[get_db] = override_get_db
     yield
     app.dependency_overrides = {}
@@ -89,18 +92,22 @@ def dependency_overrides():
 
 @pytest.fixture(autouse=True)
 def setup_and_teardown_db():
+    # Build schema fresh per test to avoid cross-test data leakage.
     Base.metadata.create_all(bind=engine)
 
     db = TestingSessionLocal()
     try:
+        # Seed a user record that matches the x-user-id header used in tests.
+        # cognito_sub is the identity link used by current user profile schema.
         db.add(
             UserProfile(
                 id=1,
                 username="alice",
-                password_hash="test-hash",
+                cognito_sub="test-cognito-sub-1",
                 benefits_preference=BenefitsPreference.no_preference,
             )
         )
+        # Seed a valid catalogue card so transactions can reference card_id=101.
         db.add(
             CardCatalogue(
                 card_id=101,
@@ -111,6 +118,7 @@ def setup_and_teardown_db():
                 status=StatusEnum.valid,
             )
         )
+        # Seed card ownership so user 1 is authorized to transact with card 101.
         db.add(
             UserOwnedCard(
                 user_id=1,
@@ -123,6 +131,7 @@ def setup_and_teardown_db():
         yield
     finally:
         db.close()
+        # Drop schema after each test for full isolation.
         Base.metadata.drop_all(bind=engine)
 
 
@@ -196,7 +205,7 @@ def test_update_transaction_status(client: TestClient):
     created = _create_transaction(client)
 
     response = client.put(
-        f"/api/v1/transactions/{created['id']}",
+        f"/api/v1/transactions/{created['id']}/status",
         json={"status": "deleted_with_card"},
         headers=USER_HEADERS,
     )

@@ -10,7 +10,6 @@ from sqlalchemy.orm import sessionmaker
 from app.db.db import Base
 from app.dependencies.db import get_db
 from app.models.user_profile import BenefitsPreference, UserProfile
-import app.services.user_profile as user_profile_service
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -28,6 +27,8 @@ user_profile_router = router_module.router
 
 app = FastAPI()
 app.include_router(user_profile_router)
+
+AUTH_HEADERS = {"Authorization": "Bearer test-token"}
 
 
 def override_get_db():
@@ -47,11 +48,14 @@ def client():
 @pytest.fixture(autouse=True)
 def dependency_overrides():
     app.dependency_overrides[get_db] = override_get_db
-    original_session_local = user_profile_service.SessionLocal
-    user_profile_service.SessionLocal = TestingSessionLocal
+
+    original_validate_token = router_module.cognito_service.validate_token
+    router_module.cognito_service.validate_token = lambda auth: {"sub": "test-cognito-sub-1"}
+
     yield
+
     app.dependency_overrides = {}
-    user_profile_service.SessionLocal = original_session_local
+    router_module.cognito_service.validate_token = original_validate_token
 
 
 @pytest.fixture(autouse=True)
@@ -64,10 +68,20 @@ def setup_and_teardown_db():
             UserProfile(
                 id=1,
                 username="alice",
-                password_hash=user_profile_service.hash_password("alice-pass"),
                 name="Alice",
                 email="alice@example.com",
+                cognito_sub="test-cognito-sub-1",
                 benefits_preference=BenefitsPreference.no_preference,
+            )
+        )
+        db.add(
+            UserProfile(
+                id=2,
+                username="bob",
+                name="Bob",
+                email="bob@example.com",
+                cognito_sub="test-cognito-sub-2",
+                benefits_preference=BenefitsPreference.cashback,
             )
         )
         db.commit()
@@ -78,101 +92,54 @@ def setup_and_teardown_db():
         Base.metadata.drop_all(bind=engine)
 
 
-def test_create_user_profile(client: TestClient):
-    response = client.post(
-        "/api/v1/user_profile",
-        json={
-            "username": "new_user",
-            "password": "my-password",
-            "name": "New User",
-            "email": "new_user@example.com",
-            "benefits_preference": "No preference",
-        },
-    )
+def test_get_user_profiles(client: TestClient):
+    response = client.get("/user_profile/", headers=AUTH_HEADERS)
 
-    assert response.status_code == 201
+    assert response.status_code == 200
     data = response.json()
-    assert data["id"] == 2
-    assert data["username"] == "new_user"
-    assert data["name"] == "New User"
-    assert data["email"] == "new_user@example.com"
+    assert isinstance(data, list)
+    assert len(data) == 2
+    assert {item["id"] for item in data} == {1, 2}
 
 
-def test_create_user_profile_conflict_username(client: TestClient):
-    response = client.post(
-        "/api/v1/user_profile",
-        json={
-            "username": "alice",
-            "password": "another-pass",
-            "name": "Alice 2",
-            "email": "alice2@example.com",
-            "benefits_preference": "No preference",
-        },
-    )
-
-    assert response.status_code == 409
-    body = response.json()
-    error = body.get("error") or body.get("detail", {}).get("error", {})
-    assert error["code"] == "CONFLICT"
-
-
-def test_get_user_profile_by_header_id(client: TestClient):
-    response = client.get("/api/v1/user_profile", headers={"x-user-id": "1"})
+def test_get_my_profile(client: TestClient):
+    response = client.get("/user_profile/me", headers=AUTH_HEADERS)
 
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == 1
-    assert data["username"] == "alice"
+    assert data["name"] == "Alice"
+    assert data["benefits_preference"] == "No preference"
 
 
-def test_get_user_profile_requires_user_context(client: TestClient):
-    response = client.get("/api/v1/user_profile")
+def test_get_user_profile_requires_auth(client: TestClient):
+    response = client.get("/user_profile/me")
 
     assert response.status_code == 401
-    body = response.json()
-    error = body.get("error") or body.get("detail", {}).get("error", {})
-    assert error["code"] == "UNAUTHORIZED"
+    assert response.json()["detail"] == "Missing Authorization header."
 
 
-def test_update_user_profile(client: TestClient):
-    response = client.patch(
-        "/api/v1/user_profile/1",
+def test_update_my_profile(client: TestClient):
+    response = client.put(
+        "/user_profile/me",
         json={
-            "username": "alice",
-            "password": "updated-pass",
             "name": "Alice Updated",
-            "email": "alice.updated@example.com",
             "benefits_preference": "Cashback",
         },
+        headers=AUTH_HEADERS,
     )
 
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == 1
     assert data["name"] == "Alice Updated"
-    assert data["email"] == "alice.updated@example.com"
     assert data["benefits_preference"] == "Cashback"
 
 
-def test_login_success(client: TestClient):
-    response = client.post(
-        "/api/v1/user_profile/login",
-        json={"username": "alice", "password": "alice-pass"},
-    )
+def test_get_my_profile_not_found_for_unknown_cognito_sub(client: TestClient):
+    router_module.cognito_service.validate_token = lambda auth: {"sub": "unknown-sub"}
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == 1
-    assert data["username"] == "alice"
+    response = client.get("/user_profile/me", headers=AUTH_HEADERS)
 
-
-def test_login_invalid_password(client: TestClient):
-    response = client.post(
-        "/api/v1/user_profile/login",
-        json={"username": "alice", "password": "wrong-pass"},
-    )
-
-    assert response.status_code == 401
-    body = response.json()
-    error = body.get("error") or body.get("detail", {}).get("error", {})
-    assert error["code"] == "UNAUTHORIZED"
+    assert response.status_code == 404
+    assert response.json()["detail"] == "User profile not found."
