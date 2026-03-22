@@ -13,9 +13,40 @@ from . import user_profile_service as _user_profile_impl
 # Always re-export UserProfileService.
 UserProfileService = _user_profile_impl.UserProfileService
 
-# Only export the symbols that are actually implemented here.
-# Legacy symbols like `SessionLocal`, `hash_password`, and `get_users` are
-# no longer re-exported from this module to avoid exposing non-functional
-# placeholders that raise NotImplementedError at runtime.
+# Backward-compatible exports for legacy symbols.
+# If the concrete implementations exist in `user_profile_service`, re-export
+# them directly. Otherwise, provide compatibility stubs that raise
+# NotImplementedError only when called so that tests and legacy code can
+# still import or monkeypatch these names without failing at import time.
 
-__all__ = ["UserProfileService"]
+if hasattr(_user_profile_impl, "SessionLocal"):
+    SessionLocal = _user_profile_impl.SessionLocal  # type: ignore[attr-defined]
+else:
+    def SessionLocal(*args, **kwargs):  # type: ignore[func-returns-value]
+        """Compatibility stub for legacy SessionLocal."""
+        raise NotImplementedError(
+            "SessionLocal is not available in this build; this is a "
+            "backward-compatibility stub."
+        )
+
+if hasattr(_user_profile_impl, "hash_password"):
+    hash_password = _user_profile_impl.hash_password  # type: ignore[attr-defined]
+else:
+    def hash_password(*args, **kwargs):
+        """Compatibility stub for legacy hash_password."""
+        raise NotImplementedError(
+            "hash_password is not available in this build; this is a "
+            "backward-compatibility stub."
+        )
+
+if hasattr(_user_profile_impl, "get_users"):
+    get_users = _user_profile_impl.get_users  # type: ignore[attr-defined]
+else:
+    def get_users(*args, **kwargs):
+        """Compatibility stub for legacy get_users."""
+        raise NotImplementedError(
+            "get_users is not available in this build; this is a "
+            "backward-compatibility stub."
+        )
+
+__all__ = ["UserProfileService", "SessionLocal", "hash_password", "get_users"]
