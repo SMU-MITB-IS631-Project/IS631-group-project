@@ -1,5 +1,5 @@
 from typing import Optional
-from sqlalchemy import Column, Date, Integer, String, DateTime, Enum as SAEnum, ForeignKey
+from sqlalchemy import Column, Date, Integer, String, DateTime, Enum as SAEnum, ForeignKey, Float
 from app.db.db import Base
 from pydantic import BaseModel, ConfigDict, field_validator, Field
 from sqlalchemy.orm import relationship
@@ -11,6 +11,11 @@ class UserOwnedCardStatus(PyEnum):
     Active = "Active"
     Inactive = "Suspended"
     Closed = "Expired"
+
+    # Backward-compatible aliases (older tests used lowercase names)
+    active = "Active"
+    inactive = "Suspended"
+    closed = "Expired"
 
 def get_billing_cycle_date():
     # return last day of current month
@@ -31,7 +36,17 @@ class UserOwnedCard(Base):
     billing_cycle_refresh_date = Column(Date, default=get_billing_cycle_date, nullable=False)
     billing_cycle_refresh_day_of_month = Column(Integer, nullable=False, default=1)
     status = Column(SAEnum(UserOwnedCardStatus), nullable=False, default=UserOwnedCardStatus.Active)
-    cycle_spend_sgd: float = Field(0, ge=0)
+    # Persisted spend tracker (some tests/logic expect this to exist on the ORM model)
+    cycle_spend_sgd = Column(Float, nullable=False, default=0.0)
+
+    # Backward-compatible attribute alias: older code/tests used the shortened name.
+    @property
+    def billing_cycle_refresh_day_of_mth(self) -> int:
+        return self.billing_cycle_refresh_day_of_month
+
+    @billing_cycle_refresh_day_of_mth.setter
+    def billing_cycle_refresh_day_of_mth(self, value: int) -> None:
+        self.billing_cycle_refresh_day_of_month = value
 
     # Relationship with UserProfile
     user_profile = relationship("UserProfile", back_populates="user_owned_cards")
