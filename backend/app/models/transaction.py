@@ -76,6 +76,9 @@ class UserTransaction(Base):
     transaction_date = Column(Date, default=date.today, nullable=False)
     status = Column(SAEnum(TransactionStatus, values_callable=_enum_values), default=TransactionStatus.Active, nullable=False)
     created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Historical reward tracking
+    total_reward = Column(Numeric(10,2), nullable=True)  # Calculated reward amount for this transaction
 
     # Relationship with UserProfile
     user_profile = relationship("UserProfile", back_populates="user_transactions")

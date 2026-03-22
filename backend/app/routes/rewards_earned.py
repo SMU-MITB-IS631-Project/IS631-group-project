@@ -1,7 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, status, Header
-from typing import Optional, Dict
-from app.dependencies.services import get_rewards_earned_service
+from datetime import date
+from fastapi import APIRouter, HTTPException, Depends, status, Header, Query
+from typing import Optional, Dict, Any
+from app.dependencies.services import get_rewards_earned_service, get_user_service
 from app.services.rewards_earned_service import RewardsEarnedService
+from app.services.user_service import UserService
+from app.services.errors import ServiceError
 
 # Attempt to import ServiceException; provide fallback if module not available
 try:
@@ -22,14 +25,15 @@ DEFAULT_USER_ID = 0 # non-existent user ID to trigger 404 if not provided
 @router.get("", response_model=Dict[str, float])
 def get_rewards_earned(
     x_user_id: Optional[str] = Header(default=None),
-    service: RewardsEarnedService = Depends(get_rewards_earned_service)
+    service: RewardsEarnedService = Depends(get_rewards_earned_service),
+    user_service: UserService = Depends(get_user_service),
 ):
     """
     Calculate and return the rewards earned for the current user's active cards
     in their latest billing cycle based on transactions.
     
     Parameters:
-    - x_user_id: User ID from header (optional; defaults to 1 if not provided)
+    - x_user_id: User ID from header (accepts digits, u_### format, or username)
     
     Returns:
     - Dictionary mapping card names to rewards amounts earned
@@ -39,7 +43,18 @@ def get_rewards_earned(
     - 500: If error occurs during rewards calculation
     """
     try:
-        user_id = int(x_user_id) if x_user_id else DEFAULT_USER_ID
+        user_id = user_service.resolve_user_identifier(x_user_id) if x_user_id else DEFAULT_USER_ID
+    except ServiceError as e:
+        raise HTTPException(
+            status_code=e.status_code,
+            detail={
+                "error": {
+                    "code": e.code,
+                    "message": e.message,
+                    "details": e.details,
+                }
+            },
+        )
     except (ValueError, TypeError):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -80,4 +95,63 @@ def get_rewards_earned(
                     "details": {}
                 }
             }
-        )      
+        )
+
+
+@router.get("/historical", response_model=list[Dict[str, Any]])
+def get_historical_rewards(
+    x_user_id: Optional[str] = Header(default=None),
+    card_id: Optional[int] = Query(default=None),
+    start_date: Optional[date] = Query(default=None),
+    end_date: Optional[date] = Query(default=None),
+    group_by: str = Query(default="month"),
+    service: RewardsEarnedService = Depends(get_rewards_earned_service),
+    user_service: UserService = Depends(get_user_service),
+):
+    """
+    Return historical rewards aggregated from stored transaction.total_reward.
+    """
+    try:
+        user_id = user_service.resolve_user_identifier(x_user_id) if x_user_id else DEFAULT_USER_ID
+    except ServiceError as e:
+        raise HTTPException(
+            status_code=e.status_code,
+            detail={
+                "error": {
+                    "code": e.code,
+                    "message": e.message,
+                    "details": e.details,
+                }
+            },
+        )
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Invalid user ID in x-user-id header.",
+                    "details": {"field": "x-user-id"},
+                }
+            },
+        )
+
+    try:
+        return service.get_historical_rewards(
+            user_id=user_id,
+            card_id=card_id,
+            start_date=start_date,
+            end_date=end_date,
+            group_by=group_by,
+        )
+    except ServiceException as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": str(e),
+                    "details": {},
+                }
+            },
+        )
