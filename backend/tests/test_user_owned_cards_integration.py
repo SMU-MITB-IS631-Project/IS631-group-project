@@ -152,7 +152,7 @@ def test_add_user_card_success(client: TestClient, valid_token):
     assert body["card_expiry_date"] == "2028-12-31"
 
 
-def test_add_user_card_duplicate_returns_internal_server_error(client: TestClient, valid_token):
+def test_add_user_card_duplicate_returns_bad_request(client: TestClient, valid_token):
     payload = {
         "card_id": 101,
         "billing_cycle_refresh_day_of_month": 15,
@@ -164,7 +164,8 @@ def test_add_user_card_duplicate_returns_internal_server_error(client: TestClien
     second = client.post("/user/cards", headers=AUTH_HEADERS, json=payload)
 
     assert first.status_code == 201
-    assert second.status_code == 500
+    assert second.status_code == 400
+    assert second.json()["detail"] == "User already owns this card."
 
 
 def test_update_user_card_success(client: TestClient, valid_token):
