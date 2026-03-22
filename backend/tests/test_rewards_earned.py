@@ -1,10 +1,10 @@
 import pytest
-import sys
-import os
+import sys, os
 # ensure backend directory is on path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from unittest.mock import Mock
+from fastapi import HTTPException
 
 # ServiceException is not part of installed modules; define placeholder for tests
 class ServiceException(Exception):
@@ -47,7 +47,7 @@ def test_calculate_rewards_earned_no_active_cards(rewards_earned_service, mock_d
 
 def test_calculate_rewards_earned_with_active_cards(rewards_earned_service, mock_db):
     # Create proper mock query objects for each model type
-    active_card = UserOwnedCard(id=1, user_id=1, card_id=1, status=UserOwnedCardStatus.Active, billing_cycle_refresh_day_of_month=1)
+    active_card = UserOwnedCard(id=1, user_id=1, card_id=1, status=UserOwnedCardStatus.active, billing_cycle_refresh_day_of_mth=1)
     card_catalogue = CardCatalogue(card_id=1, bank="Test Bank", card_name="Test Card", benefit_type="cashback", base_benefit_rate=0.01, status="active")
     bonus_category = CardBonusCategory(card_id=1, bonus_category=BonusCategory.Food, bonus_benefit_rate=0.2, bonus_cap_in_dollar=100)
     transaction = UserTransaction(id=1, user_id=1, card_id=1, amount_sgd=100, item="test", channel=TransactionChannel.online, is_overseas=False, category=TransactionCategory.food, transaction_date="2024-06-01")
@@ -73,7 +73,7 @@ def test_calculate_rewards_earned_with_active_cards(rewards_earned_service, mock
     assert result == expected_rewards
 
 def test_calculate_rewards_earned_with_no_transactions(rewards_earned_service, mock_db):
-    active_card = UserOwnedCard(id=1, user_id=1, card_id=1, status=UserOwnedCardStatus.Active, billing_cycle_refresh_day_of_month=1)
+    active_card = UserOwnedCard(id=1, user_id=1, card_id=1, status=UserOwnedCardStatus.active, billing_cycle_refresh_day_of_mth=1)
     card_catalogue = CardCatalogue(card_id=1, bank="Test Bank", card_name="Test Card", benefit_type="cashback", base_benefit_rate=0.01, status="active")
     
     mock_db.query.side_effect = [
@@ -92,7 +92,7 @@ def test_calculate_rewards_earned_with_no_transactions(rewards_earned_service, m
     assert result == expected_rewards
 
 def test_calculate_rewards_earned_with_bonus_cap_exceeded(rewards_earned_service, mock_db):
-    active_card = UserOwnedCard(id=1, user_id=1, card_id=1, status=UserOwnedCardStatus.Active, billing_cycle_refresh_day_of_month=1)
+    active_card = UserOwnedCard(id=1, user_id=1, card_id=1, status=UserOwnedCardStatus.active, billing_cycle_refresh_day_of_mth=1)
     card_catalogue = CardCatalogue(card_id=1, bank="Test Bank", card_name="Test Card", benefit_type="cashback", base_benefit_rate=0.01, status="active")
     bonus_category = CardBonusCategory(card_id=1, bonus_category=BonusCategory.Food, bonus_benefit_rate=0.2, bonus_cap_in_dollar=100)
     transaction = UserTransaction(id=1, user_id=1, card_id=1, amount_sgd=600, item="test", channel=TransactionChannel.online, is_overseas=False, category=TransactionCategory.food, transaction_date="2024-06-01")
@@ -113,7 +113,7 @@ def test_calculate_rewards_earned_with_bonus_cap_exceeded(rewards_earned_service
     assert result == expected_rewards
 
 def test_calculate_rewards_earned_with_no_bonus_categories(rewards_earned_service, mock_db):
-    active_card = UserOwnedCard(id=1, user_id=1, card_id=1, status=UserOwnedCardStatus.Active, billing_cycle_refresh_day_of_month=1)
+    active_card = UserOwnedCard(id=1, user_id=1, card_id=1, status=UserOwnedCardStatus.active, billing_cycle_refresh_day_of_mth=1)
     card_catalogue = CardCatalogue(card_id=1, bank="Test Bank", card_name="Test Card", benefit_type="cashback", base_benefit_rate=0.01, status="active")
     transaction = UserTransaction(id=1, user_id=1, card_id=1, amount_sgd=100, item="test", channel=TransactionChannel.online, is_overseas=False, category=TransactionCategory.food, transaction_date="2024-06-01")
     

@@ -13,6 +13,7 @@ Design Philosophy:
 
 from decimal import Decimal
 from typing import Optional, List
+from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from app.models.card_catalogue import BenefitTypeEnum as BenefitType

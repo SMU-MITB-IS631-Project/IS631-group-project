@@ -6,43 +6,9 @@ const TXN_KEY = 'cardtrack_transactions';
 const USER_ID_KEY = 'cardtrack_user_id';
 
 // --- User Context ---
-class MissingUserContextError extends Error {
-  constructor(message = 'Missing user context. Please login again.') {
-    super(message);
-    this.name = 'MissingUserContextError';
-  }
-}
-
+// TODO: Replace with actual user authentication/context
 function getCurrentUserId() {
-  const fromKey = localStorage.getItem(USER_ID_KEY);
-  if (fromKey && String(fromKey).trim()) {
-    return String(fromKey).trim();
-  }
-
-  // If the user id key was cleared but a profile exists, recover it from profile.
-  const rawProfile = localStorage.getItem(PROFILE_KEY);
-  if (rawProfile) {
-    try {
-      const profile = JSON.parse(rawProfile);
-      if (profile?.user_id !== undefined && profile?.user_id !== null && String(profile.user_id).trim()) {
-        const recovered = String(profile.user_id).trim();
-        setCurrentUserId(recovered);
-        return recovered;
-      }
-    } catch {
-      // ignore malformed profile
-    }
-  }
-
-  return null;
-}
-
-function requireCurrentUserId() {
-  const userId = getCurrentUserId();
-  if (!userId) {
-    throw new MissingUserContextError();
-  }
-  return userId;
+  return localStorage.getItem(USER_ID_KEY) || '1';
 }
 
 function setCurrentUserId(userId) {
@@ -152,7 +118,7 @@ export function loadUserProfile() {
 
 export async function loadUserProfileFromAPI() {
   try {
-    const userId = requireCurrentUserId();
+    const userId = getCurrentUserId();
     const response = await fetch(`${API_BASE_URL}/api/v1/profile`, {
       method: 'GET',
       headers: {
@@ -180,10 +146,6 @@ export async function loadUserProfileFromAPI() {
     saveUserProfile(profile);
     return profile;
   } catch (error) {
-    // If user context is missing, do not attempt any API call.
-    if (error?.name === 'MissingUserContextError') {
-      return loadUserProfile();
-    }
     console.error('Error loading profile from API:', error);
     // Fallback to localStorage
     return loadUserProfile();
@@ -195,9 +157,6 @@ export function saveUserProfile(profile) {
 }
 
 async function fetchUserCards(userId) {
-  if (userId === undefined || userId === null || String(userId).trim() === '') {
-    throw new MissingUserContextError();
-  }
   const response = await fetch(`${API_BASE_URL}/api/v1/user_cards`, {
     method: 'GET',
     headers: {
@@ -221,12 +180,9 @@ async function fetchUserCards(userId) {
 
 export async function loadUserOwnedCards() {
   try {
-    const userId = requireCurrentUserId();
+    const userId = getCurrentUserId();
     return await fetchUserCards(userId);
   } catch (error) {
-    if (error?.name === 'MissingUserContextError') {
-      throw error;
-    }
     console.error('Error loading user owned cards:', error);
     return [];
   }
@@ -235,9 +191,6 @@ export async function loadUserOwnedCards() {
 
 
 export async function postRegistrationTransactions(userId, walletCards) {
-  if (userId === undefined || userId === null || String(userId).trim() === '') {
-    throw new MissingUserContextError();
-  }
   const payloads = (walletCards || [])
     .filter(w => (w.cycle_spend_sgd || 0) > 0)
     .map(w => ({
@@ -283,9 +236,6 @@ export async function postRegistrationTransactions(userId, walletCards) {
 }
 
 async function postUserCards(userId, walletCards) {
-  if (userId === undefined || userId === null || String(userId).trim() === '') {
-    throw new MissingUserContextError();
-  }
   const payloads = (walletCards || [])
     .filter(w => w.card_id)
     .map(w => ({
@@ -446,7 +396,7 @@ export async function loginUser(username, password) {
 export async function loadTransactions(options = {}) {
   const { allowLocalFallback = true, includeDeleted = false } = options;
   try {
-    const userId = requireCurrentUserId();
+    const userId = getCurrentUserId();
     const response = await fetch(`${API_BASE_URL}/api/v1/transactions`, {
       method: 'GET',
       headers: {
@@ -481,9 +431,6 @@ export async function loadTransactions(options = {}) {
     });
   } catch (error) {
     console.error('Error loading transactions:', error);
-    if (error?.name === 'MissingUserContextError') {
-      throw error;
-    }
     if (!allowLocalFallback) {
       throw error;
     }
@@ -538,7 +485,7 @@ function mergePendingLocalTransactions(serverTransactions) {
 export async function appendTransaction(txn) {
   console.log('[appendTransaction] Called with:', txn);
   try {
-    const userId = requireCurrentUserId();
+    const userId = getCurrentUserId();
     const backendCardId = convertCardId(txn.card_id);
     console.log('[appendTransaction] User ID:', userId);
     console.log('[appendTransaction] Converting card_id:', txn.card_id, '->', backendCardId);
@@ -581,9 +528,6 @@ export async function appendTransaction(txn) {
     return createdTransaction;
   } catch (error) {
     console.error('[appendTransaction] Error creating transaction:', error);
-    if (error?.name === 'MissingUserContextError') {
-      throw error;
-    }
     // Fallback to localStorage if API fails
     const txns = await loadTransactions();
     txns.push(txn);
@@ -593,7 +537,7 @@ export async function appendTransaction(txn) {
 }
 
 export async function updateTransactionById(transactionId, transactionPatch) {
-  const userId = requireCurrentUserId();
+  const userId = getCurrentUserId();
   const payload = { ...transactionPatch };
 
   if (payload.card_id !== undefined && payload.card_id !== null) {
@@ -621,7 +565,7 @@ export async function updateTransactionById(transactionId, transactionPatch) {
 }
 
 export async function deleteTransactionById(transactionId) {
-  const userId = requireCurrentUserId();
+  const userId = getCurrentUserId();
   const response = await fetch(`${API_BASE_URL}/api/v1/transactions/${transactionId}`, {
     method: 'DELETE',
     headers: {
@@ -672,7 +616,7 @@ export function filterTransactionsByMonth(transactions, monthKey) {
   });
 }
 
-export function getMonthSummary(transactions, cardsMaster, _wallet = []) {
+export function getMonthSummary(transactions, cardsMaster, wallet = []) {
   const displayTxns = transactions.filter(t => {
     const status = (t.status || '').toLowerCase();
     const isDeleted = status === 'deleted_with_card' || status === 'deletedwithcard';

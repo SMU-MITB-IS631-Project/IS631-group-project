@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
 from app.services.user_profile_service import UserProfileService
+from app.services.cognito_service import CognitoService
 from app.services.catalog_service import CatalogService
 from app.services.transaction_service import TransactionService
 from app.services.user_card_service import UserCardManagementService

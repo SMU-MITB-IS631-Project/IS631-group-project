@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.models.card_catalogue import CardCatalogueResponse, CardRewardUpdateRequest
 from app.services.catalog_service import CatalogService
@@ -26,4 +26,24 @@ def update_card_rewards(
             "update_result": service.update_card_rewards(card_id, request.reward_update)
         }
     except ServiceError as exc:
-        raise exc
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "details": exc.details,
+                }
+            },
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": "Internal server error.",
+                    "details": {},
+                }
+            },
+        )

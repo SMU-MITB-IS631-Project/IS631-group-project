@@ -37,7 +37,8 @@ class RecommendationServiceTests(unittest.TestCase):
                 UserProfile(
                     id=1,
                     username="u1",
-                    benefits_preference=BenefitsPreference.no_preference,
+                    password_hash="x",
+                    benefits_preference=BenefitsPreference.No_preference,
                 )
             )
 
@@ -123,7 +124,7 @@ class RecommendationServiceTests(unittest.TestCase):
             # Ensure we recommend within cashback cards (miles vs cashback is otherwise not comparable).
             profile = db.query(UserProfile).filter(UserProfile.id == 1).first()
             self.assertIsNotNone(profile)
-            profile.benefits_preference = BenefitsPreference.cashback
+            profile.benefits_preference = BenefitsPreference.Cashback
 
             db.add(
                 CardCatalogue(

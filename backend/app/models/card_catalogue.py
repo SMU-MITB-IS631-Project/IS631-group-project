@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Numeric, Enum as SAEnum, CheckConstraint, UniqueConstraint
 from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship
 from app.db.db import Base
 from pydantic import BaseModel, ConfigDict, field_validator
 from enum import Enum as PyEnum

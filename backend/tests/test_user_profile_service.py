@@ -12,7 +12,7 @@ BACKEND_DIR = REPO_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
 
 from app.db.db import Base  # noqa: E402
-from app.services.errors import ServiceError  # noqa: E402
+from app.exceptions import ServiceException  # noqa: E402
 from app.models.user_owned_cards import UserOwnedCard  # noqa: F401,E402
 from app.models.transaction import UserTransaction  # noqa: F401,E402
 from app.models.user_profile import BenefitsPreference, UserProfile  # noqa: E402
@@ -67,7 +67,7 @@ class UserProfileServiceTests(unittest.TestCase):
 				cognitosub="shared-sub",
 			)
 
-			with self.assertRaises(ServiceError) as context:
+			with self.assertRaises(ServiceException) as context:
 				service.create_user_profile(
 					username="alice2",
 					email="alice2@example.com",
@@ -75,7 +75,7 @@ class UserProfileServiceTests(unittest.TestCase):
 				)
 
 			self.assertEqual(context.exception.status_code, 409)
-			self.assertEqual(context.exception.message, "User profile already exists for this Cognito user.")
+			self.assertEqual(context.exception.detail, "User profile already exists for this Cognito user.")
 
 	def test_create_user_profile_conflict_username(self):
 		with self.Session() as db:
@@ -86,7 +86,7 @@ class UserProfileServiceTests(unittest.TestCase):
 				cognitosub="sub-alice",
 			)
 
-			with self.assertRaises(ServiceError) as context:
+			with self.assertRaises(ServiceException) as context:
 				service.create_user_profile(
 					username="alice",
 					email="other@example.com",
@@ -94,7 +94,7 @@ class UserProfileServiceTests(unittest.TestCase):
 				)
 
 			self.assertEqual(context.exception.status_code, 409)
-			self.assertEqual(context.exception.message, "Username already exists.")
+			self.assertEqual(context.exception.detail, "Username already exists.")
 
 	def test_create_user_profile_conflict_email(self):
 		with self.Session() as db:
@@ -105,7 +105,7 @@ class UserProfileServiceTests(unittest.TestCase):
 				cognitosub="sub-alice",
 			)
 
-			with self.assertRaises(ServiceError) as context:
+			with self.assertRaises(ServiceException) as context:
 				service.create_user_profile(
 					username="bob",
 					email="same@example.com",
@@ -113,7 +113,7 @@ class UserProfileServiceTests(unittest.TestCase):
 				)
 
 			self.assertEqual(context.exception.status_code, 409)
-			self.assertEqual(context.exception.message, "Email already exists.")
+			self.assertEqual(context.exception.detail, "Email already exists.")
 
 	def test_get_user_profile_found(self):
 		with self.Session() as db:
@@ -190,11 +190,11 @@ class UserProfileServiceTests(unittest.TestCase):
 		with self.Session() as db:
 			service = UserProfileService(db)
 
-			with self.assertRaises(ServiceError) as context:
+			with self.assertRaises(ServiceException) as context:
 				service.update_user_profile(cognitosub="missing-sub", name="NoUser")
 
 			self.assertEqual(context.exception.status_code, 404)
-			self.assertEqual(context.exception.message, "User not found.")
+			self.assertEqual(context.exception.detail, "User not found.")
 
 	def test_delete_user_profile_success(self):
 		with self.Session() as db:
@@ -213,11 +213,11 @@ class UserProfileServiceTests(unittest.TestCase):
 		with self.Session() as db:
 			service = UserProfileService(db)
 
-			with self.assertRaises(ServiceError) as context:
+			with self.assertRaises(ServiceException) as context:
 				service.delete_user_profile("missing-sub")
 
 			self.assertEqual(context.exception.status_code, 404)
-			self.assertEqual(context.exception.message, "User not found.")
+			self.assertEqual(context.exception.detail, "User not found.")
 
 
 if __name__ == "__main__":

@@ -41,6 +41,7 @@ class GenAISecurityLoggingApiTests(unittest.TestCase):
                 UserProfile(
                     id=1,
                     username="u1",
+                    password_hash="x",
                     benefits_preference=BenefitsPreference.no_preference,
                 )
             )
@@ -64,7 +65,7 @@ class GenAISecurityLoggingApiTests(unittest.TestCase):
                     bonus_minimum_spend_in_dollar=0,
                 )
             )
-            db.add(UserOwnedCard(user_id=1, card_id=10, status=UserOwnedCardStatus.Active))
+            db.add(UserOwnedCard(user_id=1, card_id=10, status=UserOwnedCardStatus.active))
             db.commit()
 
         def override_get_db():
