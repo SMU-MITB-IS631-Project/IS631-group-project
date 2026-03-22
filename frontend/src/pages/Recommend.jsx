@@ -34,7 +34,7 @@ export default function Recommend() {
     const p = loadUserProfile();
     if (!p) { navigate('/register'); return; }
     setProfile(p);
-  }, []);
+  }, [navigate]);
 
   async function handleGetRecommendation(e) {
     e.preventDefault();
@@ -114,7 +114,7 @@ export default function Recommend() {
         category,
         is_overseas: false,
       };
-      const result = await appendTransaction(txn);
+      const _result = await appendTransaction(txn);
       // Reset form
       setItem('');
       setAmount('');

@@ -1,12 +1,8 @@
-from typing import Dict, Any
 
-from fastapi import APIRouter, HTTPException, logger, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy.orm import Session
-from app.exceptions import ServiceException
-from app.dependencies.db import get_db
 from app.dependencies.services import get_user_profile_service
-from app.models.user_profile import UserProfile, UserProfileResponse, UserProfileUpdate
+from app.models.user_profile import UserProfileResponse, UserProfileUpdate
 from app.services.cognito_service import CognitoService
 from app.services.user_profile_service import UserProfileService
 
@@ -56,17 +52,10 @@ def update_my_profile(
 ):
     cognito_sub = _get_cognito_sub(auth)
 
-    try:
-        updated_profile = service.update_user_profile(
-            cognitosub=cognito_sub,
-            name=update.name,
-            benefits_preference=update.benefits_preference
-        )
-        return updated_profile
-    
-    except ServiceException as e:
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-    except Exception:
-        logger.exception("Unexpected error updating profile")
-        raise HTTPException(status_code=500, detail="Internal server error.")
+    updated_profile = service.update_user_profile(
+        cognitosub=cognito_sub,
+        name=update.name,
+        benefits_preference=update.benefits_preference,
+    )
+    return updated_profile
 

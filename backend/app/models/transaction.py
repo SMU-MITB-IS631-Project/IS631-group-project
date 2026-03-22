@@ -5,7 +5,6 @@ from sqlalchemy.orm import relationship
 from datetime import datetime, date
 from enum import Enum as PyEnum
 from decimal import Decimal
-from typing import Optional
 
 
 def _enum_values(enum_cls):

@@ -346,7 +346,7 @@ def explain_from_database(
         
         # Optional: Create audit log
         if payload.user_id:
-            audit = service.create_audit_log(response, user_id=payload.user_id)
+            service.create_audit_log(response, user_id=payload.user_id)
             # TODO: Persist audit log to database or file
 
         _safe_log_genai_event(

@@ -1,112 +1,121 @@
-"""To run the unit test for user profile API, use the following command in the terminal:
-PYTHONPATH=. pytest -v tests/user_profile_api_test.py"""
+from pathlib import Path
+from importlib.util import module_from_spec, spec_from_file_location
 
 import pytest
-from fastapi.testclient import TestClient
-from app.routes.user_profile import router
 from fastapi import FastAPI
-from unittest.mock import patch
-from datetime import datetime
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from app.db.db import Base
+from app.dependencies.db import get_db
+from app.models.user_profile import BenefitsPreference, UserProfile
+
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+TEST_DB_PATH = BACKEND_DIR / "test_user_profile_api.db"
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{TEST_DB_PATH.as_posix()}"
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+ROUTER_MODULE_PATH = BACKEND_DIR / "app" / "routes" / "user_profile.py"
+router_spec = spec_from_file_location("user_profile_route_for_api_tests", ROUTER_MODULE_PATH)
+router_module = module_from_spec(router_spec)
+assert router_spec and router_spec.loader
+router_spec.loader.exec_module(router_module)
+router = router_module.router
 
 app = FastAPI()
 app.include_router(router)
-client = TestClient(app)
 
-# Automatically mock get_users for all tests
+AUTH_HEADERS = {"Authorization": "Bearer test-token"}
 
-# Mock all relevant service/database calls for all tests
+
+def override_get_db():
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@pytest.fixture()
+def client():
+    with TestClient(app) as test_client:
+        yield test_client
+
+
 @pytest.fixture(autouse=True)
-def mock_db_services():
-    with patch("app.services.user_profile.get_users") as mock_get_users, \
-         patch("app.services.user_service.UserService.list_users") as mock_list_users, \
-         patch("app.services.user_service.UserService.get_user_by_username") as mock_get_user_by_username, \
-         patch("app.services.user_service.UserService.create_user") as mock_create_user:
-        mock_get_users.return_value = {}
-        mock_list_users.return_value = {}  
-        mock_get_user_by_username.return_value = None
-        mock_create_user.return_value = {
-            "id": 1,
-            "username": "testuser",
-            "name": "Test User",
-            "email": "test@example.com",
-            "benefits_preference": "No preference",
-            "created_date": datetime.utcnow().isoformat()
-        }
+def dependency_overrides():
+    app.dependency_overrides[get_db] = override_get_db
+    yield
+    app.dependency_overrides = {}
+
+
+@pytest.fixture(autouse=True)
+def override_cognito_validate_token(monkeypatch: pytest.MonkeyPatch):
+    def _fake_validate_token(_auth):
+        return {"sub": "sub-alice"}
+
+    monkeypatch.setattr(router_module.cognito_service, "validate_token", _fake_validate_token)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def setup_and_teardown_db():
+    Base.metadata.create_all(bind=engine)
+
+    db = TestingSessionLocal()
+    try:
+        db.add(
+            UserProfile(
+                id=1,
+                username="alice",
+                name="Alice",
+                email="alice@example.com",
+                benefits_preference=BenefitsPreference.no_preference,
+                cognito_sub="sub-alice",
+            )
+        )
+        db.commit()
         yield
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
 
-def test_get_user_profile_not_found():
-    response = client.get("/api/v1/user_profile")
-    assert response.status_code == 404 or response.status_code == 200
-    # Accept either not found or empty result depending on API logic
 
-def test_create_user_profile_conflict():
-    payload = {
-        "u  sername": "existinguser",
-        "password": "password",
-        "name": "Test User",
-        "email": "existing@example.com",
-        "benefits_preference": "No preference"
-    }
-    # Simulate conflict by setting mock to raise exception or return error
-    with patch("app.services.user_service.UserService.create_user") as mock_create_user:
-        mock_create_user.side_effect = Exception("Conflict")
-        response = client.post("/api/v1/user_profile", json=payload)
-        assert response.status_code == 409 or response.status_code == 422
+def test_get_my_profile_requires_auth(client: TestClient):
+    response = client.get("/user_profile/me")
+    assert response.status_code == 401
 
-def test_login_missing_fields():
-    response = client.post("/api/v1/user_profile/login", json={})
-    assert response.status_code == 400 or response.status_code == 422
 
-def test_login_rate_limit():
-    payload = {"username": "testuser", "password": "testpass"}
-    for _ in range(5):
-        client.post("/api/v1/user_profile/login", json=payload)
-    response = client.post("/api/v1/user_profile/login", json=payload)
-    assert response.status_code == 429 or response.status_code == 200
+def test_get_my_profile_success(client: TestClient):
+    response = client.get("/user_profile/me", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == 1
+    assert data["name"] == "Alice"
+    assert data["benefits_preference"] == "No preference"
 
-def test_update_user_profile():
-    # Create a user first
-    payload = {
-        "username": "updateuser",
-        "password": "password",
-        "name": "Original Name",
-        "email": "update@example.com",
-        "benefits_preference": "No preference"
-    }
-    with patch("app.services.user_service.UserService.create_user") as mock_create_user:
-        mock_create_user.return_value = {
-            "id": 2,
-            "username": "updateuser",
-            "name": "Original Name",
-            "email": "update@example.com",
-            "benefits_preference": "No preference",
-            "created_date": datetime.utcnow().isoformat()
-        }
-        create_resp = client.post("/api/v1/user_profile", json=payload)
-        assert create_resp.status_code in (201, 200)
-        user_id = create_resp.json().get("id", 2)
 
-    # Update the user's name
-    update_payload = {
-        "name": "Updated Name",
-        "username": "updateuser",
-        "email": "update@example.com",
-        "benefits_preference": "No preference",
-        "password": "password"
-    }
-    # Patch get_users to return a dict with the correct user for update
-    with patch("app.routes.user_profile.get_users") as mock_get_users:
-        mock_get_users.return_value = {
-            user_id: {
-                "id": user_id,
-                "username": "updateuser",
-                "name": "Original Name",
-                "email": "update@example.com",
-                "benefits_preference": "No preference",
-                "password": "password",
-                "created_date": datetime.utcnow().isoformat()
-            }
-        }
-        update_resp = client.patch(f"/api/v1/user_profile/{user_id}", json=update_payload)
-        assert update_resp.status_code in (200, 201)
-        assert update_resp.json()["name"] == "Updated Name"
+def test_update_my_profile_success(client: TestClient):
+    response = client.put(
+        "/user_profile/me",
+        json={"name": "Alice Updated", "benefits_preference": "Cashback"},
+        headers=AUTH_HEADERS,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == 1
+    assert data["name"] == "Alice Updated"
+    assert data["benefits_preference"] == "Cashback"
+
+
+def test_get_user_profiles_success(client: TestClient):
+    response = client.get("/user_profile/", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["id"] == 1

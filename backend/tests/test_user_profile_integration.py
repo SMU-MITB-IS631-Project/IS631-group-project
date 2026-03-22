@@ -10,7 +10,6 @@ from sqlalchemy.orm import sessionmaker
 from app.db.db import Base
 from app.dependencies.db import get_db
 from app.models.user_profile import BenefitsPreference, UserProfile
-import app.services.user_profile as user_profile_service
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -47,11 +46,17 @@ def client():
 @pytest.fixture(autouse=True)
 def dependency_overrides():
     app.dependency_overrides[get_db] = override_get_db
-    original_session_local = user_profile_service.SessionLocal
-    user_profile_service.SessionLocal = TestingSessionLocal
     yield
     app.dependency_overrides = {}
-    user_profile_service.SessionLocal = original_session_local
+
+
+@pytest.fixture(autouse=True)
+def override_cognito_validate_token(monkeypatch: pytest.MonkeyPatch):
+    def _fake_validate_token(_auth):
+        return {"sub": "sub-alice"}
+
+    monkeypatch.setattr(router_module.cognito_service, "validate_token", _fake_validate_token)
+    yield
 
 
 @pytest.fixture(autouse=True)
@@ -64,10 +69,10 @@ def setup_and_teardown_db():
             UserProfile(
                 id=1,
                 username="alice",
-                password_hash=user_profile_service.hash_password("alice-pass"),
                 name="Alice",
                 email="alice@example.com",
                 benefits_preference=BenefitsPreference.no_preference,
+                cognito_sub="sub-alice",
             )
         )
         db.commit()
@@ -78,101 +83,66 @@ def setup_and_teardown_db():
         Base.metadata.drop_all(bind=engine)
 
 
-def test_create_user_profile(client: TestClient):
-    response = client.post(
-        "/api/v1/user_profile",
-        json={
-            "username": "new_user",
-            "password": "my-password",
-            "name": "New User",
-            "email": "new_user@example.com",
-            "benefits_preference": "No preference",
-        },
+def test_get_user_profile_requires_user_context(client: TestClient):
+    response = client.get("/user_profile/me")
+
+    assert response.status_code == 401
+    assert "detail" in response.json()
+
+
+def test_get_my_profile(client: TestClient):
+    response = client.get(
+        "/user_profile/me",
+        headers={"Authorization": "Bearer test-token"},
     )
-
-    assert response.status_code == 201
-    data = response.json()
-    assert data["id"] == 2
-    assert data["username"] == "new_user"
-    assert data["name"] == "New User"
-    assert data["email"] == "new_user@example.com"
-
-
-def test_create_user_profile_conflict_username(client: TestClient):
-    response = client.post(
-        "/api/v1/user_profile",
-        json={
-            "username": "alice",
-            "password": "another-pass",
-            "name": "Alice 2",
-            "email": "alice2@example.com",
-            "benefits_preference": "No preference",
-        },
-    )
-
-    assert response.status_code == 409
-    body = response.json()
-    error = body.get("error") or body.get("detail", {}).get("error", {})
-    assert error["code"] == "CONFLICT"
-
-
-def test_get_user_profile_by_header_id(client: TestClient):
-    response = client.get("/api/v1/user_profile", headers={"x-user-id": "1"})
 
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == 1
-    assert data["username"] == "alice"
+    assert data["name"] == "Alice"
+    assert data["benefits_preference"] == "No preference"
 
 
-def test_get_user_profile_requires_user_context(client: TestClient):
-    response = client.get("/api/v1/user_profile")
+def test_get_user_profiles(client: TestClient):
+    response = client.get(
+        "/user_profile/",
+        headers={"Authorization": "Bearer test-token"},
+    )
 
-    assert response.status_code == 401
-    body = response.json()
-    error = body.get("error") or body.get("detail", {}).get("error", {})
-    assert error["code"] == "UNAUTHORIZED"
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["id"] == 1
+    assert data[0]["name"] == "Alice"
 
 
 def test_update_user_profile(client: TestClient):
-    response = client.patch(
-        "/api/v1/user_profile/1",
+    response = client.put(
+        "/user_profile/me",
         json={
-            "username": "alice",
-            "password": "updated-pass",
             "name": "Alice Updated",
-            "email": "alice.updated@example.com",
             "benefits_preference": "Cashback",
         },
+        headers={"Authorization": "Bearer test-token"},
     )
 
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == 1
     assert data["name"] == "Alice Updated"
-    assert data["email"] == "alice.updated@example.com"
     assert data["benefits_preference"] == "Cashback"
 
 
-def test_login_success(client: TestClient):
-    response = client.post(
-        "/api/v1/user_profile/login",
-        json={"username": "alice", "password": "alice-pass"},
+def test_get_my_profile_not_found(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    def _fake_validate_token(_auth):
+        return {"sub": "sub-missing"}
+
+    monkeypatch.setattr(router_module.cognito_service, "validate_token", _fake_validate_token)
+    response = client.get(
+        "/user_profile/me",
+        headers={"Authorization": "Bearer test-token"},
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == 1
-    assert data["username"] == "alice"
-
-
-def test_login_invalid_password(client: TestClient):
-    response = client.post(
-        "/api/v1/user_profile/login",
-        json={"username": "alice", "password": "wrong-pass"},
-    )
-
-    assert response.status_code == 401
-    body = response.json()
-    error = body.get("error") or body.get("detail", {}).get("error", {})
-    assert error["code"] == "UNAUTHORIZED"
+    assert response.status_code == 404
+    assert "detail" in response.json()

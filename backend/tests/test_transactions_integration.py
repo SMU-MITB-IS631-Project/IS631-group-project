@@ -97,7 +97,6 @@ def setup_and_teardown_db():
             UserProfile(
                 id=1,
                 username="alice",
-                password_hash="test-hash",
                 benefits_preference=BenefitsPreference.no_preference,
             )
         )

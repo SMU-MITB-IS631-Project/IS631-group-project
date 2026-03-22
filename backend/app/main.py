@@ -16,10 +16,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 # OpenAI client at import time and rely on these environment variables.
 load_dotenv()
 
-from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
@@ -34,6 +32,7 @@ from app.routes import (
     auth_router,
     notifications_router,
 )
+from app.services.errors import ServiceError
 from app.services import init_sample_data
 
 
@@ -90,6 +89,20 @@ async def validation_exception_handler(request, exc: RequestValidationError):  #
     )
 
 
+@app.exception_handler(ServiceError)
+async def service_error_handler(request: Request, exc: ServiceError):  # type: ignore[override]
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "details": exc.details or {},
+            }
+        },
+    )
+
+
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc: Exception):  # type: ignore[override]
     """Handle general exceptions - log and return 500 error"""
@@ -111,7 +124,13 @@ async def general_exception_handler(request, exc: Exception):  # type: ignore[ov
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     return JSONResponse(
         status_code=429,
-        content={"detail": "Rate limit exceeded. Try again later."}
+        content={
+            "error": {
+                "code": "RATE_LIMIT_EXCEEDED",
+                "message": "Rate limit exceeded. Try again later.",
+                "details": {},
+            }
+        },
     )
 
 # Register routers

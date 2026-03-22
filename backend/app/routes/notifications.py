@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
+from app.dependencies.user_context import get_x_user_id_int
 from app.models.card_change_notification import CardChangeNotification
 
 router = APIRouter(
@@ -25,8 +26,10 @@ def _unauthorized_response() -> JSONResponse:
 
 
 @router.get("")
-def list_notifications(request: Request, db: Session = Depends(get_db)):
-    user_id = request.headers.get("x-user-id")
+def list_notifications(
+    db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_x_user_id_int),
+):
     if not user_id:
         return _unauthorized_response()
 

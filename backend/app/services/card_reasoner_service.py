@@ -16,7 +16,7 @@ import logging
 import asyncio
 import time
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import List, Optional
 from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator
@@ -268,7 +268,7 @@ async def _call_openai_async(system_prompt: str, user_prompt: str) -> tuple[str,
                 timeout=float(LLMConfig.TIMEOUT_SECONDS)
             )
             return response.choices[0].message.content.strip(), None
-        except asyncio.TimeoutError as e:
+        except asyncio.TimeoutError:
             error_msg = f"LLM timeout (attempt {attempt}/{LLMConfig.MAX_RETRIES})"
             logger.warning(error_msg)
             if attempt == LLMConfig.MAX_RETRIES:

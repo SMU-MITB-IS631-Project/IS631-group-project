@@ -42,7 +42,7 @@ export default function Dashboard() {
       loadCardsMaster().then(setCardsMaster);
     };
     loadData();
-  }, []);
+  }, [navigate]);
 
   // Reload transactions when returning to this page
   useEffect(() => {

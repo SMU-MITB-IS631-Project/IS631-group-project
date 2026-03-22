@@ -113,7 +113,7 @@ function normalizeBackendRecommendation(backendResult) {
   };
 }
 
-export function getRecommendation({ userProfile, txn, transactions, cardsMaster }) {
+export function getRecommendation({ userProfile, txn, transactions: _transactions, cardsMaster }) {
   const walletCardIds = (userProfile.wallet || []).map(w => w.card_id);
   const preference = userProfile.preference || 'miles';
   const channel = txn.channel || 'online';
@@ -249,7 +249,12 @@ async function fetchAIExplanation({ userProfile, txn }) {
   return response.json();
 }
 
-export async function getRecommendationWithAIExplanation({ userProfile, txn, transactions, cardsMaster }) {
+export async function getRecommendationWithAIExplanation({
+  userProfile,
+  txn,
+  transactions: _transactions,
+  cardsMaster: _cardsMaster,
+}) {
   const backendResult = await fetchBackendRecommendation({ userProfile, txn });
   const baseResult = normalizeBackendRecommendation(backendResult);
 

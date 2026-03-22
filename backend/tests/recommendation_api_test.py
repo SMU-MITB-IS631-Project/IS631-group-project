@@ -40,7 +40,6 @@ class RecommendationApiTests(unittest.TestCase):
                 UserProfile(
                     id=1,
                     username="u1",
-                    password_hash="x",
                     benefits_preference=BenefitsPreference.no_preference,
                 )
             )
@@ -64,7 +63,7 @@ class RecommendationApiTests(unittest.TestCase):
                     bonus_minimum_spend_in_dollar=0,
                 )
             )
-            db.add(UserOwnedCard(user_id=1, card_id=10, status=UserOwnedCardStatus.active))
+            db.add(UserOwnedCard(user_id=1, card_id=10, status=UserOwnedCardStatus.Active))
             db.commit()
 
         def override_get_db():
@@ -132,9 +131,8 @@ class RecommendationApiTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 400)
         body = resp.json()
-        self.assertIn("detail", body)
-        self.assertIn("error", body["detail"])
-        self.assertEqual(body["detail"]["error"]["code"], "VALIDATION_ERROR")
+        error = body.get("error") or body.get("detail", {}).get("error", {})
+        self.assertEqual(error.get("code"), "VALIDATION_ERROR")
 
     def test_api_returns_200_with_fallback_explanation_when_ai_fails(self):
         """End-to-end: when OpenAI explanation service fails, the API must
