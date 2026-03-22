@@ -251,7 +251,6 @@ def list_transactions_by_user_id(
 def update_transaction(
     transaction_id: int,
     request: TransactionUpdateRequest,
-    http_request: Request,
     db: Session = Depends(get_db),
     user_id: Optional[str] = Depends(get_x_user_id),
 ) -> Dict[str, Any]:
