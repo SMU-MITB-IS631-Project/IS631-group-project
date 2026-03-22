@@ -4,6 +4,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.dependencies.services import get_user_profile_service
 from app.models.user_profile import UserProfileResponse, UserProfileUpdate
 from app.services.cognito_service import CognitoService
+from app.services.errors import ServiceError
 from app.services.user_profile_service import UserProfileService
 
 router = APIRouter(
@@ -52,10 +53,14 @@ def update_my_profile(
 ):
     cognito_sub = _get_cognito_sub(auth)
 
-    updated_profile = service.update_user_profile(
-        cognitosub=cognito_sub,
-        name=update.name,
-        benefits_preference=update.benefits_preference,
-    )
-    return updated_profile
+    try:
+        updated_profile = service.update_user_profile(
+            cognitosub=cognito_sub,
+            name=update.name,
+            benefits_preference=update.benefits_preference,
+        )
+        return updated_profile
+    except ServiceError as exc:
+        detail = getattr(exc, "detail", exc.message)
+        raise HTTPException(status_code=exc.status_code, detail=detail)
 

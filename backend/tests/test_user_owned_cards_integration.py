@@ -114,7 +114,7 @@ def client():
 
 @pytest.fixture()
 def valid_token():
-    with patch("app.routes.user_card_management.cognito_service.validate_token", return_value={"sub": COGNITO_SUB}):
+    with patch("app.dependencies.user_context.CognitoService.validate_token", return_value={"sub": COGNITO_SUB}):
         yield
 
 
@@ -164,7 +164,7 @@ def test_add_user_card_duplicate_returns_internal_server_error(client: TestClien
     second = client.post("/user/cards", headers=AUTH_HEADERS, json=payload)
 
     assert first.status_code == 201
-    assert second.status_code == 500
+    assert second.status_code == 400
 
 
 def test_update_user_card_success(client: TestClient, valid_token):
@@ -220,7 +220,7 @@ def test_remove_user_card_success(client: TestClient, valid_token):
 
 
 def test_get_user_cards_invalid_token_payload(client: TestClient):
-    with patch("app.routes.user_card_management.cognito_service.validate_token", return_value={}):
+    with patch("app.dependencies.user_context.CognitoService.validate_token", return_value={}):
         response = client.get("/user/cards/", headers=AUTH_HEADERS)
 
     assert response.status_code == 401
