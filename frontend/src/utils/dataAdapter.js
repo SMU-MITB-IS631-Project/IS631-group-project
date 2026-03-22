@@ -1,9 +1,9 @@
 import { parseCSV } from './csv';
+import API_BASE_URL from './apiBaseUrl';
 
 const PROFILE_KEY = 'cardtrack_user_profile';
 const TXN_KEY = 'cardtrack_transactions';
 const USER_ID_KEY = 'cardtrack_user_id';
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // --- User Context ---
 // TODO: Replace with actual user authentication/context
