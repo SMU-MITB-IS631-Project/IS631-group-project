@@ -19,7 +19,14 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 class CognitoService:
     def __init__(self):
-        self.region = os.getenv("COGNITO_REGION")
+        # Allow local tests/coverage runs without AWS config.
+        # Prefer explicit Cognito region, then standard AWS env vars, then a safe default.
+        self.region = (
+            os.getenv("COGNITO_REGION")
+            or os.getenv("AWS_REGION")
+            or os.getenv("AWS_DEFAULT_REGION")
+            or "us-east-1"
+        )
         self.user_pool_id = os.getenv("COGNITO_USER_POOL_ID")
         self.client_id = os.getenv("COGNITO_CLIENT_ID")
         self.client_secret = os.getenv("COGNITO_CLIENT_SECRET")

@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, status, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
+from app.dependencies.user_context import get_x_user_id_int
 from app.services.card_reasoner_service import (
     ExplanationRequest as LegacyExplanationRequest,
     ExplanationResponse as LegacyExplanationResponse,
@@ -59,13 +60,6 @@ def _safe_log_genai_event(
         logger.exception("Failed to write GenAI security log")
 
 
-def _header_user_id(request: Request) -> int | None:
-    value = request.headers.get("x-user-id")
-    if value and value.strip().isdigit():
-        return int(value.strip())
-    return None
-
-
 # =============================================================================
 # Request/Response Models for DB-Grounded Endpoint
 # =============================================================================
@@ -89,6 +83,7 @@ def explain_recommendation(
     payload: LegacyExplanationRequest,
     request: Request,
     db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_x_user_id_int),
 ) -> LegacyExplanationResponse:
     """
     Generate a natural language explanation for why a credit card was recommended.
@@ -135,7 +130,6 @@ def explain_recommendation(
         }
     """
     source = "card_reasoner.explain"
-    user_id = _header_user_id(request)
     try:
         response = generate_explanation(payload)
         
@@ -209,6 +203,7 @@ async def explain_recommendation_async(
     payload: LegacyExplanationRequest,
     request: Request,
     db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_x_user_id_int),
 ) -> LegacyExplanationResponse:
     """
     Async variant for non-blocking LLM calls.
@@ -217,7 +212,6 @@ async def explain_recommendation_async(
     Same request/response schema as /explain.
     """
     source = "card_reasoner.explain_async"
-    user_id = _header_user_id(request)
     try:
         response = await generate_explanation_async(payload)
         save_audit_log(response.audit_log_entry)
@@ -291,7 +285,8 @@ async def explain_recommendation_async(
 def explain_from_database(
     payload: ExplainFromDBRequest,
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    header_user_id: int | None = Depends(get_x_user_id_int),
 ) -> ExplanationResponse:
     """
     Generate explanation by querying ground truth from database.
@@ -328,7 +323,7 @@ def explain_from_database(
     - No possibility of rate hallucination
     """
     source = "card_reasoner.explain_db"
-    user_id = payload.user_id if payload.user_id is not None else _header_user_id(request)
+    user_id = payload.user_id if payload.user_id is not None else header_user_id
     try:
         # Initialize service with DB session
         service = ExplanationService(db)
