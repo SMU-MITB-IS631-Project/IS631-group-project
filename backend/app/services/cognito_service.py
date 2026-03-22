@@ -7,7 +7,8 @@ import base64
 from fastapi import Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import requests
-from app.services.errors import ServiceError
+from app.exceptions import ServiceException
+from dotenv import load_dotenv
 
 # load_dotenv()
 
@@ -44,12 +45,7 @@ class CognitoService:
         """
         response = requests.get(self.jwks_url)
         if response.status_code != 200:
-            raise ServiceError(
-                status_code=500,
-                code="INTERNAL_SERVER_ERROR",
-                message="Unable to fetch JWKS for token validation.",
-                details={},
-            )
+            raise ServiceException(status_code=500, detail="Unable to fetch JWKS for token validation.")
         return response.json()["keys"]
 
     @property
@@ -75,12 +71,7 @@ class CognitoService:
             kid = headers.get("kid")
             key = next((k for k in self.jwks_keys if k["kid"] == kid), None)
             if not key:
-                raise ServiceError(
-                    status_code=401,
-                    code="UNAUTHORIZED",
-                    message="Invalid token signature.",
-                    details={},
-                )
+                raise ServiceException(status_code=401, detail="Invalid token signature.")
             
             payload = jwt.decode(
                 token,
@@ -91,19 +82,9 @@ class CognitoService:
             )
             return payload
         except jwt.ExpiredSignatureError:
-            raise ServiceError(
-                status_code=401,
-                code="UNAUTHORIZED",
-                message="Token has expired.",
-                details={},
-            )
+            raise ServiceException(status_code=401, detail="Token has expired.")
         except jwt.JWTError as e:
-            raise ServiceError(
-                status_code=401,
-                code="UNAUTHORIZED",
-                message="Token validation error.",
-                details={"cause": str(e)},
-            )
+            raise ServiceException(status_code=401, detail=f"Token validation error: {str(e)}")
         
 
     def calculate_secret_hash(self, username):
@@ -148,40 +129,23 @@ class CognitoService:
             }
 
         except self.client.exceptions.NotAuthorizedException:
-            raise ServiceError(
-                status_code=401,
-                code="UNAUTHORIZED",
-                message="Invalid username or password.",
-                details={},
-            )
+            raise ServiceException(status_code=401, detail="Invalid username or password.")
         except self.client.exceptions.UserNotConfirmedException:
-            raise ServiceError(
-                status_code=403,
-                code="FORBIDDEN",
-                message="User account not confirmed.",
-                details={},
-            )
+            raise ServiceException(status_code=403, detail="User account not confirmed.")
         except Exception as e:
-            raise ServiceError(
-                status_code=500,
-                code="INTERNAL_SERVER_ERROR",
-                message="Authentication failed.",
-                details={"cause": str(e)},
-            )
+            raise ServiceException(status_code=500, detail=f"Authentication failed: {str(e)}")
         
     def check_user_role(self, claims, required_role: str):
         """
         Check if the token contains the required role.
         """
-        groups = claims.get("cognito:groups", [])
-        if required_role in groups:
-            return True
-        raise ServiceError(
-            status_code=403,
-            code="FORBIDDEN",
-            message="Insufficient permissions.",
-            details={},
-        )
+        try:
+            groups = claims.get("cognito:groups", [])
+            if required_role in groups:
+                return True
+            raise ServiceException(status_code=403, detail="Insufficient permissions")
+        except Exception as e:
+            raise ServiceException(status_code=403, detail=f"Invalid token or permissions: {str(e)}")
 
     def register_user(self, username: str, email: str, password: str):
         """
@@ -207,41 +171,16 @@ class CognitoService:
             return response
 
         except self.client.exceptions.UsernameExistsException:
-            raise ServiceError(
-                status_code=409,
-                code="CONFLICT",
-                message="Username already exists.",
-                details={},
-            )
+            raise ServiceException(status_code=409, detail="Username already exists.")
         except self.client.exceptions.AliasExistsException:
-            raise ServiceError(
-                status_code=409,
-                code="CONFLICT",
-                message="Email already exists.",
-                details={},
-            )
+            raise ServiceException(status_code=409, detail="Email already exists.")
         except self.client.exceptions.InvalidParameterException as e:
             message = str(e)
             if "email" in message.lower() and "exist" in message.lower():
-                raise ServiceError(
-                    status_code=409,
-                    code="CONFLICT",
-                    message="Email already exists.",
-                    details={},
-                )
-            raise ServiceError(
-                status_code=400,
-                code="VALIDATION_ERROR",
-                message=message,
-                details={},
-            )
+                raise ServiceException(status_code=409, detail="Email already exists.")
+            raise ServiceException(status_code=400, detail=message)
         except Exception as e:
-            raise ServiceError(
-                status_code=500,
-                code="INTERNAL_SERVER_ERROR",
-                message="Registration failed.",
-                details={"cause": str(e)},
-            )
+            raise ServiceException(status_code=500, detail=f"Registration failed: {str(e)}")
     
     
     def confirm_user(self, username: str, confirmation_code: str):
@@ -260,33 +199,13 @@ class CognitoService:
             return "User confirmed successfully."
         
         except self.client.exceptions.CodeMismatchException:
-            raise ServiceError(
-                status_code=400,
-                code="VALIDATION_ERROR",
-                message="Invalid confirmation code.",
-                details={},
-            )
+            raise ServiceException(status_code=400, detail="Invalid confirmation code.")
         except self.client.exceptions.ExpiredCodeException:
-            raise ServiceError(
-                status_code=400,
-                code="VALIDATION_ERROR",
-                message="Confirmation code has expired.",
-                details={},
-            )
+            raise ServiceException(status_code=400, detail="Confirmation code has expired.")
         except self.client.exceptions.UserNotFoundException:
-            raise ServiceError(
-                status_code=404,
-                code="NOT_FOUND",
-                message="User not found.",
-                details={},
-            )
+            raise ServiceException(status_code=404, detail="User not found.")
         except Exception as e:
-            raise ServiceError(
-                status_code=500,
-                code="INTERNAL_SERVER_ERROR",
-                message="Confirmation failed.",
-                details={"cause": str(e)},
-            )
+            raise ServiceException(status_code=500, detail=f"Confirmation failed: {str(e)}")
 
     def delete_user(self, username: str) -> None:
         """Delete a Cognito user from the user pool (admin operation)."""
@@ -298,12 +217,7 @@ class CognitoService:
         except self.client.exceptions.UserNotFoundException:
             return
         except Exception as e:
-            raise ServiceError(
-                status_code=500,
-                code="INTERNAL_SERVER_ERROR",
-                message="Cognito cleanup failed.",
-                details={"cause": str(e)},
-            )
+            raise ServiceException(status_code=500, detail=f"Cognito cleanup failed: {str(e)}")
 
 class RoleChecker:
     def __init__(self, allowed_role: str):
@@ -313,12 +227,7 @@ class RoleChecker:
                  cognito_service: CognitoService = Depends(CognitoService)):
         # Validate the token and check the user's role
         if not auth:
-            raise ServiceError(
-                status_code=401,
-                code="UNAUTHORIZED",
-                message="Not authenticated.",
-                details={},
-            )
+            raise ServiceException(status_code=401, detail="Not authenticated")
         claims = cognito_service.validate_token(auth)
         cognito_service.check_user_role(claims, self.allowed_role)
         return claims

@@ -13,7 +13,7 @@ BACKEND_DIR = REPO_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
 
 from app.db.db import Base  # noqa: E402
-from app.services.errors import ServiceError  # noqa: E402
+from app.exceptions import ServiceException  # noqa: E402
 from app.models.card_catalogue import (  # noqa: E402
 	BankEnum,
 	BenefitTypeEnum,
@@ -98,11 +98,11 @@ class UserCardServiceTests(unittest.TestCase):
 		with self.Session() as db:
 			service = UserCardManagementService(db)
 
-			with self.assertRaises(ServiceError) as context:
+			with self.assertRaises(ServiceException) as context:
 				service.get_user_cards("missing-sub")
 
 			self.assertEqual(context.exception.status_code, 404)
-			self.assertEqual(context.exception.message, "User not found.")
+			self.assertEqual(context.exception.detail, "User not found.")
 
 	def test_add_user_card_success(self):
 		with self.Session() as db:
@@ -130,21 +130,21 @@ class UserCardServiceTests(unittest.TestCase):
 			payload = UserOwnedCardCreate(card_id=101)
 			service.add_user_card("sub-alice", 101, payload)
 
-			with self.assertRaises(ServiceError) as context:
+			with self.assertRaises(ServiceException) as context:
 				service.add_user_card("sub-alice", 101, payload)
 
 			self.assertEqual(context.exception.status_code, 400)
-			self.assertEqual(context.exception.message, "User already owns this card.")
+			self.assertEqual(context.exception.detail, "User already owns this card.")
 
 	def test_add_user_card_user_not_found(self):
 		with self.Session() as db:
 			service = UserCardManagementService(db)
 
-			with self.assertRaises(ServiceError) as context:
+			with self.assertRaises(ServiceException) as context:
 				service.add_user_card("missing-sub", 101, UserOwnedCardCreate(card_id=101))
 
 			self.assertEqual(context.exception.status_code, 404)
-			self.assertEqual(context.exception.message, "User not found.")
+			self.assertEqual(context.exception.detail, "User not found.")
 
 	def test_update_user_card_success(self):
 		with self.Session() as db:
@@ -183,11 +183,11 @@ class UserCardServiceTests(unittest.TestCase):
 		with self.Session() as db:
 			service = UserCardManagementService(db)
 
-			with self.assertRaises(ServiceError) as context:
+			with self.assertRaises(ServiceException) as context:
 				service.update_user_card("sub-alice", 999, UserOwnedCardUpdate(status=UserOwnedCardStatus.Closed))
 
 			self.assertEqual(context.exception.status_code, 404)
-			self.assertEqual(context.exception.message, "User does not own this card.")
+			self.assertEqual(context.exception.detail, "User does not own this card.")
 
 	def test_remove_user_card_success(self):
 		with self.Session() as db:
@@ -203,11 +203,11 @@ class UserCardServiceTests(unittest.TestCase):
 		with self.Session() as db:
 			service = UserCardManagementService(db)
 
-			with self.assertRaises(ServiceError) as context:
+			with self.assertRaises(ServiceException) as context:
 				service.remove_user_card("sub-alice", 102)
 
 			self.assertEqual(context.exception.status_code, 404)
-			self.assertEqual(context.exception.message, "User does not own this card.")
+			self.assertEqual(context.exception.detail, "User does not own this card.")
 
 
 if __name__ == "__main__":

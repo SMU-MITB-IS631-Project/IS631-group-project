@@ -1,10 +1,10 @@
-from typing import Optional
+from typing import Optional, Dict, Any, cast
 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from app.models.user_profile import BenefitsPreference, UserProfile
-from app.services.errors import ServiceError
+from app.exceptions import ServiceException
 
 
 class UserProfileService:
@@ -24,7 +24,7 @@ class UserProfileService:
         """Update a user's profile with the provided fields."""
         user = self.db.query(UserProfile).filter(UserProfile.cognito_sub == cognitosub).first()
         if not user:
-            raise ServiceError(status_code=404, code="NOT_FOUND", message="User not found.", details={})
+            raise ServiceException(status_code=404, detail="User not found.")
 
         if name is not None:
             user.name = name
@@ -40,21 +40,16 @@ class UserProfileService:
         """Create a new user profile linked to a Cognito user."""
         existing_user = self.get_user_profile(cognitosub)
         if existing_user:
-            raise ServiceError(
-                status_code=409,
-                code="CONFLICT",
-                message="User profile already exists for this Cognito user.",
-                details={},
-            )
+            raise ServiceException(status_code=409, detail="User profile already exists for this Cognito user.")
 
         username_conflict = self.db.query(UserProfile).filter(UserProfile.username == username).first()
         if username_conflict:
-            raise ServiceError(status_code=409, code="CONFLICT", message="Username already exists.", details={})
+            raise ServiceException(status_code=409, detail="Username already exists.")
 
         if email:
             email_conflict = self.db.query(UserProfile).filter(UserProfile.email == email).first()
             if email_conflict:
-                raise ServiceError(status_code=409, code="CONFLICT", message="Email already exists.", details={})
+                raise ServiceException(status_code=409, detail="Email already exists.")
 
         new_user = UserProfile(
             username=username,
@@ -68,12 +63,7 @@ class UserProfileService:
             self.db.commit()
         except IntegrityError:
             self.db.rollback()
-            raise ServiceError(
-                status_code=409,
-                code="CONFLICT",
-                message="Username or email already exists.",
-                details={},
-            )
+            raise ServiceException(status_code=409, detail="Username or email already exists.")
         self.db.refresh(new_user)
         return new_user
     
@@ -81,6 +71,6 @@ class UserProfileService:
     def delete_user_profile(self, cognitosub: str) -> None:
         user = self.get_user_profile(cognitosub)
         if not user:
-            raise ServiceError(status_code=404, code="NOT_FOUND", message="User not found.", details={})
+            raise ServiceException(status_code=404, detail="User not found.")
         self.db.delete(user)
         self.db.commit()
