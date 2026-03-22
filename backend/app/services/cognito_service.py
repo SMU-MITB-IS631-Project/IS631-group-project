@@ -1,10 +1,11 @@
 import os
+from typing import Optional
 from jose import jwt
 import boto3
 import hmac
 import hashlib
 import base64
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import requests
 from app.exceptions import ServiceException
@@ -139,13 +140,10 @@ class CognitoService:
         """
         Check if the token contains the required role.
         """
-        try:
-            groups = claims.get("cognito:groups", [])
-            if required_role in groups:
-                return True
-            raise ServiceException(status_code=403, detail="Insufficient permissions")
-        except Exception as e:
-            raise ServiceException(status_code=403, detail=f"Invalid token or permissions: {str(e)}")
+        groups = claims.get("cognito:groups") or []
+        if required_role in groups:
+            return True
+        raise ServiceException(status_code=403, detail="Insufficient permissions")
 
     def register_user(self, username: str, email: str, password: str):
         """
@@ -220,15 +218,19 @@ class CognitoService:
             raise ServiceException(status_code=500, detail=f"Cognito cleanup failed: {str(e)}")
 
 class RoleChecker:
-    def __init__(self, allowed_role: str):
+    def __init__(self, allowed_role: Optional[str] = None):
         self.allowed_role = allowed_role
 
     def __call__(self, auth: HTTPAuthorizationCredentials = Depends(bearer_scheme), 
                  cognito_service: CognitoService = Depends(CognitoService)):
         # Validate the token and check the user's role
         if not auth:
-            raise ServiceException(status_code=401, detail="Not authenticated")
-        claims = cognito_service.validate_token(auth)
-        cognito_service.check_user_role(claims, self.allowed_role)
-        return claims
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        try:
+            claims = cognito_service.validate_token(auth)
+            if self.allowed_role:
+                cognito_service.check_user_role(claims, self.allowed_role)
+            return claims
+        except ServiceException as e:
+            raise HTTPException(status_code=e.status_code, detail=e.detail) from e
 
