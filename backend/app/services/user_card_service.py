@@ -8,6 +8,14 @@ class UserCardManagementService:
     def __init__(self, db: Session):
         self.db = db
 
+    _OWNED_CARD_UPDATABLE_FIELDS = {
+        "billing_cycle_refresh_day_of_month",
+        "card_expiry_date",
+        "cycle_spend_sgd",
+        "status",
+        "card_id",
+    }
+
     def _require_user_by_id(self, user_id: int) -> UserProfile:
         user = self.db.query(UserProfile).filter(UserProfile.id == user_id).first()
         if not user:
@@ -54,6 +62,47 @@ class UserCardManagementService:
                 message="User card not found.",
                 details={},
             )
+
+        disallowed_fields = [key for key in updates.keys() if key not in self._OWNED_CARD_UPDATABLE_FIELDS]
+        if disallowed_fields:
+            raise ServiceError(
+                status_code=400,
+                code="VALIDATION_ERROR",
+                message="Invalid update fields for wallet card.",
+                details={"fields": sorted(disallowed_fields)},
+            )
+
+        new_card_id = updates.get("card_id")
+        if new_card_id is not None:
+            try:
+                new_card_id_int = int(new_card_id)
+            except (TypeError, ValueError):
+                raise ServiceError(
+                    status_code=400,
+                    code="VALIDATION_ERROR",
+                    message="Invalid card_id.",
+                    details={},
+                )
+
+            if int(getattr(card, "card_id")) != new_card_id_int:
+                conflict = (
+                    self.db.query(UserOwnedCard)
+                    .filter(
+                        UserOwnedCard.user_id == user_id,
+                        UserOwnedCard.card_id == new_card_id_int,
+                        UserOwnedCard.id != owned_card_id,
+                    )
+                    .first()
+                )
+                if conflict:
+                    raise ServiceError(
+                        status_code=409,
+                        code="CONFLICT",
+                        message="Wallet card already exists.",
+                        details={},
+                    )
+
+                updates["card_id"] = new_card_id_int
 
         for key, value in updates.items():
             if hasattr(card, key):
