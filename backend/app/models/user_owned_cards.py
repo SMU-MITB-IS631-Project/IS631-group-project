@@ -1,5 +1,5 @@
 from typing import Optional
-from sqlalchemy import Column, Date, Integer, String, DateTime, Enum as SAEnum, ForeignKey, Float
+from sqlalchemy import Column, Date, Integer, String, DateTime, Enum as SAEnum, ForeignKey
 from app.db.db import Base
 from pydantic import BaseModel, ConfigDict, field_validator, Field
 from sqlalchemy.orm import relationship
