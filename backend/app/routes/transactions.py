@@ -87,7 +87,6 @@ def _list_transactions_for_user(
 @router.post("", status_code=201)
 def create_transaction(
     request: TransactionRequest,
-    http_request: Request,
     db: Session = Depends(get_db),
     user_id: Optional[str] = Depends(get_x_user_id),
 ) -> Dict[str, Any]:
