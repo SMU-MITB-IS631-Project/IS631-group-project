@@ -78,8 +78,11 @@ def test_template_explanation_is_rated_high_by_llm_judge(
 ):
     """Generate explanation via service and have an LLM judge rate its quality (1-5)."""
     openai_api_key = os.getenv("OPENAI_API_KEY")
-    if not openai_api_key:
-        pytest.skip("OPENAI_API_KEY not set; skipping LLM-judge quality test")
+    run_llm_tests = os.getenv("RUN_LLM_TESTS")
+    if not openai_api_key or run_llm_tests != "1":
+        pytest.skip(
+            "LLM tests are disabled. Set OPENAI_API_KEY and RUN_LLM_TESTS=1 to run this test."
+        )
 
     request = _build_request()
 
