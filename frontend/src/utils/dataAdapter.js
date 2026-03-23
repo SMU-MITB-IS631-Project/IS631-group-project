@@ -320,6 +320,15 @@ export async function registerUser(username, password, name, email, preference, 
     saveUserProfile(seededProfile);
     setCurrentUserId(data.user_id);
 
+    // Persist wallet to backend before posting registration transactions
+    if (Array.isArray(wallet) && wallet.length > 0) {
+      try {
+        await postUserCards(data.user_id, wallet);
+      } catch (walletError) {
+        console.warn('Unable to persist wallet cards yet:', walletError);
+      }
+    }
+
     // Ensure initial registration spend is visible immediately.
     // Backend creation may fail if wallet linkage is delayed, so keep local fallback entries.
     const localRegistrationTxns = (wallet || [])

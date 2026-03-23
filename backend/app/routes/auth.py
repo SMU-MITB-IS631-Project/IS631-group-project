@@ -223,10 +223,17 @@ def register(payload: RegistrationPayload, request: Request, db: Session = Depen
         raise HTTPException(status_code=500, detail="Internal server error.")
     
 # Can we improve the code quality of the following endpoint implementation?
+
+# Pydantic model for OTP confirmation
+from pydantic import BaseModel
+
+class OtpConfirmationPayload(BaseModel):
+    username: str
+    confirmation_code: str
+
 @router.post("/confirmation")
 def confirm(
-    username: str,
-    confirmation_code: str,
+    payload: OtpConfirmationPayload,
     request: Request,
     db: Session = Depends(get_db),
 ):
@@ -234,7 +241,7 @@ def confirm(
     Confirm the user's email address using the code sent by Cognito.
     """
     try:
-        cognito_service.confirm_user(username=username, confirmation_code=confirmation_code)
+        cognito_service.confirm_user(username=payload.username, confirmation_code=payload.confirmation_code)
 
         _safe_log_otp(
             db,
@@ -243,7 +250,7 @@ def confirm(
             request=request,
             source="auth.confirmation",
             reason="otp_confirmed",
-            details={"username": username},
+            details={"username": payload.username},
         )
 
         return {"message": "User confirmed successfully."}
@@ -256,7 +263,7 @@ def confirm(
             request=request,
             source="auth.confirmation",
             reason="otp_confirmation_failed",
-            details={"username": username, "error_message": e.detail},
+            details={"username": payload.username, "error_message": e.detail},
         )
         raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
@@ -267,6 +274,6 @@ def confirm(
             request=request,
             source="auth.confirmation",
             reason="unexpected_error",
-            details={"username": username, "error_message": str(e)},
+            details={"username": payload.username, "error_message": str(e)},
         )
         raise HTTPException(status_code=500, detail="Internal server error.")

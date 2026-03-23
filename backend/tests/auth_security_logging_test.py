@@ -61,7 +61,10 @@ class AuthSecurityLoggingTests(unittest.TestCase):
             "app.routes.auth.jwt.get_unverified_claims",
             return_value={"sub": "sub-123", "cognito:username": "alice"},
         ), patch("app.routes.auth.log_auth_event") as mock_log_auth:
-            resp = self.client.post("/api/v1/auth/login", params={"username": "alice", "password": "secret"})
+            resp = self.client.post(
+                "/api/v1/auth/login",
+                json={"username": "alice", "password": "secret"}
+            )
 
         self.assertEqual(resp.status_code, 200, msg=resp.text)
         self.assertEqual(mock_log_auth.call_count, 1)
@@ -74,7 +77,10 @@ class AuthSecurityLoggingTests(unittest.TestCase):
             "app.routes.auth.cognito_service.authenticate_user",
             side_effect=Exception("boom"),
         ), patch("app.routes.auth.log_auth_event") as mock_log_auth:
-            resp = self.client.post("/api/v1/auth/login", params={"username": "alice", "password": "wrong"})
+            resp = self.client.post(
+                "/api/v1/auth/login",
+                json={"username": "alice", "password": "wrong"}
+            )
 
         self.assertEqual(resp.status_code, 500)
         self.assertEqual(mock_log_auth.call_count, 1)
@@ -89,7 +95,10 @@ class AuthSecurityLoggingTests(unittest.TestCase):
             "app.routes.auth.cognito_service.authenticate_user",
             side_effect=ServiceException(status_code=401, detail="Invalid username or password."),
         ), patch("app.routes.auth.log_auth_event") as mock_log_auth:
-            resp = self.client.post("/api/v1/auth/login", params={"username": "alice", "password": "wrong"})
+            resp = self.client.post(
+                "/api/v1/auth/login",
+                json={"username": "alice", "password": "wrong"}
+            )
 
         self.assertEqual(resp.status_code, 401, msg=resp.text)
         self.assertEqual(mock_log_auth.call_count, 1)
