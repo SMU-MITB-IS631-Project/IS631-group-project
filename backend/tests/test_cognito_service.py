@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -11,9 +13,13 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from jose import jwt
 
-import app.services.cognito_service as cognito_module
-from app.exceptions import ServiceException
-from app.services.cognito_service import CognitoService, RoleChecker
+REPO_ROOT = Path(__file__).resolve().parents[2]
+BACKEND_DIR = REPO_ROOT / "backend"
+sys.path.insert(0, str(BACKEND_DIR))
+
+import app.services.cognito_service as cognito_module  # noqa: E402
+from app.exceptions import ServiceException  # noqa: E402
+from app.services.cognito_service import CognitoService, RoleChecker  # noqa: E402
 
 
 
