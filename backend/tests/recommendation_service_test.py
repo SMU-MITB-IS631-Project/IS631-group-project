@@ -2,7 +2,6 @@ import sys
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from types import ModuleType
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -13,16 +12,6 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_DIR = REPO_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
-
-# Compatibility shim: app.services.__init__ imports data_service which is absent.
-if "app.services.data_service" not in sys.modules:
-    data_service_stub = ModuleType("app.services.data_service")
-    data_service_stub.get_user_wallet = lambda *args, **kwargs: None
-    data_service_stub.card_exists_in_wallet = lambda *args, **kwargs: None
-    data_service_stub.create_transaction = lambda *args, **kwargs: None
-    data_service_stub.get_user_transactions = lambda *args, **kwargs: None
-    data_service_stub.init_sample_data = lambda *args, **kwargs: None
-    sys.modules["app.services.data_service"] = data_service_stub
 
 from app.models.card_bonus_category import BonusCategory, CardBonusCategory  # noqa: E402
 from app.models.card_catalogue import BenefitTypeEnum, CardCatalogue  # noqa: E402
