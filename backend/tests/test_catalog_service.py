@@ -7,6 +7,7 @@ from app.services.catalog_service import CatalogService
 from app.services.errors import ServiceError
 from app.models.card_catalogue import CardCatalogue
 from app.models.card_catalogue import CardBonusRuleUpdate, CardRewardUpdatePayload
+from app.models.card_catalogue import CardCatalogueCreate, BankEnum, BenefitTypeEnum, StatusEnum
 from app.models.card_bonus_category import BonusCategory, CardBonusCategory
 from app.models.user_owned_cards import UserOwnedCard
 
@@ -102,6 +103,32 @@ def test_diff_snapshots_detects_added_removed_and_changed_categories(catalog_ser
     assert changes["bonus_rules"]["changed_categories"]["Food"] == {
         "bonus_benefit_rate": {"old": "2", "new": "2.5"},
         "bonus_cap_in_dollar": {"old": 100, "new": 150},
+    }
+
+
+def test_snapshot_card_rewards_serializes_bonus_rows(catalog_service):
+    card = CardCatalogue(card_id=1, card_name="Card", base_benefit_rate=Decimal("1.5000"))
+    bonus_rows = [
+        CardBonusCategory(
+            card_id=1,
+            bonus_category=BonusCategory.Transport,
+            bonus_benefit_rate=Decimal("3.2500"),
+            bonus_cap_in_dollar=999,
+            bonus_minimum_spend_in_dollar=20,
+        )
+    ]
+
+    snapshot = catalog_service._snapshot_card_rewards(card, bonus_rows)
+
+    assert snapshot == {
+        "base_benefit_rate": "1.5",
+        "bonus_rules": {
+            "Transport": {
+                "bonus_benefit_rate": "3.25",
+                "bonus_cap_in_dollar": 999,
+                "bonus_minimum_spend_in_dollar": 20,
+            }
+        },
     }
 
 
@@ -255,3 +282,108 @@ def test_update_card_rewards_updates_rules_and_creates_notifications(catalog_ser
     assert "bonus_rules" in result["changed_fields"]
     mock_db.flush.assert_called_once()
     mock_db.commit.assert_called_once()
+
+
+def test_update_card_rewards_changes_without_owners_creates_zero_notifications(catalog_service, mock_db):
+    card = CardCatalogue(card_id=1, card_name="DBS Altitude", base_benefit_rate=Decimal("1.5"))
+
+    card_query = Mock()
+    card_query.filter.return_value.first.return_value = card
+
+    bonus_query = Mock()
+    bonus_query.filter.return_value.all.return_value = []
+
+    owner_query = Mock()
+    owner_query.filter.return_value.distinct.return_value.all.return_value = []
+
+    def query_side_effect(model):
+        if model is CardCatalogue:
+            return card_query
+        if model is CardBonusCategory:
+            return bonus_query
+        if model is UserOwnedCard.user_id:
+            return owner_query
+        raise AssertionError(f"Unexpected query model: {model}")
+
+    mock_db.query.side_effect = query_side_effect
+
+    payload = CardRewardUpdatePayload(base_benefit_rate=Decimal("2.0"), effective_date=date(2026, 3, 1))
+    result = catalog_service.update_card_rewards(card_id=1, payload=payload)
+
+    assert result["changed_fields"] == {"base_benefit_rate": {"old": "1.5", "new": "2"}}
+    assert result["notifications_created"] == 0
+    mock_db.commit.assert_called_once()
+
+
+def test_create_card_success(catalog_service, mock_db):
+    create_payload = CardCatalogueCreate(
+        card_id=42,
+        bank=BankEnum.DBS,
+        card_name="DBS New Card",
+        benefit_type=BenefitTypeEnum.miles,
+        base_benefit_rate=Decimal("1.2"),
+        status=StatusEnum.valid,
+    )
+
+    card_query = Mock()
+    card_query.filter.return_value.first.return_value = None
+    mock_db.query.return_value = card_query
+
+    created = catalog_service.create_card(create_payload)
+
+    assert isinstance(created, CardCatalogue)
+    assert created.bank == BankEnum.DBS
+    assert created.card_name == "DBS New Card"
+    mock_db.add.assert_called_once_with(created)
+    mock_db.commit.assert_called_once()
+    mock_db.refresh.assert_called_once_with(created)
+
+
+def test_create_card_duplicate_raises_service_error(catalog_service, mock_db):
+    create_payload = CardCatalogueCreate(
+        card_id=7,
+        bank=BankEnum.CITI,
+        card_name="CITI Existing",
+        benefit_type=BenefitTypeEnum.cashback,
+        base_benefit_rate=Decimal("0.8"),
+        status=StatusEnum.valid,
+    )
+
+    existing_card = CardCatalogue(card_id=7, bank=BankEnum.CITI, card_name="CITI Existing")
+    card_query = Mock()
+    card_query.filter.return_value.first.return_value = existing_card
+    mock_db.query.return_value = card_query
+
+    with pytest.raises(ServiceError) as exc_info:
+        catalog_service.create_card(create_payload)
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.code == "CARD_EXISTS"
+    assert exc_info.value.details == {"bank": "BankEnum.CITI", "card_name": "CITI Existing"}
+    mock_db.add.assert_not_called()
+    mock_db.commit.assert_not_called()
+
+
+def test_delete_card_success(catalog_service, mock_db):
+    existing_card = CardCatalogue(card_id=99, card_name="Delete Me")
+    card_query = Mock()
+    card_query.filter.return_value.first.return_value = existing_card
+    mock_db.query.return_value = card_query
+
+    deleted = catalog_service.delete_card(99)
+
+    assert deleted is True
+    mock_db.delete.assert_called_once_with(existing_card)
+    mock_db.commit.assert_called_once()
+
+
+def test_delete_card_not_found_returns_false(catalog_service, mock_db):
+    card_query = Mock()
+    card_query.filter.return_value.first.return_value = None
+    mock_db.query.return_value = card_query
+
+    deleted = catalog_service.delete_card(500)
+
+    assert deleted is False
+    mock_db.delete.assert_not_called()
+    mock_db.commit.assert_not_called()
