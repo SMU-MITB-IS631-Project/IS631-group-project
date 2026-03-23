@@ -1,145 +1,140 @@
-from pathlib import Path
-from importlib.util import module_from_spec, spec_from_file_location
+from datetime import datetime, timezone
+from unittest.mock import Mock, patch
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from app.db.db import Base
-from app.dependencies.db import get_db
-from app.models.user_profile import BenefitsPreference, UserProfile
-
-
-BACKEND_DIR = Path(__file__).resolve().parents[1]
-TEST_DB_PATH = BACKEND_DIR / "test.db"
-SQLALCHEMY_DATABASE_URL = f"sqlite:///{TEST_DB_PATH.as_posix()}"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-ROUTER_MODULE_PATH = BACKEND_DIR / "app" / "routes" / "user_profile.py"
-router_spec = spec_from_file_location("user_profile_route_for_tests", ROUTER_MODULE_PATH)
-router_module = module_from_spec(router_spec)
-assert router_spec and router_spec.loader
-router_spec.loader.exec_module(router_module)
-user_profile_router = router_module.router
-
-app = FastAPI()
-app.include_router(user_profile_router)
-
-AUTH_HEADERS = {"Authorization": "Bearer test-token"}
-
-
-def override_get_db():
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+from app.dependencies.services import get_user_profile_service
+from app.exceptions import ServiceException
+from app.models.user_profile import BenefitsPreference
+from app.routes.user_profile import router
 
 
 @pytest.fixture()
-def client():
+def app_and_service_mock():
+    app = FastAPI()
+    app.include_router(router)
+
+    service_mock = Mock()
+    app.dependency_overrides[get_user_profile_service] = lambda: service_mock
+    try:
+        yield app, service_mock
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def client(app_and_service_mock):
+    app, _ = app_and_service_mock
     with TestClient(app) as test_client:
         yield test_client
 
 
-@pytest.fixture(autouse=True)
-def dependency_overrides():
-    app.dependency_overrides[get_db] = override_get_db
-
-    original_validate_token = router_module.cognito_service.validate_token
-    router_module.cognito_service.validate_token = lambda auth: {"sub": "test-cognito-sub-1"}
-
-    yield
-
-    app.dependency_overrides = {}
-    router_module.cognito_service.validate_token = original_validate_token
+def _auth_header() -> dict[str, str]:
+    return {"Authorization": "Bearer fake-token"}
 
 
-@pytest.fixture(autouse=True)
-def setup_and_teardown_db():
-    Base.metadata.create_all(bind=engine)
-
-    db = TestingSessionLocal()
-    try:
-        db.add(
-            UserProfile(
-                id=1,
-                username="alice",
-                name="Alice",
-                email="alice@example.com",
-                cognito_sub="test-cognito-sub-1",
-                benefits_preference=BenefitsPreference.no_preference,
-            )
-        )
-        db.add(
-            UserProfile(
-                id=2,
-                username="bob",
-                name="Bob",
-                email="bob@example.com",
-                cognito_sub="test-cognito-sub-2",
-                benefits_preference=BenefitsPreference.cashback,
-            )
-        )
-        db.commit()
-
-        yield
-    finally:
-        db.close()
-        Base.metadata.drop_all(bind=engine)
+def _profile_payload(**overrides):
+    payload = {
+        "id": 1,
+        "name": "Test User",
+        "benefits_preference": "No preference",
+        "created_date": datetime(2026, 3, 22, tzinfo=timezone.utc).isoformat(),
+    }
+    payload.update(overrides)
+    return payload
 
 
-def test_get_user_profiles(client: TestClient):
-    response = client.get("/user_profile/", headers=AUTH_HEADERS)
-
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, list)
-    assert len(data) == 2
-    assert {item["id"] for item in data} == {1, 2}
-
-
-def test_get_my_profile(client: TestClient):
-    response = client.get("/user_profile/me", headers=AUTH_HEADERS)
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == 1
-    assert data["name"] == "Alice"
-    assert data["benefits_preference"] == "No preference"
-
-
-def test_get_user_profile_requires_auth(client: TestClient):
-    response = client.get("/user_profile/me")
+def test_get_user_profiles_requires_authorization(client: TestClient):
+    response = client.get("/user_profile/")
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Missing Authorization header."
+    assert response.json() == {"detail": "Missing Authorization header."}
 
 
-def test_update_my_profile(client: TestClient):
-    response = client.put(
-        "/user_profile/me",
-        json={
-            "name": "Alice Updated",
-            "benefits_preference": "Cashback",
-        },
-        headers=AUTH_HEADERS,
-    )
+def test_get_user_profiles_success(client: TestClient, app_and_service_mock):
+    _, service_mock = app_and_service_mock
+    service_mock.get_all_user_profiles.return_value = [_profile_payload(id=1), _profile_payload(id=2, name="Jane")]
+
+    with patch("app.routes.user_profile.cognito_service.validate_token", return_value={"sub": "cognito-sub-1"}) as mock_validate:
+        response = client.get("/user_profile/", headers=_auth_header())
 
     assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == 1
-    assert data["name"] == "Alice Updated"
-    assert data["benefits_preference"] == "Cashback"
+    assert response.json()[0]["id"] == 1
+    assert response.json()[1]["name"] == "Jane"
+    mock_validate.assert_called_once()
+    service_mock.get_all_user_profiles.assert_called_once_with()
 
 
-def test_get_my_profile_not_found_for_unknown_cognito_sub(client: TestClient):
-    router_module.cognito_service.validate_token = lambda auth: {"sub": "unknown-sub"}
+def test_get_my_profile_not_found(client: TestClient, app_and_service_mock):
+    _, service_mock = app_and_service_mock
+    service_mock.get_user_profile.return_value = None
 
-    response = client.get("/user_profile/me", headers=AUTH_HEADERS)
+    with patch("app.routes.user_profile.cognito_service.validate_token", return_value={"sub": "missing-user-sub"}):
+        response = client.get("/user_profile/me", headers=_auth_header())
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "User profile not found."
+    assert response.json() == {"detail": "User profile not found."}
+    service_mock.get_user_profile.assert_called_once_with("missing-user-sub")
+
+
+def test_get_my_profile_success(client: TestClient, app_and_service_mock):
+    _, service_mock = app_and_service_mock
+    service_mock.get_user_profile.return_value = _profile_payload(id=10, name="Alice")
+
+    with patch("app.routes.user_profile.cognito_service.validate_token", return_value={"sub": "alice-sub"}):
+        response = client.get("/user_profile/me", headers=_auth_header())
+
+    assert response.status_code == 200
+    assert response.json()["id"] == 10
+    assert response.json()["name"] == "Alice"
+    service_mock.get_user_profile.assert_called_once_with("alice-sub")
+
+
+def test_update_my_profile_success(client: TestClient, app_and_service_mock):
+    _, service_mock = app_and_service_mock
+    service_mock.update_user_profile.return_value = _profile_payload(
+        id=7,
+        name="Updated User",
+        benefits_preference="Cashback",
+    )
+
+    with patch("app.routes.user_profile.cognito_service.validate_token", return_value={"sub": "update-sub"}):
+        response = client.put(
+            "/user_profile/me",
+            headers=_auth_header(),
+            json={"name": "Updated User", "benefits_preference": "Cashback"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Updated User"
+    assert response.json()["benefits_preference"] == "Cashback"
+    service_mock.update_user_profile.assert_called_once_with(
+        cognitosub="update-sub",
+        name="Updated User",
+        benefits_preference=BenefitsPreference.cashback,
+    )
+
+
+def test_update_my_profile_maps_service_exception(client: TestClient, app_and_service_mock):
+    _, service_mock = app_and_service_mock
+    service_mock.update_user_profile.side_effect = ServiceException(status_code=404, detail="User not found.")
+
+    with patch("app.routes.user_profile.cognito_service.validate_token", return_value={"sub": "missing-sub"}):
+        response = client.put(
+            "/user_profile/me",
+            headers=_auth_header(),
+            json={"name": "New Name", "benefits_preference": "No preference"},
+        )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "User not found."}
+
+
+def test_get_my_profile_rejects_invalid_token_payload(client: TestClient):
+    with patch("app.routes.user_profile.cognito_service.validate_token", return_value={}):
+        response = client.get("/user_profile/me", headers=_auth_header())
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid token payload."}

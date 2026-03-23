@@ -10,8 +10,7 @@ import {
   loadTransactions,
   loadUserProfile,
 } from '../utils/dataAdapter';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+import API_BASE_URL from '../utils/apiBaseUrl';
 
 function formatRate(benefitType, rate) {
   if (rate === null || rate === undefined || Number.isNaN(Number(rate))) {

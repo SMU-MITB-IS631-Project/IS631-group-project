@@ -8,6 +8,7 @@ import {
   filterTransactionsByMonth, getMonthSummary, getCardSpendForMonth,
   getAvailableMonths, convertCardId, postRegistrationTransactions, saveTransactions,
 } from '../utils/dataAdapter';
+import API_BASE_URL from '../utils/apiBaseUrl';
 
 function formatDateDMonYYYY(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
@@ -84,7 +85,7 @@ export default function Dashboard() {
         return;
       }
 
-      const response = await fetch(`http://localhost:8000/api/v1/user_cards/${cardId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/user_cards/${cardId}`, {
         method: 'DELETE',
         headers: {
           'x-user-id': userId,
@@ -133,7 +134,7 @@ export default function Dashboard() {
         },
       };
 
-      const response = await fetch('http://localhost:8000/api/v1/user_cards', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/user_cards`, {
         method: 'POST',
         headers: {
           'x-user-id': userId,

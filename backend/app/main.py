@@ -28,7 +28,6 @@ from app.routes import (
     catalog_router,
     user_card_router,
     recommendation_router,
-    card_reasoner_router,
     user_profile_router,
     rewards_earned_router,
     auth_router,
@@ -120,7 +119,6 @@ app.include_router(catalog_router)
 app.include_router(user_card_router)
 app.include_router(user_profile_router)
 app.include_router(recommendation_router)
-app.include_router(card_reasoner_router)
 app.include_router(rewards_earned_router)
 app.include_router(auth_router, prefix="", tags=["Auth"])
 app.include_router(notifications_router)

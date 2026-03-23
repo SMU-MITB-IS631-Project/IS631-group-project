@@ -3,7 +3,8 @@
  * getRecommendation({ userProfile, txn, transactions, cardsMaster })
  * Returns: { recommended_card_id, ranked_cards, state_snapshot }
  */
-const API_BASE_URL = 'http://localhost:8000';
+import API_BASE_URL from './apiBaseUrl';
+
 const USER_ID_KEY = 'cardtrack_user_id';
 const CARD_ID_MAP = {
   sc: 1,
