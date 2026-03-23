@@ -15,6 +15,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/user/cards", tags=["User Card Management"])
 
 
+def _raise_http_from_service_exception(exc: ServiceException | ServiceError) -> None:
+    if isinstance(exc, ServiceError):
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "details": exc.details,
+                }
+            },
+        )
+
+    raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
 def _get_cognito_sub_from_claims(claims: Dict[str, Any]) -> str:
     cognito_sub = claims.get("sub")
     if not cognito_sub:

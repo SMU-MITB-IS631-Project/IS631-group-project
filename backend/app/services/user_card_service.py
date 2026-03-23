@@ -73,7 +73,14 @@ class UserCardManagementService:
         if not card:
             raise ServiceException(status_code=404, detail="User does not own this card.")
 
-        for key, value in card_data.model_dump(exclude_unset=True, exclude_none=True).items():
+        update_data = card_data.model_dump(exclude_unset=True, exclude_none=True)
+
+        # Backward compatibility: older clients send billing_cycle_day_of_month,
+        # while the ORM field is billing_cycle_refresh_day_of_month.
+        if "billing_cycle_day_of_month" in update_data and "billing_cycle_refresh_day_of_month" not in update_data:
+            update_data["billing_cycle_refresh_day_of_month"] = update_data["billing_cycle_day_of_month"]
+
+        for key, value in update_data.items():
             if hasattr(card, key):
                 setattr(card, key, value)
 

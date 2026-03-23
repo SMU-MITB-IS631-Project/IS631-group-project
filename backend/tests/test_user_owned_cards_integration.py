@@ -1,7 +1,6 @@
 import sys
 import types
 from datetime import date
-from unittest.mock import patch
 
 import pytest
 from fastapi import FastAPI
@@ -38,6 +37,7 @@ except ModuleNotFoundError:
 
 
 from app.db.db import Base
+from app.dependencies.auth import required_authenticated
 from app.dependencies.db import get_db
 from app.models.card_catalogue import BankEnum, BenefitTypeEnum, CardCatalogue, StatusEnum
 from app.models.user_owned_cards import UserOwnedCardStatus
@@ -113,26 +113,26 @@ def client():
 
 
 @pytest.fixture()
-def valid_token():
-    with patch("app.routes.user_card_management.cognito_service.validate_token", return_value={"sub": COGNITO_SUB}):
-        yield
+def valid_claims():
+    app.dependency_overrides[required_authenticated] = lambda: {"sub": COGNITO_SUB}
+    yield
 
 
 def test_get_user_cards_requires_authorization(client: TestClient):
     response = client.get("/user/cards/")
 
     assert response.status_code == 401
-    assert response.json() == {"detail": "Unauthenticated. Missing Authorization header."}
+    assert response.json() == {"detail": "Not authenticated"}
 
 
-def test_get_user_cards_returns_empty_list(client: TestClient, valid_token):
+def test_get_user_cards_returns_empty_list(client: TestClient, valid_claims):
     response = client.get("/user/cards/", headers=AUTH_HEADERS)
 
     assert response.status_code == 200
     assert response.json() == []
 
 
-def test_add_user_card_success(client: TestClient, valid_token):
+def test_add_user_card_success(client: TestClient, valid_claims):
     response = client.post(
         "/user/cards",
         headers=AUTH_HEADERS,
@@ -152,7 +152,27 @@ def test_add_user_card_success(client: TestClient, valid_token):
     assert body["card_expiry_date"] == "2028-12-31"
 
 
-def test_add_user_card_duplicate_returns_bad_request(client: TestClient, valid_token):
+def test_get_user_cards_returns_created_card(client: TestClient, valid_claims):
+    create = client.post(
+        "/user/cards",
+        headers=AUTH_HEADERS,
+        json={
+            "card_id": 101,
+            "billing_cycle_refresh_day_of_month": 10,
+            "billing_cycle_refresh_date": "2026-03-31",
+            "card_expiry_date": "2028-03-31",
+        },
+    )
+    assert create.status_code == 201
+
+    list_response = client.get("/user/cards/", headers=AUTH_HEADERS)
+    assert list_response.status_code == 200
+    cards = list_response.json()
+    assert len(cards) == 1
+    assert cards[0]["card_id"] == 101
+
+
+def test_add_user_card_duplicate_returns_bad_request(client: TestClient, valid_claims):
     payload = {
         "card_id": 101,
         "billing_cycle_refresh_day_of_month": 15,
@@ -168,7 +188,7 @@ def test_add_user_card_duplicate_returns_bad_request(client: TestClient, valid_t
     assert second.json()["detail"] == "User already owns this card."
 
 
-def test_update_user_card_success(client: TestClient, valid_token):
+def test_update_user_card_success(client: TestClient, valid_claims):
     create = client.post(
         "/user/cards",
         headers=AUTH_HEADERS,
@@ -185,6 +205,7 @@ def test_update_user_card_success(client: TestClient, valid_token):
         "/user/cards/101",
         headers=AUTH_HEADERS,
         json={
+            "billing_cycle_refresh_day_of_month": 20,
             "billing_cycle_refresh_date": "2026-05-31",
             "card_expiry_date": "2029-01-31",
             "status": "Suspended",
@@ -194,12 +215,13 @@ def test_update_user_card_success(client: TestClient, valid_token):
     assert update.status_code == 200
     body = update.json()
     assert body["card_id"] == 101
+    assert body["billing_cycle_refresh_day_of_month"] == 20
     assert body["billing_cycle_refresh_date"] == "2026-05-31"
     assert body["card_expiry_date"] == "2029-01-31"
     assert body["status"] == UserOwnedCardStatus.Inactive.value
 
 
-def test_remove_user_card_success(client: TestClient, valid_token):
+def test_remove_user_card_success(client: TestClient, valid_claims):
     create = client.post(
         "/user/cards",
         headers=AUTH_HEADERS,
@@ -221,8 +243,8 @@ def test_remove_user_card_success(client: TestClient, valid_token):
 
 
 def test_get_user_cards_invalid_token_payload(client: TestClient):
-    with patch("app.routes.user_card_management.cognito_service.validate_token", return_value={}):
-        response = client.get("/user/cards/", headers=AUTH_HEADERS)
+    app.dependency_overrides[required_authenticated] = lambda: {}
+    response = client.get("/user/cards/", headers=AUTH_HEADERS)
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Invalid token payload."}
