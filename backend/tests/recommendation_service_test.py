@@ -242,9 +242,11 @@ class RecommendationServiceTests(unittest.TestCase):
         self.assertEqual(best.card_id, 10)
         self.assertEqual(best.effective_benefit_rate, Decimal("2.0"))
 
-    def test_amount_zero_raises_value_error(self):
-        with self.assertRaises(ValueError):
-            self._make_service().recommend(user_id=1, amount_sgd=Decimal("0"))
+    def test_amount_zero_uses_rate_sorting_not_reward_sorting(self):
+        # amount_sgd=0 should fall back to legacy rate-based ranking.
+        best, _ = self._make_service().recommend(user_id=1, amount_sgd=Decimal("0"))
+        self.assertIsNotNone(best)
+        self.assertEqual(best.card_id, 20)
 
     def test_cashback_percent_style_rate_is_supported(self):
         cashback_user = SimpleNamespace(id=1, benefits_preference=SimpleNamespace(value="cashback"))
