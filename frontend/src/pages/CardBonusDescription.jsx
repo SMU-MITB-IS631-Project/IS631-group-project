@@ -30,6 +30,7 @@ export default function CardBonusDescription() {
   const [cardsMaster, setCardsMaster] = useState([]);
   const [catalogCard, setCatalogCard] = useState(null);
   const [transactions, setTransactions] = useState([]);
+  const [rewardsByCardName, setRewardsByCardName] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
@@ -44,11 +45,17 @@ export default function CardBonusDescription() {
         setLoadError('');
 
         const backendCardId = convertCardId(cardId);
+        const userId = localStorage.getItem('cardtrack_user_id');
 
-        const [cardsMasterData, catalogRes, transactionsData] = await Promise.all([
+        const [cardsMasterData, catalogRes, transactionsData, rewardsRes] = await Promise.all([
           loadCardsMaster(),
           fetch(`${API_BASE_URL}/api/v1/catalog/`),
           loadTransactions(),
+          fetch(`${API_BASE_URL}/api/v1/rewards`, {
+            headers: {
+              ...(userId ? { 'x-user-id': String(userId) } : {}),
+            },
+          }),
         ]);
 
         if (cancelled) return;
@@ -61,6 +68,16 @@ export default function CardBonusDescription() {
         const catalogData = await catalogRes.json();
         const matchedCatalogCard = (catalogData || []).find((card) => card.card_id === backendCardId) || null;
         setCatalogCard(matchedCatalogCard);
+
+        if (rewardsRes.ok) {
+          const rewardsData = await rewardsRes.json();
+          setRewardsByCardName(rewardsData || {});
+        } else if (rewardsRes.status === 404) {
+          setRewardsByCardName({});
+        } else {
+          console.error('Failed to load rewards earned data:', rewardsRes.status);
+          setRewardsByCardName({});
+        }
       } catch (error) {
         if (cancelled) return;
         console.error('Failed to load card bonus data:', error);
@@ -104,15 +121,20 @@ export default function CardBonusDescription() {
   }, [transactions, backendCardIdFromRoute]);
 
   const expectedRewards = useMemo(() => {
-    if (!catalogCard) {
-      return null;
-    }
-    const baseRate = Number(catalogCard.base_benefit_rate);
-    if (Number.isNaN(baseRate)) {
+    const normalizedDisplayCardName = String(displayCardName || '').trim().toLowerCase();
+    const rewardCardNameKey = Object.keys(rewardsByCardName).find(
+      (name) => String(name || '').trim().toLowerCase() === normalizedDisplayCardName
+    );
+
+    if (!rewardCardNameKey) {
       return null;
     }
 
-    const rewardAmount = thisMonthSpend * baseRate;
+    const rewardAmount = Number(rewardsByCardName[rewardCardNameKey]);
+    if (Number.isNaN(rewardAmount)) {
+      return null;
+    }
+
     const benefitTypeLower = (displayBenefitType || '').toLowerCase();
     const isCashback = benefitTypeLower.includes('cash');
     return {
@@ -120,7 +142,7 @@ export default function CardBonusDescription() {
       isCashback,
       formatted: isCashback ? `$${Number(rewardAmount).toFixed(2)}` : `${Math.round(Number(rewardAmount))} miles`,
     };
-  }, [catalogCard, displayBenefitType, thisMonthSpend]);
+  }, [displayCardName, displayBenefitType, rewardsByCardName]);
 
   return (
     <div className="px-4 pt-6 pb-10">
