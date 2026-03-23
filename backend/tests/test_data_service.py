@@ -14,7 +14,6 @@ if str(BACKEND_DIR) not in sys.path:
 from app.services import data_service
 
 
-pytestmark = pytest.mark.unit
 
 
 @pytest.fixture
