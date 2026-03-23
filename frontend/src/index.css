@@ -58,3 +58,9 @@ input, select, button {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Hide native password reveal controls so custom toggle remains the only icon */
+.hide-password-reveal::-ms-reveal,
+.hide-password-reveal::-ms-clear {
+  display: none;
+}

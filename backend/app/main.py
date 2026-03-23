@@ -10,11 +10,11 @@ from fastapi.responses import JSONResponse
 # Add backend directory to path
 sys.path.insert(0, os.path.dirname(__file__))
 
-# Load environment variables from backend/.env (if present).
+# Load environment variables from backend/.env using an absolute path.
 # NOTE: This must run before importing FastAPI routes/services because some
-# modules (e.g., ExplanationService via card_reasoner_router) initialize the
-# OpenAI client at import time and rely on these environment variables.
-load_dotenv()
+# modules initialize clients at import time and rely on these values.
+_BACKEND_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(dotenv_path=_BACKEND_ROOT / ".env")
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError

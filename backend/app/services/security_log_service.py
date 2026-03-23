@@ -93,6 +93,7 @@ def log_auth_event(
     *,
     status: str,
     request: Optional[Request],
+    source: str = "user_profile.login",
     user_id: Optional[int] = None,
     username: Optional[str] = None,
     reason: Optional[str] = None,
@@ -107,7 +108,7 @@ def log_auth_event(
     return log_security_event(
         db,
         event_type=SecurityEventType.AUTH_LOGIN,
-        source="user_profile.login",
+        source=source,
         event_status=status,
         user_id=user_id,
         request=request,
@@ -122,6 +123,7 @@ def log_otp_event(
     event_type: str,
     status: str,
     request: Optional[Request],
+    source: str = "otp",
     user_id: Optional[int] = None,
     channel: Optional[str] = None,
     reason: Optional[str] = None,
@@ -139,7 +141,7 @@ def log_otp_event(
     return log_security_event(
         db,
         event_type=event_type,
-        source="otp",
+        source=source,
         event_status=status,
         user_id=user_id,
         request=request,
