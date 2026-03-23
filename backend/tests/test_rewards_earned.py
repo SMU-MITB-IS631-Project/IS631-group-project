@@ -1,5 +1,8 @@
 import pytest
 import sys, os
+import builtins
+import importlib.util
+from pathlib import Path
 # ensure backend directory is on path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -30,22 +33,22 @@ class MockQuery:
         return self.result
 
 @pytest.fixture
-def mock_db():
+def mockdb():
     return Mock()
 
 @pytest.fixture
-def rewards_earned_service(mock_db):
-    return RewardsEarnedService(db_session=mock_db)
+def rewards_earned_service(mockdb):
+    return RewardsEarnedService(db_session=mockdb)
 
-def test_calculate_rewards_earned_no_active_cards(rewards_earned_service, mock_db):
+def test_calculate_rewards_earned_no_active_cards(rewards_earned_service, mockdb):
     # Mock the database query to return no active cards
-    mock_db.query().filter().all.return_value = []
+    mockdb.query().filter().all.return_value = []
     
     result = rewards_earned_service.calculate_rewards_earned(user_id=1)
     
     assert result == {}  # Expecting an empty dictionary when there are no active cards
 
-def test_calculate_rewards_earned_with_active_cards(rewards_earned_service, mock_db):
+def test_calculate_rewards_earned_with_active_cards(rewards_earned_service, mockdb):
     # Create proper mock query objects for each model type
     active_card = UserOwnedCard(id=1, user_id=1, card_id=1, status=UserOwnedCardStatus.active, billing_cycle_refresh_day_of_mth=1)
     card_catalogue = CardCatalogue(card_id=1, bank="Test Bank", card_name="Test Card", benefit_type="cashback", base_benefit_rate=0.01, status="active")
@@ -60,8 +63,8 @@ def test_calculate_rewards_earned_with_active_cards(rewards_earned_service, mock
         [transaction]         # 4th call: query(UserTransaction).filter().all()
     ]
     
-    # Set up mock_db.query() to return appropriate MockQuery objects
-    mock_db.query.side_effect = [MockQuery(result) for result in query_results]
+    # Set up mockdb.query() to return appropriate MockQuery objects
+    mockdb.query.side_effect = [MockQuery(result) for result in query_results]
     
     result = rewards_earned_service.calculate_rewards_earned(user_id=1)
     
@@ -72,11 +75,11 @@ def test_calculate_rewards_earned_with_active_cards(rewards_earned_service, mock
     
     assert result == expected_rewards
 
-def test_calculate_rewards_earned_with_no_transactions(rewards_earned_service, mock_db):
+def test_calculate_rewards_earned_with_no_transactions(rewards_earned_service, mockdb):
     active_card = UserOwnedCard(id=1, user_id=1, card_id=1, status=UserOwnedCardStatus.active, billing_cycle_refresh_day_of_mth=1)
     card_catalogue = CardCatalogue(card_id=1, bank="Test Bank", card_name="Test Card", benefit_type="cashback", base_benefit_rate=0.01, status="active")
     
-    mock_db.query.side_effect = [
+    mockdb.query.side_effect = [
         MockQuery([active_card]),  # Active cards query
         MockQuery([card_catalogue]),  # Card catalogue query
         MockQuery([]),  # Bonus categories query (no bonus categories)
@@ -91,13 +94,13 @@ def test_calculate_rewards_earned_with_no_transactions(rewards_earned_service, m
     
     assert result == expected_rewards
 
-def test_calculate_rewards_earned_with_bonus_cap_exceeded(rewards_earned_service, mock_db):
+def test_calculate_rewards_earned_with_bonus_cap_exceeded(rewards_earned_service, mockdb):
     active_card = UserOwnedCard(id=1, user_id=1, card_id=1, status=UserOwnedCardStatus.active, billing_cycle_refresh_day_of_mth=1)
     card_catalogue = CardCatalogue(card_id=1, bank="Test Bank", card_name="Test Card", benefit_type="cashback", base_benefit_rate=0.01, status="active")
     bonus_category = CardBonusCategory(card_id=1, bonus_category=BonusCategory.Food, bonus_benefit_rate=0.2, bonus_cap_in_dollar=100)
     transaction = UserTransaction(id=1, user_id=1, card_id=1, amount_sgd=600, item="test", channel=TransactionChannel.online, is_overseas=False, category=TransactionCategory.food, transaction_date="2024-06-01")
     
-    mock_db.query.side_effect = [
+    mockdb.query.side_effect = [
         MockQuery([active_card]),  # Active cards query
         MockQuery([card_catalogue]),  # Card catalogue query
         MockQuery([bonus_category]),  # Bonus categories query
@@ -112,12 +115,12 @@ def test_calculate_rewards_earned_with_bonus_cap_exceeded(rewards_earned_service
     
     assert result == expected_rewards
 
-def test_calculate_rewards_earned_with_no_bonus_categories(rewards_earned_service, mock_db):
+def test_calculate_rewards_earned_with_no_bonus_categories(rewards_earned_service, mockdb):
     active_card = UserOwnedCard(id=1, user_id=1, card_id=1, status=UserOwnedCardStatus.active, billing_cycle_refresh_day_of_mth=1)
     card_catalogue = CardCatalogue(card_id=1, bank="Test Bank", card_name="Test Card", benefit_type="cashback", base_benefit_rate=0.01, status="active")
     transaction = UserTransaction(id=1, user_id=1, card_id=1, amount_sgd=100, item="test", channel=TransactionChannel.online, is_overseas=False, category=TransactionCategory.food, transaction_date="2024-06-01")
     
-    mock_db.query.side_effect = [
+    mockdb.query.side_effect = [
         MockQuery([active_card]),  # Active cards query
         MockQuery([card_catalogue]),  # Card catalogue query
         MockQuery([]),  # Bonus categories query (no bonus categories)
@@ -131,3 +134,137 @@ def test_calculate_rewards_earned_with_no_bonus_categories(rewards_earned_servic
     }
     
     assert result == expected_rewards
+
+
+def test_module_import_uses_fallback_service_exception_when_app_exceptions_missing(monkeypatch):
+    service_path = Path(__file__).resolve().parents[1] / "app/services/rewards_earned_service.py"
+    original_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "app.exceptions":
+            raise ImportError("forced import error for test")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    spec = importlib.util.spec_from_file_location("temp_rewards_service_importerror", str(service_path))
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    # If fallback path ran, ServiceException is defined inside the loaded module.
+    assert module.ServiceException.__module__ == module.__name__
+
+
+def test_calculate_rewards_earned_skips_when_card_not_found(rewards_earned_service, mockdb):
+    missing_card_ref = UserOwnedCard(
+        id=1, user_id=1, card_id=999, status=UserOwnedCardStatus.active, billing_cycle_refresh_day_of_mth=1
+    )
+    valid_card_ref = UserOwnedCard(
+        id=2, user_id=1, card_id=1, status=UserOwnedCardStatus.active, billing_cycle_refresh_day_of_mth=1
+    )
+    valid_card = CardCatalogue(
+        card_id=1, bank="Test Bank", card_name="Valid Card", benefit_type="cashback", base_benefit_rate=0.01, status="active"
+    )
+    txn = UserTransaction(
+        id=1,
+        user_id=1,
+        card_id=1,
+        amount_sgd=100,
+        item="test",
+        channel=TransactionChannel.online,
+        is_overseas=False,
+        category=TransactionCategory.food,
+        transaction_date="2024-06-01",
+    )
+
+    mockdb.query.side_effect = [
+        MockQuery([missing_card_ref, valid_card_ref]),  # active cards
+        MockQuery([]),  # missing card lookup -> first() returns None
+        MockQuery([valid_card]),  # valid card lookup
+        MockQuery([]),  # no bonus categories
+        MockQuery([txn]),  # valid card transactions
+    ]
+
+    result = rewards_earned_service.calculate_rewards_earned(user_id=1)
+
+    assert result == {"Valid Card": 1.0}
+
+
+def test_calculate_rewards_earned_uses_previous_month_when_refresh_day_not_reached(rewards_earned_service, mockdb, monkeypatch):
+    import app.services.rewards_earned_service as rewards_module
+    from datetime import date as real_date
+
+    class FakeDate:
+        @classmethod
+        def today(cls):
+            return real_date(2026, 3, 5)
+
+    active_card = UserOwnedCard(
+        id=1, user_id=1, card_id=1, status=UserOwnedCardStatus.active, billing_cycle_refresh_day_of_mth=20
+    )
+    card_catalogue = CardCatalogue(
+        card_id=1, bank="Test Bank", card_name="Test Card", benefit_type="cashback", base_benefit_rate=0.01, status="active"
+    )
+    txn = UserTransaction(
+        id=1,
+        user_id=1,
+        card_id=1,
+        amount_sgd=100,
+        item="test",
+        channel=TransactionChannel.online,
+        is_overseas=False,
+        category=TransactionCategory.transport,
+        transaction_date="2026-02-25",
+    )
+
+    monkeypatch.setattr(rewards_module, "date", FakeDate)
+
+    mockdb.query.side_effect = [
+        MockQuery([active_card]),
+        MockQuery([card_catalogue]),
+        MockQuery([]),
+        MockQuery([txn]),
+    ]
+
+    result = rewards_earned_service.calculate_rewards_earned(user_id=1)
+
+    assert result == {"Test Card": 1.0}
+
+
+def test_calculate_rewards_earned_wraps_unexpected_errors(rewards_earned_service, mockdb):
+    import app.services.rewards_earned_service as rewards_module
+
+    class DummyServiceException(Exception):
+        pass
+
+    rewards_module.ServiceException = DummyServiceException
+
+    active_card = UserOwnedCard(
+        id=1, user_id=1, card_id=1, status=UserOwnedCardStatus.active, billing_cycle_refresh_day_of_mth=1
+    )
+    card_catalogue = CardCatalogue(
+        card_id=1, bank="Test Bank", card_name="Test Card", benefit_type="cashback", base_benefit_rate=0.01, status="active"
+    )
+    bad_txn = UserTransaction(
+        id=1,
+        user_id=1,
+        card_id=1,
+        amount_sgd=100,
+        item="test",
+        channel=TransactionChannel.online,
+        is_overseas=False,
+        category=TransactionCategory.food,
+        transaction_date="2024-06-01",
+    )
+    bad_txn.category = None  # Triggers AttributeError when service accesses txn.category.value
+
+    mockdb.query.side_effect = [
+        MockQuery([active_card]),
+        MockQuery([card_catalogue]),
+        MockQuery([]),
+        MockQuery([bad_txn]),
+    ]
+
+    with pytest.raises(DummyServiceException, match="Error calculating rewards earned"):
+        rewards_earned_service.calculate_rewards_earned(user_id=1)

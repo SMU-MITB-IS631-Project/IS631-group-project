@@ -3,14 +3,32 @@ import logging
 
 from fastapi import APIRouter, HTTPException, status, Depends
 
+from app.exceptions import ServiceException
 from app.dependencies.services import get_user_card_management_service
 from app.dependencies.auth import required_authenticated
+from app.models.user_owned_cards import UserOwnedCardCreate, UserOwnedCardUpdate, UserOwnedCardResponse
 from app.services.errors import ServiceError
 from app.services.user_card_service import UserCardManagementService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/user/cards", tags=["User Card Management"])
+
+
+def _raise_http_from_service_exception(exc: ServiceException | ServiceError) -> None:
+    if isinstance(exc, ServiceError):
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "details": exc.details,
+                }
+            },
+        )
+
+    raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 def _get_cognito_sub_from_claims(claims: Dict[str, Any]) -> str:
