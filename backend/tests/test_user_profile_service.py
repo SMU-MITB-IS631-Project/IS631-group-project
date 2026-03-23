@@ -68,12 +68,12 @@ def test_create_user_profile_with_empty_email_hits_no_email_branch(mockdb):
     service = UserProfileService(mockdb)
     created = service.create_user_profile(
         username="charlie",
-        email="",
+        email=None,
         cognitosub="sub-charlie",
     )
 
     assert created.id is not None
-    assert created.email == ""
+    assert created.email is None
     assert created.username == "charlie"
 
 
