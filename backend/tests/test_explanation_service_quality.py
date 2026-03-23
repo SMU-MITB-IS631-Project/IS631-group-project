@@ -2,8 +2,7 @@ import os
 import sys
 from decimal import Decimal
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
+from unittest.mock import Mock, patch
 import pytest
 from openai import OpenAI
 
@@ -16,6 +15,16 @@ sys.path.insert(0, str(BACKEND_DIR))
 from app.models.card_catalogue import BenefitTypeEnum  # noqa: E402
 from app.schemas.ai_schemas import ExplanationRequest, RecommendationContext  # noqa: E402
 from app.services.explanation_service import ExplanationService  # noqa: E402
+
+
+@pytest.fixture
+def mock_db() -> Mock:
+    return Mock()
+
+
+@pytest.fixture
+def explanation_service(mock_db: Mock) -> ExplanationService:
+    return ExplanationService(db=mock_db)
 
 
 def _build_request() -> ExplanationRequest:
@@ -39,13 +48,14 @@ def _build_request() -> ExplanationRequest:
 
 
 @pytest.mark.unit
-def test_template_fallback_returns_expected_fields_and_content():
+def test_template_fallback_returns_expected_fields_and_content(
+    explanation_service: ExplanationService,
+):
     """Validate deterministic fallback behavior without external API calls."""
     request = _build_request()
 
     with patch("app.services.explanation_service.openai_client", None):
-        service = ExplanationService(db=MagicMock())
-        response = service.generate_explanation(request)
+        response = explanation_service.generate_explanation(request)
 
     assert response.is_fallback is True
     assert response.model_used == "template"
@@ -63,7 +73,9 @@ def test_template_fallback_returns_expected_fields_and_content():
 
 @pytest.mark.unit
 @pytest.mark.llm
-def test_template_explanation_is_rated_high_by_llm_judge():
+def test_template_explanation_is_rated_high_by_llm_judge(
+    explanation_service: ExplanationService,
+):
     """Generate explanation via service and have an LLM judge rate its quality (1-5)."""
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if not openai_api_key:
@@ -73,8 +85,7 @@ def test_template_explanation_is_rated_high_by_llm_judge():
 
     # Force deterministic template generation to keep this test stable.
     with patch("app.services.explanation_service.openai_client", None):
-        service = ExplanationService(db=MagicMock())
-        response = service.generate_explanation(request)
+        response = explanation_service.generate_explanation(request)
 
     explanation = response.explanation
     assert explanation

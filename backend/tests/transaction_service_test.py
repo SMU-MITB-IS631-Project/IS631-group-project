@@ -1,23 +1,6 @@
-def test_update_transactions_by_card_id_success(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
-    mock_db.query.return_value.filter.return_value.update.return_value = 3
-
-    count = transaction_service.update_transactions_by_card_id("1", 101, "deleted_with_card")
-
-    assert count == 3
-    mock_db.commit.assert_called_once()
-
-def test_update_transactions_by_card_id_invalid_status_raises_service_error(transaction_service):
-    transaction_service._resolve_user_id = Mock(return_value=1)
-
-    with pytest.raises(ServiceError) as exc_info:
-        transaction_service.update_transactions_by_card_id("1", 101, "bad_status")
-
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.code == "VALIDATION_ERROR"
 from datetime import date
 from decimal import Decimal
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
 import pytest
 
@@ -35,7 +18,7 @@ from app.services.transaction_service import TransactionService
 
 @pytest.fixture
 def mock_db():
-    return MagicMock()
+    return Mock()
 
 
 @pytest.fixture
@@ -202,9 +185,9 @@ def test_create_transaction_invalid_card_raises_service_error(transaction_servic
 def test_get_user_transactions_returns_rows_desc_by_default(transaction_service, mock_db):
     transaction_service._resolve_user_id = Mock(return_value=1)
 
-    base_query = MagicMock()
-    filtered_query = MagicMock()
-    ordered_query = MagicMock()
+    base_query = Mock()
+    filtered_query = Mock()
+    ordered_query = Mock()
 
     mock_db.query.return_value = base_query
     base_query.filter.return_value = filtered_query
@@ -320,3 +303,23 @@ def test_delete_transaction_not_found_raises_service_error(transaction_service, 
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.code == "NOT_FOUND"
+
+
+def test_update_transactions_by_card_id_success(transaction_service, mock_db):
+    transaction_service._resolve_user_id = Mock(return_value=1)
+    mock_db.query.return_value.filter.return_value.update.return_value = 3
+
+    count = transaction_service.update_transactions_by_card_id("1", 101, "deleted_with_card")
+
+    assert count == 3
+    mock_db.commit.assert_called_once()
+
+
+def test_update_transactions_by_card_id_invalid_status_raises_service_error(transaction_service):
+    transaction_service._resolve_user_id = Mock(return_value=1)
+
+    with pytest.raises(ServiceError) as exc_info:
+        transaction_service.update_transactions_by_card_id("1", 101, "bad_status")
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.code == "VALIDATION_ERROR"
