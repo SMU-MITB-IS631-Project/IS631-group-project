@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import Any, Dict
 
-from alembic.util import status
+from fastapi import status
 from sqlalchemy.orm import Session
 
 from app.models.card_bonus_category import CardBonusCategory
@@ -164,13 +164,20 @@ class CatalogService:
     
     def create_card(self, card_data: CardCatalogueCreate) -> CardCatalogue:
         new_card = CardCatalogue(**card_data.model_dump())
-        existing_card = self.db.query(CardCatalogue).filter(CardCatalogue.card_id == new_card.card_id).first()
+        existing_card = (
+            self.db.query(CardCatalogue)
+            .filter(
+                CardCatalogue.bank == new_card.bank,
+                CardCatalogue.card_name == new_card.card_name,
+            )
+            .first()
+        )
         if existing_card:
             raise ServiceError(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 code="CARD_EXISTS",
-                message="A card with this ID already exists.",
-                details={"card_id": new_card.card_id}
+                message="A card with this bank and name already exists.",
+                details={"bank": str(new_card.bank), "card_name": new_card.card_name}
             )
         self.db.add(new_card)
         self.db.commit()

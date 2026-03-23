@@ -5,12 +5,14 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 import pytest
 from openai import OpenAI
+from dotenv import load_dotenv
 
 
 # Ensure backend/ is on sys.path so `import app...` works
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_DIR = REPO_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
+load_dotenv(BACKEND_DIR / ".env")
 
 from app.models.card_catalogue import BenefitTypeEnum  # noqa: E402
 from app.schemas.ai_schemas import ExplanationRequest, RecommendationContext  # noqa: E402
@@ -78,8 +80,11 @@ def test_template_explanation_is_rated_high_by_llm_judge(
 ):
     """Generate explanation via service and have an LLM judge rate its quality (1-5)."""
     openai_api_key = os.getenv("OPENAI_API_KEY")
-    if not openai_api_key:
-        pytest.skip("OPENAI_API_KEY not set; skipping LLM-judge quality test")
+    run_llm_tests = os.getenv("RUN_LLM_TESTS")
+    if not openai_api_key or run_llm_tests != "1":
+        pytest.skip(
+            "LLM tests are disabled. Set OPENAI_API_KEY and RUN_LLM_TESTS=1 to run this test."
+        )
 
     request = _build_request()
 
