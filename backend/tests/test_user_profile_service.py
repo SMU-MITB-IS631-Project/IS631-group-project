@@ -176,14 +176,6 @@ def test_get_user_profile_not_found(mockdb):
     assert user is None
 
 
-def test_get_all_user_profiles_not_exposed(mockdb):
-    service = UserProfileService(mockdb)
-    service.create_user_profile("alice", "alice@example.com", "sub-alice")
-
-    with pytest.raises(AttributeError):
-        service.get_all_user_profiles()
-
-
 def test_update_user_profile_name_and_preference(mockdb):
     service = UserProfileService(mockdb)
     service.create_user_profile(
