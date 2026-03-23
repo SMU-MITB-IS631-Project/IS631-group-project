@@ -90,6 +90,7 @@ export default function Register() {
 
     if (!username.trim()) newErrors.username = 'Username is required';
     if (!password.trim()) newErrors.password = 'Password is required';
+    if (!email.trim()) newErrors.email = 'Email is required for OTP verification';
     if (walletCards.every(w => !w.card_id)) newErrors.wallet = 'Add at least one card';
 
     // Validate annual fee date for each card that has a selected card_id
@@ -110,7 +111,7 @@ export default function Register() {
       .map(w => ({ ...w, cycle_spend_sgd: parseFloat(w.cycle_spend_sgd) || 0 }));
 
     registerUser(username, password, name, email, preference, walletCardsFormatted)
-      .then(() => navigate('/creating'))
+      .then(() => navigate('/verify-otp', { state: { username: username.trim() } }))
       .catch(err => {
         console.error('Registration failed:', err);
         setAlertMessage(err.message || 'Registration failed. Please try again.');
@@ -177,16 +178,32 @@ export default function Register() {
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder="Enter password"
-                  className="w-full h-11 px-3 pr-16 bg-card border-2 border-primary rounded-[14px] text-sm text-text outline-none focus:border-primary transition-colors"
+                  className="hide-password-reveal w-full h-11 px-3 pr-12 bg-card border-2 border-primary rounded-[14px] text-sm text-text outline-none focus:border-primary transition-colors"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-primary font-medium"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-primary hover:text-primary-dark"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
-                  {showPassword ? 'Hide' : 'Show'}
+                  {showPassword ? (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20C7 20 2.73 16.11 1 12c.92-2.19 2.36-4.04 4.12-5.38"/>
+                      <path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c5 0 9.27 3.89 11 8a11.84 11.84 0 0 1-1.67 2.68"/>
+                      <path d="M14.12 14.12A3 3 0 0 1 9.88 9.88"/>
+                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    </svg>
+                  ) : (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  )}
                 </button>
               </div>
+              <p className="text-[11px] text-muted mt-1">
+                Password must be at least 8 characters and include uppercase, lowercase, number, and special character.
+              </p>
               {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
             </div>
             <div>
@@ -200,7 +217,7 @@ export default function Register() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted mb-1 block">Email (Optional)</label>
+              <label className="text-xs font-medium text-muted mb-1 block">Email</label>
               <input
                 type="email"
                 value={email}
@@ -208,6 +225,7 @@ export default function Register() {
                 placeholder="Enter your email"
                 className="w-full h-11 px-3 bg-card border-2 border-primary rounded-[14px] text-sm text-text outline-none focus:border-primary transition-colors"
               />
+              {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
             </div>
           </div>
         </CardSurface>
