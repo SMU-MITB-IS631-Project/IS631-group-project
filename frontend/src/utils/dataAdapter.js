@@ -1,3 +1,17 @@
+
+// Save transactions to localStorage
+
+// Load transactions from localStorage
+export function loadTransactionsFromStorage() {
+  const raw = localStorage.getItem(TXN_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 import { parseCSV } from './csv';
 import API_BASE_URL from './apiBaseUrl';
 
@@ -362,16 +376,15 @@ export async function registerUser(username, password, name, email, preference, 
 
 export async function confirmRegistrationOtp(username, confirmationCode) {
   try {
-    const params = new URLSearchParams({
-      username: username.trim(),
-      confirmation_code: confirmationCode.trim(),
-    });
-
-    const response = await fetch(`${API_BASE_URL}/api/v1/auth/confirmation?${params.toString()}`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/confirmation`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        username: username.trim(),
+        confirmation_code: confirmationCode.trim(),
+      }),
     });
 
     if (!response.ok) {
@@ -486,19 +499,6 @@ export function saveTransactions(txns) {
   localStorage.setItem(TXN_KEY, JSON.stringify(txns));
 }
 
-function loadTransactionsFromStorage() {
-  const raw = localStorage.getItem(TXN_KEY);
-  if (!raw) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
 
 function mergePendingLocalTransactions(serverTransactions) {
   const raw = localStorage.getItem(TXN_KEY);
