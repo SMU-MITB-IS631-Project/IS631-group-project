@@ -18,15 +18,8 @@ from app.schemas.ai_schemas import ExplanationRequest, RecommendationContext  # 
 from app.services.explanation_service import ExplanationService  # noqa: E402
 
 
-@pytest.mark.unit
-@pytest.mark.llm
-def test_template_explanation_is_rated_high_by_llm_judge():
-    """Generate explanation via service and have an LLM judge rate its quality (1-5)."""
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if not openai_api_key:
-        pytest.skip("OPENAI_API_KEY not set; skipping LLM-judge quality test")
-
-    request = ExplanationRequest(
+def _build_request() -> ExplanationRequest:
+    return ExplanationRequest(
         recommendation=RecommendationContext(
             card_id=1,
             card_name="DBS Live Fresh",
@@ -43,6 +36,40 @@ def test_template_explanation_is_rated_high_by_llm_judge():
         ),
         comparison_cards=[],
     )
+
+
+@pytest.mark.unit
+def test_template_fallback_returns_expected_fields_and_content():
+    """Validate deterministic fallback behavior without external API calls."""
+    request = _build_request()
+
+    with patch("app.services.explanation_service.openai_client", None):
+        service = ExplanationService(db=MagicMock())
+        response = service.generate_explanation(request)
+
+    assert response.is_fallback is True
+    assert response.model_used == "template"
+    assert response.card_id == 1
+    assert response.category == "Fashion"
+    assert response.total_reward == Decimal("5.00")
+    assert response.generation_time_ms is not None
+
+    explanation = response.explanation
+    assert "DBS Live Fresh" in explanation
+    assert "Fashion" in explanation
+    assert "5.00%" in explanation
+    assert "SGD 5.00" in explanation
+
+
+@pytest.mark.unit
+@pytest.mark.llm
+def test_template_explanation_is_rated_high_by_llm_judge():
+    """Generate explanation via service and have an LLM judge rate its quality (1-5)."""
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if not openai_api_key:
+        pytest.skip("OPENAI_API_KEY not set; skipping LLM-judge quality test")
+
+    request = _build_request()
 
     # Force deterministic template generation to keep this test stable.
     with patch("app.services.explanation_service.openai_client", None):
