@@ -16,7 +16,6 @@ from app.exceptions import ServiceException
 from app.services.cognito_service import CognitoService, RoleChecker
 
 
-pytestmark = pytest.mark.unit
 
 
 def _build_fake_cognito_client() -> Mock:
