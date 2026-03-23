@@ -16,6 +16,7 @@ BACKEND_DIR = REPO_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
 
 from app.db.db import Base  # noqa: E402
+from app.dependencies.auth import required_authenticated  # noqa: E402
 from app.dependencies.db import get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.card_bonus_category import BonusCategory, CardBonusCategory  # noqa: E402
@@ -76,7 +77,9 @@ class GenAISecurityLoggingApiTests(unittest.TestCase):
                 db.close()
 
         app.dependency_overrides[get_db] = override_get_db
-        self.client = TestClient(app)
+        app.dependency_overrides[required_authenticated] = lambda: {"sub": "test-cognito-sub-genai-log-1"}
+        # Keep 500 responses inside HTTP layer for assertions in failure-path tests.
+        self.client = TestClient(app, raise_server_exceptions=False)
 
     def tearDown(self):
         app.dependency_overrides.clear()
@@ -101,15 +104,13 @@ class GenAISecurityLoggingApiTests(unittest.TestCase):
             self.assertEqual(log.user_id, 1)
             self.assertEqual((log.details or {}).get("endpoint"), "/api/v1/recommendation/explain")
 
-    def test_card_reasoner_explain_db_writes_success_security_log(self):
+    def test_recommendation_explain_resolves_header_user_id_and_writes_success_security_log(self):
         resp = self.client.post(
-            "/api/v1/card-reasoner/explain-db",
+            "/api/v1/recommendation/explain",
             json={
-                "card_id": 10,
                 "category": "Food",
-                "transaction_amount": 30.0,
+                "amount_sgd": 30.0,
                 "merchant_name": "FairPrice",
-                "user_id": 1,
             },
             headers={"x-user-id": "1"},
         )
@@ -118,7 +119,7 @@ class GenAISecurityLoggingApiTests(unittest.TestCase):
         with self.Session() as db:
             log = (
                 db.query(SecurityLog)
-                .filter(SecurityLog.source == "card_reasoner.explain_db")
+                .filter(SecurityLog.source == "recommendation.explain")
                 .order_by(SecurityLog.id.desc())
                 .first()
             )
@@ -126,30 +127,19 @@ class GenAISecurityLoggingApiTests(unittest.TestCase):
             self.assertEqual(log.event_type, SecurityEventType.GENAI_ACCESS)
             self.assertEqual(log.event_status, "success")
             self.assertEqual(log.user_id, 1)
-            self.assertEqual((log.details or {}).get("endpoint"), "/api/v1/card-reasoner/explain-db")
+            self.assertEqual((log.details or {}).get("endpoint"), "/api/v1/recommendation/explain")
 
-    def test_card_reasoner_explain_writes_failed_security_log_on_error(self):
+    def test_recommendation_explain_writes_failed_security_log_on_error(self):
         payload = {
-            "transaction": {
-                "merchant_name": "ZARA",
-                "amount": 120.0,
-                "category": "Fashion",
-            },
-            "recommended_card": {
-                "Card_ID": 10,
-                "Bank": "DBS",
-                "Card_Name": "Card A",
-                "Benefit_type": "Miles",
-                "base_benefit_rate": 1.0,
-                "applied_bonus_rate": 1.0,
-                "total_calculated_value": 120.0,
-            },
-            "comparison_cards": [],
+            "user_id": 1,
+            "category": "Food",
+            "amount_sgd": 120.0,
+            "merchant_name": "ZARA",
         }
 
-        with patch("app.routes.card_reasoner.generate_explanation", side_effect=Exception("boom")):
+        with patch("app.routes.recommendation.ExplanationService.generate_explanation", side_effect=Exception("boom")):
             resp = self.client.post(
-                "/api/v1/card-reasoner/explain",
+                "/api/v1/recommendation/explain",
                 json=payload,
                 headers={"x-user-id": "1"},
             )
@@ -159,7 +149,7 @@ class GenAISecurityLoggingApiTests(unittest.TestCase):
         with self.Session() as db:
             log = (
                 db.query(SecurityLog)
-                .filter(SecurityLog.source == "card_reasoner.explain")
+                .filter(SecurityLog.source == "recommendation.explain")
                 .order_by(SecurityLog.id.desc())
                 .first()
             )

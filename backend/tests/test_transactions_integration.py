@@ -33,6 +33,11 @@ app.include_router(transactions_router)
 USER_HEADERS = {"x-user-id": "1"}
 
 
+# ============================================================================
+# FIXTURES & SETUP
+# ============================================================================
+
+
 def override_get_db():
     # Provide an isolated DB session for each request handled by the TestClient.
     db = TestingSessionLocal()
@@ -78,13 +83,14 @@ def _create_transaction(client: TestClient, payload: dict | None = None) -> dict
 
 @pytest.fixture()
 def client():
+    """Provide a TestClient for isolated request handling."""
     with TestClient(app) as test_client:
         yield test_client
 
 
 @pytest.fixture(autouse=True)
 def dependency_overrides():
-    # Route DB dependency to the test database for every test case.
+    """Inject test database into app dependency resolver for all tests."""
     app.dependency_overrides[get_db] = override_get_db
     yield
     app.dependency_overrides = {}
@@ -92,13 +98,17 @@ def dependency_overrides():
 
 @pytest.fixture(autouse=True)
 def setup_and_teardown_db():
-    # Build schema fresh per test to avoid cross-test data leakage.
+    """Create fresh database schema per test with seeded user, card, and ownership records.
+    
+    Seeds:
+      - UserProfile(id=1): Test user matching x-user-id header
+      - CardCatalogue(card_id=101): Valid card for transaction references
+      - UserOwnedCard: Authorization link between user 1 and card 101
+    """
     Base.metadata.create_all(bind=engine)
 
     db = TestingSessionLocal()
     try:
-        # Seed a user record that matches the x-user-id header used in tests.
-        # cognito_sub is the identity link used by current user profile schema.
         db.add(
             UserProfile(
                 id=1,
@@ -107,7 +117,6 @@ def setup_and_teardown_db():
                 benefits_preference=BenefitsPreference.no_preference,
             )
         )
-        # Seed a valid catalogue card so transactions can reference card_id=101.
         db.add(
             CardCatalogue(
                 card_id=101,
@@ -118,7 +127,6 @@ def setup_and_teardown_db():
                 status=StatusEnum.valid,
             )
         )
-        # Seed card ownership so user 1 is authorized to transact with card 101.
         db.add(
             UserOwnedCard(
                 user_id=1,
@@ -131,11 +139,18 @@ def setup_and_teardown_db():
         yield
     finally:
         db.close()
-        # Drop schema after each test for full isolation.
         Base.metadata.drop_all(bind=engine)
 
 
+# ============================================================================
+# CREATE TRANSACTION TESTS
+# ============================================================================
+# Verify POST /api/v1/transactions endpoint validates card ownership, required
+# fields, and user authentication. Tests both happy path and error scenarios.
+
+
 def test_create_transaction(client: TestClient):
+    """Happy path: create transaction with valid card and all required fields."""
     response = client.post(
         "/api/v1/transactions",
         json=_transaction_payload(),
@@ -150,7 +165,61 @@ def test_create_transaction(client: TestClient):
     assert data["status"] == "active"
 
 
+def test_create_transaction_invalid_card(client: TestClient):
+    """Error: reject transactions with card_id not owned by user."""
+    response = client.post(
+        "/api/v1/transactions",
+        json=_transaction_payload(card_id=999),
+        headers=USER_HEADERS,
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["detail"]["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_create_transaction_no_user_header(client: TestClient):
+    """Error: reject requests missing x-user-id header (no auth context)."""
+    response = client.post(
+        "/api/v1/transactions",
+        json=_transaction_payload(),
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "UNAUTHORIZED"
+
+
+def test_create_transaction_null_required_field(client: TestClient):
+    """Error: reject null values for required fields (e.g., item)."""
+    response = client.post(
+        "/api/v1/transactions",
+        json={
+            "transaction": {
+                "card_id": 101,
+                "amount_sgd": 50.0,
+                "item": None,
+                "channel": "online",
+                "is_overseas": False,
+                "date": "2026-02-18",
+            }
+        },
+        headers=USER_HEADERS,
+    )
+
+    # Route-level harness returns FastAPI's default 422.
+    # Full app harness may normalize this to 400 via global exception handler.
+    assert response.status_code in (400, 422)
+
+
+# ============================================================================
+# READ/LIST TRANSACTION TESTS
+# ============================================================================
+# Verify GET endpoints return correct transaction lists, sorted correctly,
+# and enforce user-scoped access controls.
+
+
 def test_list_transactions(client: TestClient):
+    """Happy path: list returns all transactions for user, newest first."""
     _create_transaction(
         client,
         _transaction_payload(item="Old txn", amount_sgd=10.0, date="2026-02-10"),
@@ -170,6 +239,7 @@ def test_list_transactions(client: TestClient):
 
 
 def test_get_transactions_for_specific_user(client: TestClient):
+    """Legacy endpoint: GET /api/v1/transactions/{id} returns user's transactions."""
     created = _create_transaction(client)
 
     response = client.get("/api/v1/transactions/1", headers=USER_HEADERS)
@@ -181,6 +251,7 @@ def test_get_transactions_for_specific_user(client: TestClient):
 
 
 def test_get_transactions_for_specific_user_new_endpoint(client: TestClient):
+    """New endpoint: GET /api/v1/transactions/user/{id} returns user's transactions."""
     created = _create_transaction(client)
 
     response = client.get("/api/v1/transactions/user/1", headers=USER_HEADERS)
@@ -192,6 +263,7 @@ def test_get_transactions_for_specific_user_new_endpoint(client: TestClient):
 
 
 def test_get_transactions_for_specific_user_forbidden_when_mismatch(client: TestClient):
+    """Security: reject attempts to access other users' transaction lists."""
     _create_transaction(client)
 
     response = client.get("/api/v1/transactions/user/2", headers=USER_HEADERS)
@@ -201,7 +273,15 @@ def test_get_transactions_for_specific_user_forbidden_when_mismatch(client: Test
     assert error["code"] == "FORBIDDEN"
 
 
+# ============================================================================
+# UPDATE TRANSACTION TESTS
+# ============================================================================
+# Verify PUT endpoints accept field updates, validate inputs, and enforce
+# authorization. Tests status updates, field edits, nullable fields, and errors.
+
+
 def test_update_transaction_status(client: TestClient):
+    """Update transaction status (active → deleted_with_card)."""
     created = _create_transaction(client)
 
     response = client.put(
@@ -216,7 +296,132 @@ def test_update_transaction_status(client: TestClient):
     assert updated["status"] == "deleted_with_card"
 
 
+def test_update_transaction_success(client: TestClient):
+    """Happy path: update item, amount, and category fields."""
+    created = _create_transaction(client)
+
+    response = client.put(
+        f"/api/v1/transactions/{created['id']}",
+        json={
+            "transaction": {
+                "item": "Updated Item",
+                "amount_sgd": 75.00,
+                "category": "fashion",
+            }
+        },
+        headers=USER_HEADERS,
+    )
+
+    assert response.status_code == 200
+    txn = response.json()["transaction"]
+    assert txn["item"] == "Updated Item"
+    assert txn["amount_sgd"] == 75.0
+    assert txn["category"] == "fashion"
+
+
+def test_update_transaction_accepts_lowercase_category(client: TestClient):
+    """Category field accepts lowercase strings (case-normalization handled)."""
+    created = _create_transaction(client)
+
+    response = client.put(
+        f"/api/v1/transactions/{created['id']}",
+        json={
+            "transaction": {
+                "item": "Updated Item Lowercase Category",
+                "category": "food",
+            }
+        },
+        headers=USER_HEADERS,
+    )
+
+    assert response.status_code == 200
+    txn = response.json()["transaction"]
+    assert txn["item"] == "Updated Item Lowercase Category"
+    assert txn["category"] == "food"
+
+
+def test_update_transaction_not_found(client: TestClient):
+    """Error: PUT non-existent transaction ID returns 404."""
+    response = client.put(
+        "/api/v1/transactions/999",
+        json={"transaction": {"item": "Updated"}},
+        headers=USER_HEADERS,
+    )
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["detail"]["error"]["code"] == "NOT_FOUND"
+
+
+def test_update_transaction_invalid_card(client: TestClient):
+    """Error: reject card_id updates to cards not owned by user."""
+    created = _create_transaction(client)
+
+    response = client.put(
+        f"/api/v1/transactions/{created['id']}",
+        json={"transaction": {"card_id": 999}},
+        headers=USER_HEADERS,
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["detail"]["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_update_transaction_clear_nullable_category(client: TestClient):
+    """Nullable fields: set category to None to clear optional data."""
+    created = _create_transaction(client, _transaction_payload(category="food"))
+
+    response = client.put(
+        f"/api/v1/transactions/{created['id']}",
+        json={"transaction": {"category": None}},
+        headers=USER_HEADERS,
+    )
+
+    assert response.status_code == 200
+    txn = response.json()["transaction"]
+    assert txn["category"] is None
+
+
+def test_update_transaction_rejects_null_non_nullable_field(client: TestClient):
+    """Error: reject null values for non-nullable fields (e.g., item)."""
+    created = _create_transaction(client)
+
+    response = client.put(
+        f"/api/v1/transactions/{created['id']}",
+        json={"transaction": {"item": None}},
+        headers=USER_HEADERS,
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["detail"]["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_update_transaction_status_invalid_value(client: TestClient):
+    """Error: reject invalid status enum values."""
+    created = _create_transaction(client)
+
+    response = client.put(
+        f"/api/v1/transactions/{created['id']}/status",
+        json={"status": "invalid_status"},
+        headers=USER_HEADERS,
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["detail"]["error"]["code"] == "VALIDATION_ERROR"
+
+
+# ============================================================================
+# BULK OPERATIONS TESTS
+# ============================================================================
+# Verify PUT /api/v1/transactions/bulk/status updates multiple transactions
+# in a single request.
+
+
 def test_bulk_update_transaction_status(client: TestClient):
+    """Bulk status update: change status for multiple transaction IDs at once."""
     first = _create_transaction(client, _transaction_payload(item="First txn", date="2026-02-15"))
     second = _create_transaction(client, _transaction_payload(item="Second txn", date="2026-02-16"))
 
@@ -235,7 +440,103 @@ def test_bulk_update_transaction_status(client: TestClient):
     assert data["status"] == "deleted_with_card"
 
 
+# ============================================================================
+# AUTHENTICATION & AUTHORIZATION TESTS
+# ============================================================================
+# Verify all endpoints require x-user-id header and enforce access controls.
+
+
 def test_transactions_requires_user_context(client: TestClient):
+    """Authorization: enforce x-user-id header on all GET endpoints."""
     response = client.get("/api/v1/transactions")
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
+
+
+# ============================================================================
+# DELETE TRANSACTION TESTS
+# ============================================================================
+# Verify DELETE endpoint removes transactions and enforces authorization.
+
+
+def test_delete_transaction_success(client: TestClient):
+    """Happy path: delete transaction by ID and verify it no longer appears in list."""
+    created = _create_transaction(client)
+
+    response = client.delete(f"/api/v1/transactions/{created['id']}", headers=USER_HEADERS)
+
+    assert response.status_code == 200
+    deleted = response.json()["transaction"]
+    assert deleted["id"] == created["id"]
+
+    list_response = client.get("/api/v1/transactions", headers=USER_HEADERS)
+    assert list_response.status_code == 200
+    assert list_response.json()["transactions"] == []
+
+
+def test_delete_transaction_not_found(client: TestClient):
+    """Error: DELETE non-existent transaction ID returns 404."""
+    response = client.delete("/api/v1/transactions/999", headers=USER_HEADERS)
+    assert response.status_code == 404
+    body = response.json()
+    assert body["detail"]["error"]["code"] == "NOT_FOUND"
+
+
+def test_delete_transaction_requires_user_context(client: TestClient):
+    """Authorization: enforce x-user-id header on DELETE operations."""
+    created = _create_transaction(client)
+
+    response = client.delete(f"/api/v1/transactions/{created['id']}")
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "UNAUTHORIZED"
+
+
+# ============================================================================
+# END-TO-END LIFECYCLE TEST
+# ============================================================================
+# Verify complete transaction lifecycle: create, read, update, and delete
+# in a single test flow.
+
+
+def test_full_crud_flow(client: TestClient):
+    """Lifecycle test: POST → GET → PUT → DELETE transaction through all states."""
+    create_response = client.post(
+        "/api/v1/transactions",
+        headers=USER_HEADERS,
+        json={
+            "transaction": {
+                "card_id": 101,
+                "amount_sgd": 200.00,
+                "item": "CRUD Test",
+                "channel": "offline",
+                "category": "Entertainment",
+                "is_overseas": False,
+                "date": "2026-02-18",
+            }
+        },
+    )
+    assert create_response.status_code == 201
+    created_id = create_response.json()["transaction"]["id"]
+
+    list_response = client.get("/api/v1/transactions", headers=USER_HEADERS)
+    assert list_response.status_code == 200
+    found = [t for t in list_response.json()["transactions"] if t["id"] == created_id]
+    assert len(found) == 1
+    assert found[0]["item"] == "CRUD Test"
+
+    update_response = client.put(
+        f"/api/v1/transactions/{created_id}",
+        headers=USER_HEADERS,
+        json={"transaction": {"item": "CRUD Test Updated", "amount_sgd": 250.00}},
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["transaction"]["item"] == "CRUD Test Updated"
+
+    delete_response = client.delete(f"/api/v1/transactions/{created_id}", headers=USER_HEADERS)
+    assert delete_response.status_code == 200
+
+    verify_response = client.get("/api/v1/transactions", headers=USER_HEADERS)
+    assert verify_response.status_code == 200
+    still_exists = [t for t in verify_response.json()["transactions"] if t["id"] == created_id]
+    assert len(still_exists) == 0
