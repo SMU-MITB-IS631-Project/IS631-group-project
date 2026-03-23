@@ -5,12 +5,14 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 import pytest
 from openai import OpenAI
+from dotenv import load_dotenv
 
 
 # Ensure backend/ is on sys.path so `import app...` works
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_DIR = REPO_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
+load_dotenv(BACKEND_DIR / ".env")
 
 from app.models.card_catalogue import BenefitTypeEnum  # noqa: E402
 from app.schemas.ai_schemas import ExplanationRequest, RecommendationContext  # noqa: E402
