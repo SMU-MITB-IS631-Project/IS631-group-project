@@ -33,14 +33,12 @@ from app.routes import (
     auth_router,
     notifications_router,
 )
-from app.services import init_sample_data
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan event handler - runs on startup and shutdown"""
     # Startup
-    init_sample_data()
     yield
     # Shutdown
 
