@@ -11,10 +11,10 @@ class UserProfileService:
     def __init__(self, db: Session):
         self.db = db
 
-    # # Admin role
-    # def get_all_user_profiles(self):
-    #     """Return all users as a dictionary keyed by user_id."""
-    #     return self.db.query(UserProfile).all()
+    # Admin role
+    def get_all_user_profiles(self):
+        """Return all user profiles."""
+        return self.db.query(UserProfile).all()
 
     # User role
     def get_user_profile(self, cognitosub: str) -> Optional[UserProfile]:

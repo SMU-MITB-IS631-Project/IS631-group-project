@@ -73,6 +73,7 @@ def default_bonus_rules():
     ]
 
 
+
 def _make_query(*, first_result=None, all_result=None, scalar_result=None) -> Mock:
     query = Mock()
     query.filter.return_value = query

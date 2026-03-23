@@ -37,6 +37,22 @@ def _get_cognito_sub_from_claims(claims: Dict[str, Any]) -> str:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload.")
     return str(cognito_sub)
 
+
+def _raise_http_from_service_exception(exc: ServiceException | ServiceError) -> None:
+    if isinstance(exc, ServiceException):
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+    raise HTTPException(
+        status_code=exc.status_code,
+        detail={
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "details": exc.details,
+            }
+        },
+    )
+
 @router.get("/", response_model=list[UserOwnedCardResponse])
 def get_user_cards(
     claims: Dict[str, Any] = Depends(required_authenticated),

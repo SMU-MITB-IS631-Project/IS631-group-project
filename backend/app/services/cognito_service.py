@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Optional
 from jose import jwt
 import boto3
@@ -20,6 +21,10 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 class CognitoService:
     def __init__(self):
+        # Defensive env load to avoid cwd/reloader inconsistencies.
+        backend_root = Path(__file__).resolve().parents[2]
+        load_dotenv(dotenv_path=backend_root / ".env")
+
         # Allow local tests/coverage runs without AWS config.
         # Prefer explicit Cognito region, then standard AWS env vars, then a safe default.
         self.region = (
@@ -39,6 +44,13 @@ class CognitoService:
 
         # Initialize Boto3 Cognito client
         self.client = boto3.client("cognito-idp", region_name=self.region)
+
+    def _require_client_id(self) -> None:
+        if not self.client_id:
+            raise ServiceException(
+                status_code=500,
+                detail="Cognito client is not configured. Missing COGNITO_CLIENT_ID.",
+            )
 
     def _get_cognito_jwks(self):
         """
@@ -88,10 +100,16 @@ class CognitoService:
             raise ServiceException(status_code=401, detail=f"Token validation error: {str(e)}")
         
 
-    def calculate_secret_hash(self, username):
+    def calculate_secret_hash(self, username: str) -> Optional[str]:
         """
-        Calculate the Cognito SECRET_HASH for the given username.
+        Calculate the Cognito SECRET_HASH when client secret is configured.
         """
+        self._require_client_id()
+
+        # App clients without a secret do not require SecretHash.
+        if not self.client_secret:
+            return None
+
         message = username + self.client_id
         dig = hmac.new(
             self.client_secret.encode("utf-8"),
@@ -109,17 +127,21 @@ class CognitoService:
         :return: Dictionary containing tokens if authentication is successful.
         """
         try:
+            self._require_client_id()
+
             # Calculate the SECRET_HASH
             secret_hash = self.calculate_secret_hash(username)
+            auth_parameters = {
+                "USERNAME": username,
+                "PASSWORD": password,
+            }
+            if secret_hash:
+                auth_parameters["SECRET_HASH"] = secret_hash
 
             # Initiate the authentication
             response = self.client.initiate_auth(
                 AuthFlow="USER_PASSWORD_AUTH",
-                AuthParameters={
-                    "USERNAME": username,
-                    "PASSWORD": password,
-                    "SECRET_HASH": secret_hash
-                },
+                AuthParameters=auth_parameters,
                 ClientId=self.client_id
             )
 
@@ -150,21 +172,25 @@ class CognitoService:
         Register a new user with a distinct username, and store the user's email in Cognito.
         """
         try:
+            self._require_client_id()
+
             # Calculate the SECRET_HASH if your app client has a client secret
             secret_hash = self.calculate_secret_hash(username)
-
-            response = self.client.sign_up(
-                ClientId=self.client_id,
-                SecretHash=secret_hash,
-                Username=username,      # <--- Distinct username
-                Password=password,
-                UserAttributes=[
+            sign_up_payload = {
+                "ClientId": self.client_id,
+                "Username": username,
+                "Password": password,
+                "UserAttributes": [
                     {
-                        'Name': 'email',
-                        'Value': email       # <--- Storing user's email as an attribute
+                        "Name": "email",
+                        "Value": email,
                     }
-                ]
-            )
+                ],
+            }
+            if secret_hash:
+                sign_up_payload["SecretHash"] = secret_hash
+
+            response = self.client.sign_up(**sign_up_payload)
 
             return response
 
@@ -186,13 +212,19 @@ class CognitoService:
         Confirm the user's signup with the code they received by email
         """
         try:
+            self._require_client_id()
+
             # First confirm the sign-up
-            self.client.confirm_sign_up(
-                ClientId=self.client_id,
-                Username=username,
-                ConfirmationCode=confirmation_code,
-                SecretHash=self.calculate_secret_hash(username)
-            )
+            confirm_payload = {
+                "ClientId": self.client_id,
+                "Username": username,
+                "ConfirmationCode": confirmation_code,
+            }
+            secret_hash = self.calculate_secret_hash(username)
+            if secret_hash:
+                confirm_payload["SecretHash"] = secret_hash
+
+            self.client.confirm_sign_up(**confirm_payload)
 
             return "User confirmed successfully."
         

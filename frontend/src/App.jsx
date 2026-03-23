@@ -4,6 +4,7 @@ import BottomNav from './components/BottomNav';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import VerifyOtp from './pages/VerifyOtp';
 import Recommend from './pages/Recommend';
 import Dashboard from './pages/Dashboard';
 import Creating from './pages/Creating';
@@ -25,7 +26,7 @@ function RequireProfile({ children }) {
 
 function AppContent() {
   const location = useLocation();
-  const hideNav = location.pathname === '/creating' || location.pathname === '/' || location.pathname === '/login' || location.pathname === '/register';
+  const hideNav = location.pathname === '/creating' || location.pathname === '/' || location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/verify-otp';
 
   return (
     <div className="flex flex-col min-h-full">
@@ -34,6 +35,7 @@ function AppContent() {
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/verify-otp" element={<VerifyOtp />} />
           <Route path="/creating" element={<Creating />} />
           <Route path="/recommend" element={<RequireProfile><Recommend /></RequireProfile>} />
           <Route path="/dashboard" element={<RequireProfile><Dashboard /></RequireProfile>} />
