@@ -6,6 +6,17 @@ import sys
 
 import pytest
 
+
+# Temporary compatibility shim: app.services.__init__ imports data_service which is absent.
+if "app.services.data_service" not in sys.modules:
+    data_service_stub = ModuleType("app.services.data_service")
+    data_service_stub.get_user_wallet = lambda *args, **kwargs: None
+    data_service_stub.card_exists_in_wallet = lambda *args, **kwargs: None
+    data_service_stub.create_transaction = lambda *args, **kwargs: None
+    data_service_stub.get_user_transactions = lambda *args, **kwargs: None
+    data_service_stub.init_sample_data = lambda *args, **kwargs: None
+    sys.modules["app.services.data_service"] = data_service_stub
+
 from app.models.transaction import (
     TransactionCategory,
     TransactionChannel,
@@ -453,3 +464,49 @@ def test_update_transaction_card_id_changed_and_valid_wallet_updates_card_id(tra
     assert updated["item"] == "New"
     mock_db.commit.assert_called_once()
     mock_db.refresh.assert_called_once_with(existing)
+
+
+def test_get_user_transactions_returns_rows_without_order_when_sort_flag_is_none(transaction_service, mock_db):
+    transaction_service._resolve_user_id = Mock(return_value=1)
+
+    base_query = Mock()
+    filtered_query = Mock()
+
+    mock_db.query.return_value = base_query
+    base_query.filter.return_value = filtered_query
+    filtered_query.all.return_value = [
+        _build_transaction(txn_id=3, txn_date=date(2026, 2, 15)),
+    ]
+
+    rows = transaction_service.get_user_transactions("1", sort_by_date_desc=None)
+
+    assert [row["id"] for row in rows] == ["3"]
+    filtered_query.order_by.assert_not_called()
+    filtered_query.all.assert_called_once()
+
+
+def test_update_transaction_card_id_same_value_skips_wallet_lookup(transaction_service, mock_db):
+    transaction_service._resolve_user_id = Mock(return_value=1)
+    transaction_service._parse_card_id = Mock(return_value=101)
+    transaction_service._card_exists_in_wallet = Mock()
+
+    existing = _build_transaction(txn_id=10, card_id=101, item="Old")
+    mock_db.query.return_value.filter.return_value.first.return_value = existing
+
+    updated = transaction_service.update_transaction("1", 10, {"card_id": "101", "item": "Same Card"})
+
+    assert updated["card_id"] == "101"
+    assert updated["item"] == "Same Card"
+    transaction_service._card_exists_in_wallet.assert_not_called()
+
+
+def test_update_transaction_ignores_unknown_field_with_none_value(transaction_service, mock_db):
+    transaction_service._resolve_user_id = Mock(return_value=1)
+
+    existing = _build_transaction(txn_id=10, item="Before")
+    mock_db.query.return_value.filter.return_value.first.return_value = existing
+
+    updated = transaction_service.update_transaction("1", 10, {"unknown_field": None, "item": "After"})
+
+    assert updated["item"] == "After"
+    assert not hasattr(existing, "unknown_field")
