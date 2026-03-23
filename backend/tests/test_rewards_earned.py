@@ -232,13 +232,13 @@ def test_calculate_rewards_earned_uses_previous_month_when_refresh_day_not_reach
     assert result == {"Test Card": 1.0}
 
 
-def test_calculate_rewards_earned_wraps_unexpected_errors(rewards_earned_service, mockdb):
+def test_calculate_rewards_earned_wraps_unexpected_errors(rewards_earned_service, mockdb, monkeypatch):
     import app.services.rewards_earned_service as rewards_module
 
     class DummyServiceException(Exception):
         pass
 
-    rewards_module.ServiceException = DummyServiceException
+    monkeypatch.setattr(rewards_module, "ServiceException", DummyServiceException)
 
     active_card = UserOwnedCard(
         id=1, user_id=1, card_id=1, status=UserOwnedCardStatus.active, billing_cycle_refresh_day_of_mth=1
