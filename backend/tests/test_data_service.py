@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import json
 from datetime import date as real_date
+from pathlib import Path
+import sys
 
 import pytest
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+BACKEND_DIR = REPO_ROOT / "backend"
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 from app.services import data_service
 
 
