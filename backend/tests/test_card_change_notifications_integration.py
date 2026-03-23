@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.db.db import Base
+from app.dependencies.auth import required_admin_role
 from app.dependencies.db import get_db
 from app.models.card_bonus_category import BonusCategory, CardBonusCategory
 from app.models.card_catalogue import BankEnum, BenefitTypeEnum, CardCatalogue, StatusEnum
@@ -46,6 +47,7 @@ def override_get_db():
 @pytest.fixture(autouse=True)
 def dependency_overrides():
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[required_admin_role] = lambda: {"sub": "test-admin", "role": "admin"}
     yield
     app.dependency_overrides = {}
 
@@ -61,13 +63,13 @@ def setup_and_teardown_db():
                 UserProfile(
                     id=1,
                     username="owner_user",
-                    password_hash="hash1",
+                    cognito_sub="test-cognito-sub-owner-1",
                     benefits_preference=BenefitsPreference.no_preference,
                 ),
                 UserProfile(
                     id=2,
                     username="non_owner_user",
-                    password_hash="hash2",
+                    cognito_sub="test-cognito-sub-owner-2",
                     benefits_preference=BenefitsPreference.no_preference,
                 ),
             ]
