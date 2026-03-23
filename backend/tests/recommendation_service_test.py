@@ -2,6 +2,7 @@ import sys
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from types import ModuleType
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -13,11 +14,25 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_DIR = REPO_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
 
+# Compatibility shim: app.services.__init__ imports data_service which is absent.
+if "app.services.data_service" not in sys.modules:
+    data_service_stub = ModuleType("app.services.data_service")
+    data_service_stub.get_user_wallet = lambda *args, **kwargs: None
+    data_service_stub.card_exists_in_wallet = lambda *args, **kwargs: None
+    data_service_stub.create_transaction = lambda *args, **kwargs: None
+    data_service_stub.get_user_transactions = lambda *args, **kwargs: None
+    data_service_stub.init_sample_data = lambda *args, **kwargs: None
+    sys.modules["app.services.data_service"] = data_service_stub
+
 from app.models.card_bonus_category import BonusCategory, CardBonusCategory  # noqa: E402
 from app.models.card_catalogue import BenefitTypeEnum, CardCatalogue  # noqa: E402
 from app.models.user_owned_cards import UserOwnedCard  # noqa: E402
 from app.models.user_profile import UserProfile  # noqa: E402
+from app.services import recommendation_service as recommendation_module  # noqa: E402
 from app.services.recommendation_service import RecommendationService  # noqa: E402
+
+
+ORIGINAL_GET_CURRENT_CYCLE_SPEND = RecommendationService._get_current_cycle_spend
 
 
 _UNSET = object()
@@ -306,3 +321,63 @@ def test_points_preference_is_treated_as_miles(make_service):
     )
     assert best is not None
     assert best.reward_unit == "miles"
+
+
+# Helper method coverage tests.
+def test_get_current_cycle_spend_returns_decimal_from_scalar_value():
+    session = Mock()
+    query = Mock()
+    query.filter.return_value = query
+    query.scalar.return_value = Decimal("123.45")
+    session.query.return_value = query
+    service = RecommendationService(session)
+
+    result = ORIGINAL_GET_CURRENT_CYCLE_SPEND(
+        service,
+        user_id=1,
+        card_id=10,
+        cycle_start_date=date(2026, 3, 1),
+    )
+
+    assert result == Decimal("123.45")
+
+
+def test_get_current_cycle_spend_falls_back_to_zero_when_scalar_none():
+    session = Mock()
+    query = Mock()
+    query.filter.return_value = query
+    query.scalar.return_value = None
+    session.query.return_value = query
+    service = RecommendationService(session)
+
+    result = ORIGINAL_GET_CURRENT_CYCLE_SPEND(
+        service,
+        user_id=1,
+        card_id=10,
+        cycle_start_date=date(2026, 3, 1),
+    )
+
+    assert result == Decimal("0")
+
+
+def test_latest_cycle_start_date_uses_previous_year_when_january_and_not_reached(monkeypatch):
+    class FakeDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 1, 5)
+
+    monkeypatch.setattr(recommendation_module, "date", FakeDate)
+
+    assert RecommendationService._latest_cycle_start_date(20) == date(2025, 12, 20)
+
+
+def test_latest_cycle_start_date_uses_previous_month_and_clamps_day(monkeypatch):
+    class FakeDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 3, 5)
+
+    monkeypatch.setattr(recommendation_module, "date", FakeDate)
+
+    # Refresh day 31 should clamp to February's last day (28 in 2026).
+    assert RecommendationService._latest_cycle_start_date(31) == date(2026, 2, 28)
