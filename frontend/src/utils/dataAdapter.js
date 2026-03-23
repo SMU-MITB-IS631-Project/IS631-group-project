@@ -272,14 +272,14 @@ export async function registerUser(username, password, name, email, preference, 
       ? preference.charAt(0).toUpperCase() + preference.slice(1)
       : 'No preference';
     
-    const response = await fetch(`${API_BASE_URL}/api/v1/user_profile`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/registration`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         username: username.trim(),
-        password: password.trim(),
+        password,
         name: name || null,
         email: email || null,
         benefits_preference: normalizedPreference,
@@ -288,45 +288,100 @@ export async function registerUser(username, password, name, email, preference, 
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData?.detail?.error?.message || errorData?.error?.message || 'Registration failed');
+      throw new Error(errorData?.detail?.error?.message || errorData?.detail || errorData?.error?.message || 'Registration failed');
     }
 
     const data = await response.json();
-    setCurrentUserId(data.id);
-    
-    // Save profile to localStorage for session persistence
-    // Filter out cycle_spend_sgd since it's stored as transactions, not wallet
-    const walletForStorage = (wallet || []).map(w => ({
-      card_id: w.card_id,
-      refresh_day_of_month: w.refresh_day_of_month,
-      annual_fee_billing_date: w.annual_fee_billing_date,
-    }));
-    const profile = {
-      user_id: data.id,
-      username: data.username,
-      name: data.name,
-      email: data.email,
-      preference: data.benefits_preference || 'miles',
-      wallet: walletForStorage,
-      created_date: data.created_date,
+
+    // Seed local profile context so first login/dashboard has wallet/preference metadata.
+    const seededProfile = {
+      user_id: data.user_id,
+      username: username.trim(),
+      name: name || username.trim(),
+      email: email || null,
+      preference: preference || 'miles',
+      wallet: Array.isArray(wallet) ? wallet : [],
+      created_date: data?.profile?.created_date || new Date().toISOString(),
     };
-    
-    saveUserProfile(profile);
+    saveUserProfile(seededProfile);
+    setCurrentUserId(data.user_id);
 
-    try {
-      await postUserCards(data.id, wallet);
-    } catch (cardError) {
-      console.warn('Registration user_cards failed:', cardError);
+    // Ensure initial registration spend is visible immediately.
+    // Backend creation may fail if wallet linkage is delayed, so keep local fallback entries.
+    const localRegistrationTxns = (wallet || [])
+      .filter(w => (parseFloat(w.cycle_spend_sgd) || 0) > 0)
+      .map(w => ({
+        id: `local-reg-${Date.now()}-${String(w.card_id)}`,
+        date: new Date().toISOString().split('T')[0],
+        item: 'registration',
+        amount_sgd: parseFloat(w.cycle_spend_sgd),
+        card_id: w.card_id,
+        channel: 'online',
+        category: 'others',
+        is_overseas: false,
+        status: 'active',
+      }));
+
+    if (localRegistrationTxns.length > 0) {
+      const existingTxns = loadTransactionsFromStorage();
+      const merged = [...existingTxns];
+
+      localRegistrationTxns.forEach((pendingTxn) => {
+        const duplicate = existingTxns.some((txn) =>
+          String(txn.item || '').trim().toLowerCase() === 'registration' &&
+          String(txn.card_id) === String(pendingTxn.card_id) &&
+          Number(txn.amount_sgd) === Number(pendingTxn.amount_sgd)
+        );
+
+        if (!duplicate) {
+          merged.push(pendingTxn);
+        }
+      });
+
+      saveTransactions(merged);
+
+      // Best-effort: try persisting to backend; local fallback remains if this fails.
+      try {
+        await postRegistrationTransactions(data.user_id, wallet || []);
+      } catch (txnError) {
+        console.warn('Unable to persist registration transactions yet:', txnError);
+      }
     }
 
-    try {
-      await postRegistrationTransactions(data.id, wallet);
-    } catch (txnError) {
-      console.warn('Registration transactions failed:', txnError);
-    }
-    return profile;
+    return {
+      user_id: data.user_id,
+      user_sub: data.user_sub,
+      user_confirmed: data.user_confirmed,
+      profile: data.profile,
+    };
   } catch (error) {
     console.error('Registration error:', error);
+    throw error;
+  }
+}
+
+export async function confirmRegistrationOtp(username, confirmationCode) {
+  try {
+    const params = new URLSearchParams({
+      username: username.trim(),
+      confirmation_code: confirmationCode.trim(),
+    });
+
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/confirmation?${params.toString()}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData?.detail?.error?.message || errorData?.detail || errorData?.error?.message || 'OTP verification failed');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('OTP confirmation error:', error);
     throw error;
   }
 }
@@ -336,51 +391,38 @@ export async function registerUser(username, password, name, email, preference, 
  */
 export async function loginUser(username, password) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/v1/user_profile/login`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         username: username.trim(),
-        password: password.trim()
+        password,
       }),
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData?.error?.message || 'Login failed');
+      throw new Error(errorData?.detail?.error?.message || errorData?.detail || errorData?.error?.message || 'Login failed');
     }
 
     const data = await response.json();
-    setCurrentUserId(data.id);
+    setCurrentUserId(data.user_id);
     
-    let wallet = [];
-    try {
-      wallet = await fetchUserCards(data.id);
-    } catch (walletError) {
-      console.warn('Login user_cards failed:', walletError);
-      const existingProfile = loadUserProfile();
-      wallet = existingProfile && existingProfile.username === data.username
-        ? (existingProfile.wallet || [])
-        : [];
-    }
+    const existingProfile = loadUserProfile();
+    const wallet = existingProfile && existingProfile.username === username.trim()
+      ? (existingProfile.wallet || [])
+      : [];
 
-    // Save the profile to localStorage for session persistence
-    // Filter out cycle_spend_sgd since it's stored as transactions, not wallet
-    const walletForStorage = (wallet || []).map(w => ({
-      card_id: w.card_id,
-      refresh_day_of_month: w.refresh_day_of_month,
-      annual_fee_billing_date: w.annual_fee_billing_date,
-    }));
     const profile = {
-      user_id: data.id,
-      username: data.username,
-      name: data.name,
-      email: data.email,
-      preference: data.benefits_preference || 'miles',
-      wallet: walletForStorage,
-      created_date: data.created_date,
+      user_id: data.user_id,
+      username: username.trim(),
+      name: existingProfile?.name || username.trim(),
+      email: existingProfile?.email || null,
+      preference: existingProfile?.preference || 'miles',
+      wallet,
+      created_date: existingProfile?.created_date || new Date().toISOString(),
     };
     
     saveUserProfile(profile);
@@ -442,6 +484,20 @@ export async function loadTransactions(options = {}) {
 
 export function saveTransactions(txns) {
   localStorage.setItem(TXN_KEY, JSON.stringify(txns));
+}
+
+function loadTransactionsFromStorage() {
+  const raw = localStorage.getItem(TXN_KEY);
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function mergePendingLocalTransactions(serverTransactions) {
