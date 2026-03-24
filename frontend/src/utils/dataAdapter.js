@@ -71,7 +71,6 @@ export function loadTransactionsFromStorage() {
   }
 }
 import API_BASE_URL from './apiBaseUrl';
-import { parseCSV } from './csv';
 
 const PROFILE_KEY = 'cardtrack_user_profile';
 const TXN_KEY = 'cardtrack_transactions';
@@ -167,25 +166,6 @@ function convertBackendCardId(backendCardId) {
   return 'ww';
 }
 
-// --- CSV Loader ---
-
-
-async function loadCardCatalogueFromCsvFallback() {
-  const csvResponse = await fetch('/data/cards_master.csv');
-  if (!csvResponse.ok) {
-    throw new Error(`Failed to load fallback card catalogue (${csvResponse.status})`);
-  }
-
-  const csvText = await csvResponse.text();
-  const parsedRows = parseCSV(csvText);
-  return parsedRows.map((row) => ({
-    ...row,
-    bank: row.bank || row.issuer,
-    benefit_type: row.benefit_type || row.reward_type,
-  }));
-}
-
-
 // Fetch card catalogue from backend API
 export async function loadCardCatalogue() {
   const endpointCandidates = [
@@ -209,8 +189,11 @@ export async function loadCardCatalogue() {
     }
   }
 
-  console.warn('Card catalogue API unavailable, using CSV fallback.', lastApiError);
-  return loadCardCatalogueFromCsvFallback();
+  if (lastApiError instanceof Error) {
+    throw lastApiError;
+  }
+
+  throw new Error('Failed to fetch card catalogue');
 }
 
 // --- User Profile ---
