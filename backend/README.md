@@ -56,15 +56,17 @@ INFO:     Application startup complete.
 
 ```bash
 cd backend
-python -m pytest -c pytest.ini tests
+python -m pytest tests --cov-report=html
 ```
 
-This backend pytest configuration now generates:
+Default backend test runs generate:
 
 - Statement coverage
 - Line coverage
 - Branch coverage
-- HTML report views by file, function, and class in `backend/htmlcov/`
+
+Adding `--cov-report=html` also generates HTML report views by file, function,
+and class in `backend/htmlcov/`.
 
 The function and class pages are report views over the collected coverage data.
 They are not separate instrumentation modes beyond the statement/line and branch
