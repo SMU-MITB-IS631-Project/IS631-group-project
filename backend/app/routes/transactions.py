@@ -23,12 +23,6 @@ class TransactionStatusUpdate(BaseModel):
     status: str  # "active" or "deleted_with_card"
 
 
-class BulkTransactionStatusUpdate(BaseModel):
-    """Bulk update multiple transactions status"""
-    transaction_ids: list[int]
-    status: str  # "active" or "deleted_with_card"
-
-
 class TransactionUpdateRequest(BaseModel):
     """Wrapper for transaction update API"""
     transaction: TransactionUpdate
@@ -47,42 +41,6 @@ def _unauthorized_response() -> JSONResponse:
     )
 
 
-def _forbidden_response() -> JSONResponse:
-    return JSONResponse(
-        status_code=status.HTTP_403_FORBIDDEN,
-        content={
-            "error": {
-                "code": "FORBIDDEN",
-                "message": "Cannot access transactions for another user.",
-                "details": {},
-            }
-        },
-    )
-
-
-def _parse_sort_to_desc(sort: str) -> Optional[bool]:
-    sort_value = sort.lower()
-    if sort_value == "none":
-        return None
-    return sort_value != "date_asc"
-
-
-def _list_transactions_for_user(
-    *,
-    target_user_id: str,
-    requester_user_id: str,
-    sort: str,
-    db: Session,
-) -> Dict[str, Any] | JSONResponse:
-    service = TransactionService(db)
-    if service._resolve_user_id(requester_user_id) != service._resolve_user_id(target_user_id):
-        return _forbidden_response()
-
-    transactions = service.get_user_transactions(
-        target_user_id,
-        sort_by_date_desc=_parse_sort_to_desc(sort),
-    )
-    return {"transactions": transactions}
 
 
 @router.post("", status_code=201, dependencies=[Depends(required_authenticated)])
@@ -167,85 +125,85 @@ def list_transactions(
         )
 
 
-@router.get("/{user_id}", dependencies=[Depends(required_authenticated)])
-def get_user_transactions_by_id(
-    user_id: str,
-    request: Request,
-    sort: str = "date_desc",
-    db: Session = Depends(get_db),
-    claims: dict = Depends(required_authenticated),
-) -> Dict[str, Any]:
-    """
-    Get all transactions for a specific user.
+# @router.get("/{user_id}", dependencies=[Depends(required_authenticated)])
+# def get_user_transactions_by_id(
+#     user_id: str,
+#     request: Request,
+#     sort: str = "date_desc",
+#     db: Session = Depends(get_db),
+#     claims: dict = Depends(required_authenticated),
+# ) -> Dict[str, Any]:
+#     """
+#     Get all transactions for a specific user.
     
-    Path Parameters:
-    - user_id: The user ID to fetch transactions for
+#     Path Parameters:
+#     - user_id: The user ID to fetch transactions for
     
-    Query Parameters:
-    - sort: Sort order. Options: "date_desc" (default), "date_asc", "none"
+#     Query Parameters:
+#     - sort: Sort order. Options: "date_desc" (default), "date_asc", "none"
     
-    Returns:
-    - transactions: List of user's transactions, sorted by date DESC by default
+#     Returns:
+#     - transactions: List of user's transactions, sorted by date DESC by default
     
-    Security:
-    - Only returns transactions for the specified user
-    """
-    requester_user_id = claims.get("sub")
-    if not requester_user_id:
-        return _unauthorized_response()
-    try:
-        return _list_transactions_for_user(
-            target_user_id=user_id,
-            requester_user_id=requester_user_id,
-            sort=sort,
-            db=db,
-        )
-    except ServiceError as exc:
-        raise HTTPException(
-            status_code=exc.status_code,
-            detail={
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details,
-                }
-            },
-        )
+#     Security:
+#     - Only returns transactions for the specified user
+#     """
+#     requester_user_id = claims.get("sub")
+#     if not requester_user_id:
+#         return _unauthorized_response()
+#     try:
+#         return _list_transactions_for_user(
+#             target_user_id=user_id,
+#             requester_user_id=requester_user_id,
+#             sort=sort,
+#             db=db,
+#         )
+#     except ServiceError as exc:
+#         raise HTTPException(
+#             status_code=exc.status_code,
+#             detail={
+#                 "error": {
+#                     "code": exc.code,
+#                     "message": exc.message,
+#                     "details": exc.details,
+#                 }
+#             },
+#         )
 
 
-@router.get("/user/{user_id}", dependencies=[Depends(required_authenticated)])
-def list_transactions_by_user_id(
-    user_id: str,
-    request: Request,
-    sort: str = "date_desc",
-    db: Session = Depends(get_db),
-    claims: dict = Depends(required_authenticated),
-) -> Dict[str, Any]:
-    """List all transactions for the specified user_id.
+# @router.get("/user/{user_id}", dependencies=[Depends(required_authenticated)])
+# def list_transactions_by_user_id(
+#     user_id: str,
+#     request: Request,
+#     sort: str = "date_desc",
+#     db: Session = Depends(get_db),
+#     claims: dict = Depends(required_authenticated),
+# ) -> Dict[str, Any]:
+#     """List all transactions for the specified user_id.
 
-    Requires x-user-id header and only allows requesting your own transactions.
-    """
-    requester_user_id = claims.get("sub")
-    if not requester_user_id:
-        return _unauthorized_response()
-    try:
-        return _list_transactions_for_user(
-            target_user_id=user_id,
-            requester_user_id=requester_user_id,
-            sort=sort,
-            db=db,
-        )
-    except ServiceError as exc:
-        raise HTTPException(
-            status_code=exc.status_code,
-            detail={
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details,
-                }
-            },
-        )
+#     Requires x-user-id header and only allows requesting your own transactions.
+#     """
+#     requester_user_id = claims.get("sub")
+#     if not requester_user_id:
+#         return _unauthorized_response()
+#     try:
+#         return _list_transactions_for_user(
+#             target_user_id=user_id,
+#             requester_user_id=requester_user_id,
+#             sort=sort,
+#             db=db,
+#         )
+#     except ServiceError as exc:
+#         raise HTTPException(
+#             status_code=exc.status_code,
+#             detail={
+#                 "error": {
+#                     "code": exc.code,
+#                     "message": exc.message,
+#                     "details": exc.details,
+#                 }
+#             },
+#         )
 
 
 @router.put("/{transaction_id}", dependencies=[Depends(required_authenticated)])
