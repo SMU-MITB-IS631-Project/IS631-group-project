@@ -10,6 +10,7 @@ from app.dependencies.user_context import get_x_user_id
 from app.models.transaction import TransactionRequest, TransactionUpdate, TransactionStatus
 from app.services.errors import ServiceError
 from app.services.transaction_service import TransactionService
+from app.dependencies.auth import required_authenticated
 
 router = APIRouter(
     prefix="/api/v1/transactions",
@@ -84,7 +85,7 @@ def _list_transactions_for_user(
     return {"transactions": transactions}
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, dependencies=[Depends(required_authenticated)])
 def create_transaction(
     request: TransactionRequest,
     db: Session = Depends(get_db),
@@ -137,7 +138,7 @@ def create_transaction(
         )
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(required_authenticated)])
 def list_transactions(
     request: Request,
     db: Session = Depends(get_db),
@@ -166,7 +167,7 @@ def list_transactions(
         )
 
 
-@router.get("/{user_id}")
+@router.get("/{user_id}", dependencies=[Depends(required_authenticated)])
 def get_user_transactions_by_id(
     user_id: str,
     request: Request,
@@ -212,7 +213,7 @@ def get_user_transactions_by_id(
         )
 
 
-@router.get("/user/{user_id}")
+@router.get("/user/{user_id}", dependencies=[Depends(required_authenticated)])
 def list_transactions_by_user_id(
     user_id: str,
     request: Request,
@@ -247,7 +248,7 @@ def list_transactions_by_user_id(
         )
 
 
-@router.put("/{transaction_id}")
+@router.put("/{transaction_id}", dependencies=[Depends(required_authenticated)])
 def update_transaction(
     transaction_id: int,
     request: TransactionUpdateRequest,
@@ -304,7 +305,7 @@ def update_transaction(
         )
 
 
-@router.put("/{transaction_id:int}/status")
+@router.put("/{transaction_id:int}/status", dependencies=[Depends(required_authenticated)])
 def update_transaction_status(
     transaction_id: int,
     status_update: TransactionStatusUpdate,
@@ -354,7 +355,7 @@ def update_transaction_status(
         )
 
 
-@router.put("/bulk/status")
+@router.put("/bulk/status", dependencies=[Depends(required_authenticated)])
 def bulk_update_transaction_status(
     bulk_update: BulkTransactionStatusUpdate,
     http_request: Request,
@@ -404,7 +405,7 @@ def bulk_update_transaction_status(
         )
 
 
-@router.delete("/{transaction_id:int}")
+@router.delete("/{transaction_id:int}", dependencies=[Depends(required_authenticated)])
 def delete_transaction(
     transaction_id: int,
     http_request: Request,
