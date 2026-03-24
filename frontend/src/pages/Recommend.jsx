@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import CardSurface from '../components/CardSurface';
 import SegmentedControl from '../components/SegmentedControl';
 import { CardThumbnail } from '../components/CardAutocomplete';
-import { loadCardsMaster, loadUserProfile, loadTransactions, appendTransaction } from '../utils/dataAdapter';
+import { loadCardCatalogue, loadUserProfile, loadTransactions, appendTransaction } from '../utils/dataAdapter';
 import { getRecommendationWithAIExplanation } from '../utils/recommendation';
 
 export default function Recommend() {
@@ -30,7 +30,7 @@ export default function Recommend() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   useEffect(() => {
-    loadCardsMaster().then(setCardsMaster);
+    loadCardCatalogue().then(setCardsMaster);
     const p = loadUserProfile();
     if (!p) { navigate('/register'); return; }
     setProfile(p);

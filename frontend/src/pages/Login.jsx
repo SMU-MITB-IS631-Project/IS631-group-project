@@ -34,6 +34,44 @@ export default function Login() {
     try {
       // Call the backend login endpoint
       await loginUser(username, password);
+
+      // After login, check for pending_wallet and auto-create cards/transactions
+      const pendingWalletRaw = localStorage.getItem('pending_wallet');
+      if (pendingWalletRaw) {
+        try {
+          const pendingWallet = JSON.parse(pendingWalletRaw);
+          // Ensure all walletCards have required fields
+          const normalizedWallet = (pendingWallet || []).map(w => ({
+            ...w,
+            cycle_spend_sgd: w.cycle_spend_sgd || 0,
+            refresh_day_of_month: w.refresh_day_of_month || 1,
+            annual_fee_billing_date: w.annual_fee_billing_date || new Date().toISOString().split('T')[0],
+          }));
+          const userId = localStorage.getItem('cardtrack_user_id');
+          if (userId && Array.isArray(normalizedWallet) && normalizedWallet.length > 0) {
+            await import('../utils/dataAdapter').then(async m => {
+              // Await user card creation and check for errors
+              try {
+                await m.postUserCards(userId, normalizedWallet);
+              } catch (err) {
+                console.error('Error creating user cards:', err);
+                throw err;
+              }
+              // Only proceed to transactions if user cards were created
+              try {
+                await m.postRegistrationTransactions(userId, normalizedWallet);
+              } catch (err) {
+                console.error('Error creating registration transactions:', err);
+                throw err;
+              }
+            });
+          }
+        } catch (err) {
+          console.error('Error auto-creating user cards/transactions after login:', err);
+        }
+        localStorage.removeItem('pending_wallet');
+      }
+
       // Login successful, navigate to dashboard
       navigate('/dashboard');
     } catch (err) {

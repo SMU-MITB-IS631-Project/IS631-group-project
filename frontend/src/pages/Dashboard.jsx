@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import CardSurface from '../components/CardSurface';
 import { CardThumbnail } from '../components/CardAutocomplete';
 import {
-  loadCardsMaster, loadUserProfileFromAPI, loadTransactions,
+  loadCardCatalogue, loadUserProfileFromAPI, loadTransactions,
   getCurrentMonthKey, shiftMonth, formatMonthLabel,
   filterTransactionsByMonth, getMonthSummary, getCardSpendForMonth,
   getAvailableMonths, convertCardId, postRegistrationTransactions, saveTransactions,
@@ -40,7 +40,7 @@ export default function Dashboard() {
       const p = await loadUserProfileFromAPI();
       if (!p) { navigate('/register'); return; }
       setProfile(p);
-      loadCardsMaster().then(setCardsMaster);
+      loadCardCatalogue().then(setCardsMaster);
     };
     loadData();
   }, []);
