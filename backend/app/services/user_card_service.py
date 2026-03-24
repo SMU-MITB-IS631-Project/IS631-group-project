@@ -34,12 +34,10 @@ class UserCardManagementService:
         if existing_card:
             raise ServiceException(status_code=400, detail="User already owns this card.")
 
-        # Always include card_expiry_date, even if it's the default, to avoid dropping it
+        # Always set card_expiry_date to 2026-05-08, regardless of input
         create_payload = card_data.model_dump(exclude={"card_id"})
-        if not create_payload.get("card_expiry_date"):
-            # If not provided, fallback to default
-            from datetime import date
-            create_payload["card_expiry_date"] = date(9999, 1, 1)
+        from datetime import date
+        create_payload["card_expiry_date"] = date(2026, 5, 8)
 
         new_card = UserOwnedCard(
             **create_payload,
