@@ -79,11 +79,14 @@ async function fetchBackendRecommendation({ userProfile, txn }) {
     preference: mapPreferenceToBackend(userProfile?.preference),
   });
 
+  // Get access token from localStorage
+  const accessToken = localStorage.getItem('access_token');
   const response = await fetch(`${API_BASE_URL}/api/v1/recommendation?${params.toString()}`, {
     method: 'GET',
     headers: {
       'x-user-id': userId,
       'Content-Type': 'application/json',
+      ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
     },
   });
 
@@ -232,11 +235,14 @@ async function fetchAIExplanation({ userProfile, txn }) {
     payload.user_id = parseInt(userId, 10);
   }
 
+  // Get access token from localStorage
+  const accessToken = localStorage.getItem('access_token');
   const response = await fetch(`${API_BASE_URL}/api/v1/recommendation/explain`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(userId ? { 'x-user-id': userId } : {}),
+      ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
     },
     body: JSON.stringify(payload),
   });

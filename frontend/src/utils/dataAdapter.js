@@ -607,6 +607,7 @@ export async function appendTransaction(txn) {
     console.log('[appendTransaction] Converting card_id:', txn.card_id, '->', backendCardId);
     console.log('[appendTransaction] Sending POST to:', `${API_BASE_URL}/api/v1/transactions`);
     
+    const accessToken = getAccessToken();
     const response = await fetch(`${API_BASE_URL}/api/v1/transactions`, {
       method: 'POST',
       headers: {

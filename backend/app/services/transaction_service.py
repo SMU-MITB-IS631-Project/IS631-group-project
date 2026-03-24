@@ -14,20 +14,16 @@ class TransactionService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def _resolve_user_id(self, user_id: Optional[str]) -> int:
-        raw_user_id = (user_id or "").strip()
-        if raw_user_id.isdigit():
-            return int(raw_user_id)
-        if raw_user_id.startswith("u_") and raw_user_id[2:].isdigit():
-            return int(raw_user_id[2:])
-
-        user = self.db.query(UserProfile).filter(UserProfile.username == raw_user_id).first()
+    def _resolve_user_sub(self, cognito_sub: Optional[str]) -> str:
+        """
+        Validate the Cognito sub (UUID) in the JWT and ensure user exists.
+        """
+        if not cognito_sub:
+            raise ServiceError(401, "UNAUTHORIZED", "Missing Cognito sub in token.", {})
+        user = self.db.query(UserProfile).filter(UserProfile.cognito_sub == cognito_sub).first()
         if not user:
             raise ServiceError(404, "NOT_FOUND", "Profile not found.", {})
-        return cast(int, user.id)
-
-    def _format_user_id(self, user_id: int) -> str:
-        return f"u_{user_id:03d}"
+            return user.id
 
     def _parse_card_id(self, card_id: Any) -> int:
         if isinstance(card_id, int):
@@ -41,20 +37,20 @@ class TransactionService:
             {"field": "transaction.card_id", "reason": "Invalid format or type."},
         )
 
-    def _card_exists_in_wallet(self, user_id: int, card_id: int) -> bool:
-        return (
-            self.db.query(UserOwnedCard.card_id)
-            .filter(
-                UserOwnedCard.user_id == user_id,
-                UserOwnedCard.card_id == card_id,
-                or_(
-                    UserOwnedCard.status == UserOwnedCardStatus.Active,
-                    func.lower(sa_cast(UserOwnedCard.status, String)) == "active",
-                ),
+    def _card_exists_in_wallet(self, user_sub: str, card_id: int) -> bool:
+            return (
+                self.db.query(UserOwnedCard.card_id)
+                .filter(
+                    UserOwnedCard.user_id == user_sub,
+                    UserOwnedCard.card_id == card_id,
+                    or_(
+                        UserOwnedCard.status == UserOwnedCardStatus.Active,
+                        func.lower(sa_cast(UserOwnedCard.status, String)) == "active",
+                    ),
+                )
+                .first()
+                is not None
             )
-            .first()
-            is not None
-        )
 
     def _transaction_to_dict(self, txn: UserTransaction) -> Dict[str, Any]:
         channel_value = str(txn.channel.value if hasattr(txn.channel, "value") else txn.channel).lower()
@@ -72,17 +68,17 @@ class TransactionService:
             "category": category_value,
             "is_overseas": txn.is_overseas,
             "status": status_value,
-            "user_id": self._format_user_id(cast(int, txn.user_id)),
+                "user_id": txn.id,  # user_profile.id
         }
 
-    def create_transaction(self, user_id: Optional[str], payload: TransactionCreate) -> Dict[str, Any]:
-        raw_user_id = user_id
-        if not raw_user_id and payload.user_id is not None:
-            raw_user_id = str(payload.user_id)
-        resolved_user_id = self._resolve_user_id(raw_user_id or "u_001")
+    def create_transaction(self, user_sub: Optional[str], payload: TransactionCreate) -> Dict[str, Any]:
+        raw_user_sub = user_sub
+        if not raw_user_sub and payload.user_id is not None:
+            raw_user_sub = str(payload.user_id)
+            resolved_user_id = self._resolve_user_id(raw_user_sub or "")
 
         card_id = self._parse_card_id(payload.card_id)
-        if not self._card_exists_in_wallet(resolved_user_id, card_id):
+            if not self._card_exists_in_wallet(resolved_user_id, card_id):
             raise ServiceError(
                 400,
                 "VALIDATION_ERROR",
@@ -92,7 +88,7 @@ class TransactionService:
 
         transaction_date = payload.transaction_date or date.today()
         record = UserTransaction(
-            user_id=resolved_user_id,
+                user_id=resolved_user_id,
             card_id=card_id,
             amount_sgd=payload.amount_sgd,
             item=payload.item,
@@ -107,9 +103,9 @@ class TransactionService:
         self.db.refresh(record)
         return self._transaction_to_dict(record)
 
-    def get_user_transactions(self, user_id: str, sort_by_date_desc: Optional[bool] = True) -> List[Dict[str, Any]]:
-        resolved_user_id = self._resolve_user_id(user_id)
-        query = self.db.query(UserTransaction).filter(UserTransaction.user_id == resolved_user_id)
+    def get_user_transactions(self, user_sub: str, sort_by_date_desc: Optional[bool] = True) -> List[Dict[str, Any]]:
+            resolved_user_id = self._resolve_user_id(user_sub)
+            query = self.db.query(UserTransaction).filter(UserTransaction.user_id == resolved_user_id)
         if sort_by_date_desc is True:
             query = query.order_by(UserTransaction.transaction_date.desc())
         elif sort_by_date_desc is False:
@@ -117,17 +113,17 @@ class TransactionService:
         rows = query.all()
         return [self._transaction_to_dict(row) for row in rows]
 
-    def get_transaction_by_id(self, transaction_id: int, user_id: str) -> Dict[str, Any] | None:
-        resolved_user_id = self._resolve_user_id(user_id)
-        row = (
-            self.db.query(UserTransaction)
-            .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.id == transaction_id)
-            .first()
-        )
-        return self._transaction_to_dict(row) if row else None
+    def get_transaction_by_id(self, transaction_id: int, user_sub: str) -> Dict[str, Any] | None:
+            resolved_user_id = self._resolve_user_id(user_sub)
+            row = (
+                self.db.query(UserTransaction)
+                .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.id == transaction_id)
+                .first()
+            )
+            return self._transaction_to_dict(row) if row else None
 
-    def update_transaction_status(self, user_id: str, transaction_id: int, status: str) -> Dict[str, Any]:
-        resolved_user_id = self._resolve_user_id(user_id)
+    def update_transaction_status(self, user_sub: str, transaction_id: int, status: str) -> Dict[str, Any]:
+            resolved_user_id = self._resolve_user_id(user_sub)
         
         # Validate status
         valid_statuses = [s.value for s in TransactionStatus]
@@ -141,7 +137,7 @@ class TransactionService:
         
         transaction = (
             self.db.query(UserTransaction)
-            .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.id == transaction_id)
+                .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.id == transaction_id)
             .first()
         )
         
@@ -153,9 +149,9 @@ class TransactionService:
         self.db.refresh(transaction)
         return self._transaction_to_dict(transaction)
     
-    def update_transactions_by_card_id(self, user_id: str, card_id: int, status: str) -> int:
+    def update_transactions_by_card_id(self, user_sub: str, card_id: int, status: str) -> int:
         """Update all transactions for a card to the given status. Returns count of updated transactions."""
-        resolved_user_id = self._resolve_user_id(user_id)
+            resolved_user_id = self._resolve_user_id(user_sub)
         
         # Validate status
         valid_statuses = [s.value for s in TransactionStatus]
@@ -171,16 +167,16 @@ class TransactionService:
         
         count = (
             self.db.query(UserTransaction)
-            .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.card_id == card_id)
+                .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.card_id == card_id)
             .update({"status": status_enum})
         )
         
         self.db.commit()
         return count
 
-    def bulk_update_transaction_status(self, user_id: str, transaction_ids: List[int], status: str) -> int:
+    def bulk_update_transaction_status(self, user_sub: str, transaction_ids: List[int], status: str) -> int:
         """Bulk update multiple transactions to the given status. Returns count of updated transactions."""
-        resolved_user_id = self._resolve_user_id(user_id)
+            resolved_user_id = self._resolve_user_id(user_sub)
         
         # Validate status
         valid_statuses = [s.value for s in TransactionStatus]
@@ -196,20 +192,20 @@ class TransactionService:
         
         count = (
             self.db.query(UserTransaction)
-            .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.id.in_(transaction_ids))
+                .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.id.in_(transaction_ids))
             .update({"status": status_enum})
         )
         
         self.db.commit()
         return count
 
-    def update_transaction(self, user_id: str, transaction_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
+    def update_transaction(self, user_sub: str, transaction_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update transaction fields. Returns updated transaction."""
-        resolved_user_id = self._resolve_user_id(user_id)
+            resolved_user_id = self._resolve_user_id(user_sub)
         
         transaction = (
             self.db.query(UserTransaction)
-            .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.id == transaction_id)
+                .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.id == transaction_id)
             .first()
         )
         
@@ -236,7 +232,7 @@ class TransactionService:
             # Avoid wallet lookup when card is unchanged; this keeps updates resilient
             # for legacy rows where unrelated wallet date fields may be malformed.
             if card_id != transaction.card_id:
-                if not self._card_exists_in_wallet(resolved_user_id, card_id):
+                if not self._card_exists_in_wallet(resolved_user_sub, card_id):
                     raise ServiceError(
                         400,
                         "VALIDATION_ERROR",
@@ -256,11 +252,11 @@ class TransactionService:
 
     def delete_transaction(self, user_id: str, transaction_id: int) -> Dict[str, Any]:
         """Delete a transaction. Returns deleted transaction."""
-        resolved_user_id = self._resolve_user_id(user_id)
+            resolved_user_id = self._resolve_user_id(user_sub)
         
         transaction = (
             self.db.query(UserTransaction)
-            .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.id == transaction_id)
+                .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.id == transaction_id)
             .first()
         )
         
