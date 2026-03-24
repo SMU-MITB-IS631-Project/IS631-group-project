@@ -35,6 +35,40 @@ from app.routes import (
 )
 
 
+def get_cors_allowed_origins() -> list[str]:
+    """Get CORS allowed origins from CORS_ALLOWED_ORIGINS env var, or use dev defaults.
+    
+    Supports three modes:
+    - Not set (None): Use sensible dev defaults (localhost variants)
+    - Empty string: Allow all origins (dynamic IP mode)
+    - Comma-separated values: Use specific origins
+    """
+    cors_origins_str = os.getenv("CORS_ALLOWED_ORIGINS")
+    
+    # Not set: use dev defaults for local development
+    if cors_origins_str is None:
+        return [
+            "http://localhost:5173",
+            "http://localhost:5174",
+            "http://localhost:5175",
+            "http://localhost:5176",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:5174",
+            "http://127.0.0.1:5175",
+            "http://127.0.0.1:5176",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:5177",
+        ]
+    
+    # Empty string: allow any origin (enables dynamic IP without pre-configuration)
+    if cors_origins_str == "":
+        return ["*"]
+    
+    # Explicit comma-separated origins
+    return [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan event handler - runs on startup and shutdown"""
@@ -54,19 +88,7 @@ app = FastAPI(
 # CORS middleware - MUST be added first before other middlewares
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:5175",
-        "http://localhost:5176",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",
-        "http://127.0.0.1:5175",
-        "http://127.0.0.1:5176",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5177",
-    ],
+    allow_origins=get_cors_allowed_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
