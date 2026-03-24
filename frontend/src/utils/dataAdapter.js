@@ -71,6 +71,7 @@ export function loadTransactionsFromStorage() {
   }
 }
 import API_BASE_URL from './apiBaseUrl';
+import { parseCSV } from './csv';
 
 const PROFILE_KEY = 'cardtrack_user_profile';
 const TXN_KEY = 'cardtrack_transactions';
@@ -169,14 +170,47 @@ function convertBackendCardId(backendCardId) {
 // --- CSV Loader ---
 
 
+async function loadCardCatalogueFromCsvFallback() {
+  const csvResponse = await fetch('/data/cards_master.csv');
+  if (!csvResponse.ok) {
+    throw new Error(`Failed to load fallback card catalogue (${csvResponse.status})`);
+  }
+
+  const csvText = await csvResponse.text();
+  const parsedRows = parseCSV(csvText);
+  return parsedRows.map((row) => ({
+    ...row,
+    bank: row.bank || row.issuer,
+    benefit_type: row.benefit_type || row.reward_type,
+  }));
+}
+
+
 // Fetch card catalogue from backend API
 export async function loadCardCatalogue() {
-  const res = await fetch(`${API_BASE_URL}/api/v1/catalog`);
-  if (!res.ok) throw new Error('Failed to fetch card catalogue');
-  const data = await res.json();
-  // Expecting data.cards or data.card_catalogue or similar
-  // Adjust as needed based on actual API response
-  return data.cards || data.card_catalogue || data;
+  const endpointCandidates = [
+    `${API_BASE_URL}/api/v1/catalog/`,
+    `${API_BASE_URL}/api/v1/catalog`,
+  ];
+
+  let lastApiError = null;
+  for (const endpoint of endpointCandidates) {
+    try {
+      const response = await fetch(endpoint);
+      if (!response.ok) {
+        lastApiError = new Error(`Failed to fetch card catalogue (${response.status}) from ${endpoint}`);
+        continue;
+      }
+
+      const data = await response.json();
+      return data.cards || data.card_catalogue || data;
+    } catch (error) {
+      lastApiError = error;
+    }
+  }
+
+  console.warn('Card catalogue API unavailable, using CSV fallback.', lastApiError);
+  return loadCardCatalogueFromCsvFallback();
 }
 
 // --- User Profile ---
