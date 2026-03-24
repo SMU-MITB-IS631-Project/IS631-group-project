@@ -11,7 +11,7 @@ router = APIRouter(
     tags=["catalog"]
 )
 
-@router.get("/", response_model=list[CardCatalogueResponse], dependencies=[Depends(required_authenticated)])
+@router.get("/", response_model=list[CardCatalogueResponse])
 def get_catalog(service: CatalogService = Depends(get_catalog_service)):
     return service.get_catalog()
 
