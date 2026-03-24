@@ -7,30 +7,29 @@
  * @returns {Object} Summary: { total, count, topCardId, topCardName, topCardSpend, registrationTotal }
  */
 export function getMonthSummary(transactions, cardsMaster = [], wallet = []) {
-  // Exclude deleted and registration txns for main spend/count
-  const displayTxns = (transactions || []).filter(t => {
+
+  // Get current user id
+  const userId = getCurrentUserId && getCurrentUserId();
+  // Only include transactions for the logged-in user and not deleted
+  const userTxns = (transactions || []).filter(t => {
     const status = (t.status || '').toLowerCase();
     const isDeleted = status === 'deleted_with_card' || status === 'deletedwithcard';
-    return (t.item || '').trim().toLowerCase() !== 'registration' && !isDeleted;
+    return String(t.user_id) === String(userId) && !isDeleted;
   });
-  const txnTotal = displayTxns.reduce((sum, t) => sum + (t.amount_sgd || 0), 0);
+  // Sum all active transactions for the user, including registration
+  const txnTotal = userTxns.reduce((sum, t) => sum + (t.amount_sgd || 0), 0);
+  const count = userTxns.length;
+  // Registration transaction (monthly salary) for user
+  const registrationTotal = userTxns.filter(t => (t.item || '').trim().toLowerCase() === 'registration')
+    .reduce((sum, t) => sum + (t.amount_sgd || 0), 0);
   // Baseline: wallet cycle_spend_sgd (not in txns)
   const baselineTotal = (wallet || []).reduce((sum, w) => sum + (parseFloat(w.cycle_spend_sgd) || 0), 0);
   const total = txnTotal + baselineTotal;
-  const count = displayTxns.length;
-
-  // Registration transaction (monthly salary)
-  const registrationTxns = (transactions || []).filter(t => {
-    const status = (t.status || '').toLowerCase();
-    const isDeleted = status === 'deleted_with_card' || status === 'deletedwithcard';
-    return (t.item || '').trim().toLowerCase() === 'registration' && !isDeleted;
-  });
-  const registrationTotal = registrationTxns.reduce((sum, t) => sum + (t.amount_sgd || 0), 0);
 
   // Top card by spend (txn + baseline)
   const cardSpend = {};
-  // Add spend from transactions
-  displayTxns.forEach(t => {
+  // Use userTxns for spend calculation (excluding deleted)
+  userTxns.forEach(t => {
     cardSpend[t.card_id] = (cardSpend[t.card_id] || 0) + (t.amount_sgd || 0);
   });
   // Add baseline spend from wallet
@@ -202,7 +201,7 @@ export async function loadUserProfileFromAPI() {
   try {
     const userId = getCurrentUserId();
     const accessToken = getAccessToken();
-    const response = await fetch(`${API_BASE_URL}/api/v1/profile`, {
+    const response = await fetch(`${API_BASE_URL}/user_profile/user`, {
       method: 'GET',
       headers: {
         'x-user-id': userId,
@@ -216,16 +215,32 @@ export async function loadUserProfileFromAPI() {
     }
 
     const data = await response.json();
-    const profile = data.profile;
-    
-    // Convert card IDs and ensure id field from API
-    if (Array.isArray(profile.wallet)) {
-      profile.wallet = profile.wallet.map(card => ({
-        ...card,
-        card_id: convertBackendCardId(card.card_id),
-      }));
+    // Backend returns the profile object directly
+    const profile = data;
+    // Fetch user cards and attach as wallet
+    try {
+      const userId = getCurrentUserId();
+      const accessToken = getAccessToken();
+      const cardsResponse = await fetch(`${API_BASE_URL}/user/cards/`, {
+        method: 'GET',
+        headers: {
+          'x-user-id': String(userId),
+          'Content-Type': 'application/json',
+          ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+        },
+      });
+      if (cardsResponse.ok) {
+        const cardsData = await cardsResponse.json();
+        profile.wallet = (cardsData.user_cards || cardsData || []).map(card => ({
+          ...card,
+          card_id: convertBackendCardId(card.card_id),
+        }));
+      } else {
+        profile.wallet = [];
+      }
+    } catch (e) {
+      profile.wallet = [];
     }
-
     // Save to localStorage for caching
     saveUserProfile(profile);
     return profile;
@@ -495,11 +510,13 @@ export async function loadTransactions(options = {}) {
   const { allowLocalFallback = true, includeDeleted = false } = options;
   try {
     const userId = getCurrentUserId();
+    const accessToken = getAccessToken();
     const response = await fetch(`${API_BASE_URL}/api/v1/transactions`, {
       method: 'GET',
       headers: {
         'x-user-id': userId,
         'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       },
     });
     
@@ -644,11 +661,13 @@ export async function updateTransactionById(transactionId, transactionPatch) {
     payload.card_id = convertCardId(payload.card_id);
   }
 
+  const accessToken = getAccessToken();
   const response = await fetch(`${API_BASE_URL}/api/v1/transactions/${transactionId}`, {
     method: 'PUT',
     headers: {
       'x-user-id': userId,
       'Content-Type': 'application/json',
+      ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
     },
     body: JSON.stringify({ transaction: payload }),
   });
@@ -666,10 +685,12 @@ export async function updateTransactionById(transactionId, transactionPatch) {
 
 export async function deleteTransactionById(transactionId) {
   const userId = getCurrentUserId();
+  const accessToken = getAccessToken();
   const response = await fetch(`${API_BASE_URL}/api/v1/transactions/${transactionId}`, {
     method: 'DELETE',
     headers: {
       'x-user-id': userId,
+      ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
     },
   });
 
