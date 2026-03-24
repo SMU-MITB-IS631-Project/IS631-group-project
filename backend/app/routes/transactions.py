@@ -89,7 +89,7 @@ def _list_transactions_for_user(
 def create_transaction(
     request: TransactionRequest,
     db: Session = Depends(get_db),
-    user_id: Optional[str] = Depends(get_x_user_id),
+    claims: dict = Depends(required_authenticated),
 ) -> Dict[str, Any]:
     """
     Create a new transaction.
@@ -107,9 +107,9 @@ def create_transaction(
         }
     }
     """
+    user_id = claims.get("sub")
     if not user_id:
         return _unauthorized_response()
-    
     try:
         service = TransactionService(db)
         transaction = service.create_transaction(user_id, request.transaction)
@@ -142,14 +142,14 @@ def create_transaction(
 def list_transactions(
     request: Request,
     db: Session = Depends(get_db),
-    user_id: Optional[str] = Depends(get_x_user_id),
+    claims: dict = Depends(required_authenticated),
 ) -> Dict[str, Any]:
     """
     List all transactions for current user.
     """
+    user_id = claims.get("sub")
     if not user_id:
         return _unauthorized_response()
-    
     try:
         service = TransactionService(db)
         transactions = service.get_user_transactions(user_id, sort_by_date_desc=True)
@@ -173,7 +173,7 @@ def get_user_transactions_by_id(
     request: Request,
     sort: str = "date_desc",
     db: Session = Depends(get_db),
-    header_user_id: Optional[str] = Depends(get_x_user_id),
+    claims: dict = Depends(required_authenticated),
 ) -> Dict[str, Any]:
     """
     Get all transactions for a specific user.
@@ -190,13 +190,13 @@ def get_user_transactions_by_id(
     Security:
     - Only returns transactions for the specified user
     """
-    if not header_user_id:
+    requester_user_id = claims.get("sub")
+    if not requester_user_id:
         return _unauthorized_response()
-
     try:
         return _list_transactions_for_user(
             target_user_id=user_id,
-            requester_user_id=header_user_id,
+            requester_user_id=requester_user_id,
             sort=sort,
             db=db,
         )
@@ -219,19 +219,19 @@ def list_transactions_by_user_id(
     request: Request,
     sort: str = "date_desc",
     db: Session = Depends(get_db),
-    header_user_id: Optional[str] = Depends(get_x_user_id),
+    claims: dict = Depends(required_authenticated),
 ) -> Dict[str, Any]:
     """List all transactions for the specified user_id.
 
     Requires x-user-id header and only allows requesting your own transactions.
     """
-    if not header_user_id:
+    requester_user_id = claims.get("sub")
+    if not requester_user_id:
         return _unauthorized_response()
-
     try:
         return _list_transactions_for_user(
             target_user_id=user_id,
-            requester_user_id=header_user_id,
+            requester_user_id=requester_user_id,
             sort=sort,
             db=db,
         )
@@ -253,7 +253,7 @@ def update_transaction(
     transaction_id: int,
     request: TransactionUpdateRequest,
     db: Session = Depends(get_db),
-    user_id: Optional[str] = Depends(get_x_user_id),
+    claims: dict = Depends(required_authenticated),
 ) -> Dict[str, Any]:
     """
     Update a transaction's fields (item, amount, category, etc.).
@@ -273,9 +273,9 @@ def update_transaction(
         }
     }
     """
+    user_id = claims.get("sub")
     if not user_id:
         return _unauthorized_response()
-    
     try:
         service = TransactionService(db)
         updates = request.transaction.model_dump(exclude_unset=True, by_alias=False)
@@ -311,7 +311,7 @@ def update_transaction_status(
     status_update: TransactionStatusUpdate,
     http_request: Request,
     db: Session = Depends(get_db),
-    user_id: Optional[str] = Depends(get_x_user_id),
+    claims: dict = Depends(required_authenticated),
 ) -> Dict[str, Any]:
     """
     Update only a transaction's status (e.g., mark as deleted_with_card).
@@ -324,9 +324,9 @@ def update_transaction_status(
         "status": "deleted_with_card"
     }
     """
+    user_id = claims.get("sub")
     if not user_id:
         return _unauthorized_response()
-    
     try:
         service = TransactionService(db)
         transaction = service.update_transaction_status(user_id, transaction_id, status_update.status)
@@ -360,7 +360,7 @@ def bulk_update_transaction_status(
     bulk_update: BulkTransactionStatusUpdate,
     http_request: Request,
     db: Session = Depends(get_db),
-    user_id: Optional[str] = Depends(get_x_user_id),
+    claims: dict = Depends(required_authenticated),
 ) -> Dict[str, Any]:
     """
     Bulk update multiple transactions' status.
@@ -374,9 +374,9 @@ def bulk_update_transaction_status(
     Returns:
     - count: Number of transactions updated
     """
+    user_id = claims.get("sub")
     if not user_id:
         return _unauthorized_response()
-    
     try:
         service = TransactionService(db)
         count = service.bulk_update_transaction_status(user_id, bulk_update.transaction_ids, bulk_update.status)
@@ -410,7 +410,7 @@ def delete_transaction(
     transaction_id: int,
     http_request: Request,
     db: Session = Depends(get_db),
-    user_id: Optional[str] = Depends(get_x_user_id),
+    claims: dict = Depends(required_authenticated),
 ) -> Dict[str, Any]:
     """
     Delete a transaction that was mistakenly added.
@@ -421,9 +421,9 @@ def delete_transaction(
     Returns:
     - The deleted transaction object
     """
+    user_id = claims.get("sub")
     if not user_id:
         return _unauthorized_response()
-    
     try:
         service = TransactionService(db)
         deleted_transaction = service.delete_transaction(user_id, transaction_id)
