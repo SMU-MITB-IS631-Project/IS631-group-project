@@ -1,3 +1,62 @@
+// --- Monthly Summary ---
+/**
+ * Aggregates monthly summary for dashboard: total spend, txn count, top card, registration total, etc.
+ * @param {Array} transactions - List of transaction objects for the month
+ * @param {Array} cardsMaster - List of all card objects (from card catalogue)
+ * @param {Array} wallet - User's wallet cards (optional, for baseline spend)
+ * @returns {Object} Summary: { total, count, topCardId, topCardName, topCardSpend, registrationTotal }
+ */
+export function getMonthSummary(transactions, cardsMaster = [], wallet = []) {
+  // Exclude deleted and registration txns for main spend/count
+  const displayTxns = (transactions || []).filter(t => {
+    const status = (t.status || '').toLowerCase();
+    const isDeleted = status === 'deleted_with_card' || status === 'deletedwithcard';
+    return (t.item || '').trim().toLowerCase() !== 'registration' && !isDeleted;
+  });
+  const txnTotal = displayTxns.reduce((sum, t) => sum + (t.amount_sgd || 0), 0);
+  // Baseline: wallet cycle_spend_sgd (not in txns)
+  const baselineTotal = (wallet || []).reduce((sum, w) => sum + (parseFloat(w.cycle_spend_sgd) || 0), 0);
+  const total = txnTotal + baselineTotal;
+  const count = displayTxns.length;
+
+  // Registration transaction (monthly salary)
+  const registrationTxns = (transactions || []).filter(t => {
+    const status = (t.status || '').toLowerCase();
+    const isDeleted = status === 'deleted_with_card' || status === 'deletedwithcard';
+    return (t.item || '').trim().toLowerCase() === 'registration' && !isDeleted;
+  });
+  const registrationTotal = registrationTxns.reduce((sum, t) => sum + (t.amount_sgd || 0), 0);
+
+  // Top card by spend (txn + baseline)
+  const cardSpend = {};
+  // Add spend from transactions
+  displayTxns.forEach(t => {
+    cardSpend[t.card_id] = (cardSpend[t.card_id] || 0) + (t.amount_sgd || 0);
+  });
+  // Add baseline spend from wallet
+  (wallet || []).forEach(w => {
+    if (w.card_id) {
+      cardSpend[w.card_id] = (cardSpend[w.card_id] || 0) + (parseFloat(w.cycle_spend_sgd) || 0);
+    }
+  });
+
+  let topCardId = null;
+  let topSpend = 0;
+  Object.entries(cardSpend).forEach(([cid, spend]) => {
+    if (spend > topSpend) { topCardId = cid; topSpend = spend; }
+  });
+
+  const topCard = (cardsMaster || []).find(c => c.card_id === topCardId);
+
+  return {
+    total,
+    count,
+    topCardId,
+    topCardName: topCard?.card_name || topCardId,
+    topCardSpend: topSpend,
+    registrationTotal
+  };
+}
 
 // Save transactions to localStorage
 
@@ -12,7 +71,6 @@ export function loadTransactionsFromStorage() {
     return [];
   }
 }
-import { parseCSV } from './csv';
 import API_BASE_URL from './apiBaseUrl';
 
 const PROFILE_KEY = 'cardtrack_user_profile';
@@ -20,6 +78,11 @@ const TXN_KEY = 'cardtrack_transactions';
 const USER_ID_KEY = 'cardtrack_user_id';
 
 // --- User Context ---
+
+// Helper to get access token from localStorage
+function getAccessToken() {
+  return localStorage.getItem('access_token');
+}
 // TODO: Replace with actual user authentication/context
 function getCurrentUserId() {
   return localStorage.getItem(USER_ID_KEY) || '1';
@@ -106,10 +169,15 @@ function convertBackendCardId(backendCardId) {
 
 // --- CSV Loader ---
 
-export async function loadCardsMaster() {
-  const res = await fetch('/data/cards_master.csv');
-  const text = await res.text();
-  return parseCSV(text);
+
+// Fetch card catalogue from backend API
+export async function loadCardCatalogue() {
+  const res = await fetch(`${API_BASE_URL}/api/v1/catalog`);
+  if (!res.ok) throw new Error('Failed to fetch card catalogue');
+  const data = await res.json();
+  // Expecting data.cards or data.card_catalogue or similar
+  // Adjust as needed based on actual API response
+  return data.cards || data.card_catalogue || data;
 }
 
 // --- User Profile ---
@@ -133,11 +201,13 @@ export function loadUserProfile() {
 export async function loadUserProfileFromAPI() {
   try {
     const userId = getCurrentUserId();
+    const accessToken = getAccessToken();
     const response = await fetch(`${API_BASE_URL}/api/v1/profile`, {
       method: 'GET',
       headers: {
         'x-user-id': userId,
         'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       },
     });
 
@@ -171,11 +241,13 @@ export function saveUserProfile(profile) {
 }
 
 async function fetchUserCards(userId) {
-  const response = await fetch(`${API_BASE_URL}/api/v1/user_cards`, {
+  const accessToken = getAccessToken();
+  const response = await fetch(`${API_BASE_URL}/user/cards`, {
     method: 'GET',
     headers: {
       'x-user-id': String(userId),
       'Content-Type': 'application/json',
+      ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
     },
   });
 
@@ -205,6 +277,7 @@ export async function loadUserOwnedCards() {
 
 
 export async function postRegistrationTransactions(userId, walletCards) {
+  const accessToken = getAccessToken();
   const payloads = (walletCards || [])
     .filter(w => (w.cycle_spend_sgd || 0) > 0)
     .map(w => ({
@@ -229,6 +302,7 @@ export async function postRegistrationTransactions(userId, walletCards) {
       headers: {
         'x-user-id': String(userId),
         'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       },
       body: JSON.stringify(payload),
     });
@@ -249,15 +323,15 @@ export async function postRegistrationTransactions(userId, walletCards) {
   return responses.filter(Boolean);
 }
 
-async function postUserCards(userId, walletCards) {
+export async function postUserCards(userId, walletCards) {
+  const accessToken = getAccessToken();
+  const today = new Date().toISOString().split('T')[0];
   const payloads = (walletCards || [])
     .filter(w => w.card_id)
     .map(w => ({
-      wallet_card: {
-        card_id: String(convertCardId(w.card_id)),
-        refresh_day_of_month: parseInt(w.refresh_day_of_month, 10) || 1,
-        annual_fee_billing_date: w.annual_fee_billing_date,
-      },
+      card_id: Number(w.card_id),
+      refresh_day_of_month: parseInt(w.refresh_day_of_month, 10) || 1,
+      annual_fee_billing_date: w.annual_fee_billing_date || today,
     }));
 
   if (payloads.length === 0) {
@@ -265,11 +339,12 @@ async function postUserCards(userId, walletCards) {
   }
 
   await Promise.all(payloads.map(payload =>
-    fetch(`${API_BASE_URL}/api/v1/user_cards`, {
+    fetch(`${API_BASE_URL}/user/cards`, {
       method: 'POST',
       headers: {
         'x-user-id': String(userId),
         'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       },
       body: JSON.stringify(payload),
     })
@@ -320,55 +395,9 @@ export async function registerUser(username, password, name, email, preference, 
     saveUserProfile(seededProfile);
     setCurrentUserId(data.user_id);
 
-    // Persist wallet to backend before posting registration transactions
+    // Store wallet info in localStorage for post-login creation
     if (Array.isArray(wallet) && wallet.length > 0) {
-      try {
-        await postUserCards(data.user_id, wallet);
-      } catch (walletError) {
-        console.warn('Unable to persist wallet cards yet:', walletError);
-      }
-    }
-
-    // Ensure initial registration spend is visible immediately.
-    // Backend creation may fail if wallet linkage is delayed, so keep local fallback entries.
-    const localRegistrationTxns = (wallet || [])
-      .filter(w => (parseFloat(w.cycle_spend_sgd) || 0) > 0)
-      .map(w => ({
-        id: `local-reg-${Date.now()}-${String(w.card_id)}`,
-        date: new Date().toISOString().split('T')[0],
-        item: 'registration',
-        amount_sgd: parseFloat(w.cycle_spend_sgd),
-        card_id: w.card_id,
-        channel: 'online',
-        category: 'others',
-        is_overseas: false,
-        status: 'active',
-      }));
-
-    if (localRegistrationTxns.length > 0) {
-      const existingTxns = loadTransactionsFromStorage();
-      const merged = [...existingTxns];
-
-      localRegistrationTxns.forEach((pendingTxn) => {
-        const duplicate = existingTxns.some((txn) =>
-          String(txn.item || '').trim().toLowerCase() === 'registration' &&
-          String(txn.card_id) === String(pendingTxn.card_id) &&
-          Number(txn.amount_sgd) === Number(pendingTxn.amount_sgd)
-        );
-
-        if (!duplicate) {
-          merged.push(pendingTxn);
-        }
-      });
-
-      saveTransactions(merged);
-
-      // Best-effort: try persisting to backend; local fallback remains if this fails.
-      try {
-        await postRegistrationTransactions(data.user_id, wallet || []);
-      } catch (txnError) {
-        console.warn('Unable to persist registration transactions yet:', txnError);
-      }
+      localStorage.setItem('pending_wallet', JSON.stringify(wallet));
     }
 
     return {
@@ -431,7 +460,9 @@ export async function loginUser(username, password) {
 
     const data = await response.json();
     setCurrentUserId(data.user_id);
-    
+    if (data.tokens && data.tokens.access_token) {
+      localStorage.setItem('access_token', data.tokens.access_token);
+    }
     const existingProfile = loadUserProfile();
     const wallet = existingProfile && existingProfile.username === username.trim()
       ? (existingProfile.wallet || [])
@@ -446,9 +477,12 @@ export async function loginUser(username, password) {
       wallet,
       created_date: existingProfile?.created_date || new Date().toISOString(),
     };
-    
     saveUserProfile(profile);
     return profile;
+  // Helper to get access token from localStorage
+  function getAccessToken() {
+    return localStorage.getItem('access_token');
+  }
   } catch (error) {
     console.error('Login error:', error);
     throw error;
@@ -561,6 +595,7 @@ export async function appendTransaction(txn) {
       headers: {
         'x-user-id': userId,
         'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       },
       body: JSON.stringify({
         transaction: {
@@ -679,33 +714,6 @@ export function filterTransactionsByMonth(transactions, monthKey) {
     const isDeleted = status === 'deleted_with_card' || status === 'deletedwithcard';
     return getMonthKey(t.date) === monthKey && !isDeleted;
   });
-}
-
-export function getMonthSummary(transactions, cardsMaster, wallet = []) {
-  const displayTxns = transactions.filter(t => {
-    const status = (t.status || '').toLowerCase();
-    const isDeleted = status === 'deleted_with_card' || status === 'deletedwithcard';
-    return (t.item || '').trim().toLowerCase() !== 'registration' && !isDeleted;
-  });
-  const txnTotal = displayTxns.reduce((sum, t) => sum + (t.amount_sgd || 0), 0);
-  const total = txnTotal;
-  const count = displayTxns.length;
-
-  // Top card by spend (txn spend only)
-  const cardSpend = {};
-  displayTxns.forEach(t => {
-    cardSpend[t.card_id] = (cardSpend[t.card_id] || 0) + (t.amount_sgd || 0);
-  });
-
-  let topCardId = null;
-  let topSpend = 0;
-  Object.entries(cardSpend).forEach(([cid, spend]) => {
-    if (spend > topSpend) { topCardId = cid; topSpend = spend; }
-  });
-
-  const topCard = cardsMaster.find(c => c.card_id === topCardId);
-
-  return { total, count, topCardId, topCardName: topCard?.card_name || topCardId, topCardSpend: topSpend };
 }
 
 export function getAvailableMonths(transactions) {

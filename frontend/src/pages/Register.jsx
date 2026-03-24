@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import CardSurface from '../components/CardSurface';
 import CardAutocomplete from '../components/CardAutocomplete';
 import SegmentedControl from '../components/SegmentedControl';
-import { loadCardsMaster, registerUser } from '../utils/dataAdapter';
+import { loadCardCatalogue, registerUser } from '../utils/dataAdapter';
 
 const EMPTY_WALLET_CARD = { card_id: '', refresh_day_of_month: 1, annual_fee_billing_date: '', cycle_spend_sgd: '' };
 
@@ -50,7 +50,12 @@ export default function Register() {
   }
 
   useEffect(() => {
-    loadCardsMaster().then(setCardsMaster);
+    loadCardCatalogue()
+      .then(setCardsMaster)
+      .catch((err) => {
+        console.error('Failed to load card catalogue:', err);
+        setCardsMaster([]);
+      });
   }, []);
 
   function updateWalletCard(index, field, value) {

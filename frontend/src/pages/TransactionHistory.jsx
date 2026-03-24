@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CardSurface from '../components/CardSurface';
-import { CardThumbnail } from '../components/CardAutocomplete';
 import {
-  loadCardsMaster,
+  loadCardCatalogue,
   loadUserProfile,
   loadTransactions,
   loadUserOwnedCards,
@@ -58,7 +57,7 @@ export default function TransactionHistory() {
         setError('');
         const [txns, cards, walletCards] = await Promise.all([
           loadTransactions({ allowLocalFallback: false, includeDeleted: true }),
-          loadCardsMaster(),
+          loadCardCatalogue(),
           loadUserOwnedCards(),
         ]);
         setProfile(loadUserProfile());

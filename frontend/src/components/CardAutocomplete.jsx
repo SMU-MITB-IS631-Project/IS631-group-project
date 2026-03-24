@@ -10,9 +10,9 @@ export default function CardAutocomplete({ cards, value, onChange, placeholder =
   const isVerified = !!selectedCard;
 
   const filtered = cards.filter(c =>
-    c.card_name.toLowerCase().includes(query.toLowerCase()) ||
-    c.card_id.toLowerCase().includes(query.toLowerCase()) ||
-    c.issuer.toLowerCase().includes(query.toLowerCase())
+    (c.card_name && c.card_name.toLowerCase().includes(query.toLowerCase())) ||
+    String(c.card_id).toLowerCase().includes(query.toLowerCase()) ||
+    (c.issuer && c.issuer.toLowerCase().includes(query.toLowerCase()))
   );
 
   useEffect(() => {
@@ -67,7 +67,7 @@ export default function CardAutocomplete({ cards, value, onChange, placeholder =
                 setIsOpen(false);
               }}
               className="w-full text-left px-3 py-3 hover:bg-yellow-300/40 text-sm flex items-center gap-2 transition-all first:rounded-t-[12px] last:rounded-b-[12px] hover:scale-[1.02] active:scale-[0.98]"            >
-              <CardThumbnail imagePath={card.image_path} name={card.card_name} size="sm" />
+              {/* Removed CardThumbnail image as card_catalogue has no image */}
               <div>
                 <div className="font-medium text-text">{card.card_name}</div>
                 <div className="text-xs text-muted">{card.issuer}</div>
