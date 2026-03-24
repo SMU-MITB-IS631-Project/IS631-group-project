@@ -142,7 +142,7 @@ python backend/run.py
 
 ### cURL Example
 ```bash
-curl -X POST http://localhost:8000/api/v1/card-reasoner/explain-db \
+curl -X POST http://127.0.0.1:8000/api/v1/card-reasoner/explain-db \
   -H "Content-Type: application/json" \
   -d '{
     "card_id": 3,

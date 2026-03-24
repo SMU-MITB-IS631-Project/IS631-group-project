@@ -41,7 +41,7 @@ pip install -r requirements.txt
 python run.py
 ```
 
-Server starts at **`http://localhost:8000`** with auto-reload enabled.
+Server starts at **`http://127.0.0.1:8000`** with auto-reload enabled.
 
 You should see:
 ```
@@ -59,7 +59,7 @@ INFO:     Application startup complete.
 ### Option 1: Interactive API Docs (Swagger UI) — **Recommended**
 
 1. Start the server: `python run.py`
-2. Open browser: **http://localhost:8000/api/docs**
+2. Open browser: **http://127.0.0.1:8000/api/docs**
 3. You'll see interactive documentation with all endpoints
 4. Click on `POST /api/v1/transactions` → **"Try it out"**
 5. Edit the request body:
@@ -81,7 +81,7 @@ INFO:     Application startup complete.
 
 **Create a Transaction:**
 ```powershell
-Invoke-RestMethod -Uri http://localhost:8000/api/v1/transactions `
+Invoke-RestMethod -Uri http://127.0.0.1:8000/api/v1/transactions `
   -Method POST `
   -ContentType "application/json" `
   -Body '{"transaction": {"item": "Taxi", "amount_sgd": 25.50, "card_id": "ww", "channel": "offline", "is_overseas": false}}'
@@ -89,21 +89,21 @@ Invoke-RestMethod -Uri http://localhost:8000/api/v1/transactions `
 
 **List All Transactions:**
 ```powershell
-Invoke-RestMethod -Uri http://localhost:8000/api/v1/transactions -Method GET
+Invoke-RestMethod -Uri http://127.0.0.1:8000/api/v1/transactions -Method GET
 ```
 
 ### Option 3: curl (macOS/Linux/Git Bash)
 
 **Create a Transaction:**
 ```bash
-curl -X POST http://localhost:8000/api/v1/transactions \
+curl -X POST http://127.0.0.1:8000/api/v1/transactions \
   -H "Content-Type: application/json" \
   -d '{"transaction": {"item": "GrabFood", "amount_sgd": 100, "card_id": "ww", "channel": "online", "is_overseas": false}}'
 ```
 
 **List All Transactions:**
 ```bash
-curl http://localhost:8000/api/v1/transactions
+curl http://127.0.0.1:8000/api/v1/transactions
 ```
 
 ---

@@ -162,7 +162,7 @@ python run.py
 ```
 
 ### 4. Try in API Docs
-http://localhost:8000/api/docs
+http://127.0.0.1:8000/api/docs
 → POST /api/v1/card-reasoner/explain
 → Try it out with sample payload
 

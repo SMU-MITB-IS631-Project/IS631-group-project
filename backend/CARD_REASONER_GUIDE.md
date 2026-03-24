@@ -111,13 +111,13 @@ python test_card_reasoner.py
    ```
 
 3. **Access documentation:**
-   - OpenAPI Docs: http://localhost:8000/api/docs
-   - ReDoc: http://localhost:8000/api/redoc
+   - OpenAPI Docs: http://127.0.0.1:8000/api/docs
+   - ReDoc: http://127.0.0.1:8000/api/redoc
 
 ### Example Request
 
 ```bash
-curl -X POST "http://localhost:8000/api/v1/card-reasoner/explain" \
+curl -X POST "http://127.0.0.1:8000/api/v1/card-reasoner/explain" \
   -H "Content-Type: application/json" \
   -d '{
     "transaction": {
@@ -270,7 +270,7 @@ python test_card_reasoner.py
 ### API Test (FastAPI Docs)
 
 1. Start server: `python run.py`
-2. Open http://localhost:8000/api/docs
+2. Open http://127.0.0.1:8000/api/docs
 3. Try POST /api/v1/card-reasoner/explain with sample payload
 
 ### Load Test (Async Variant)
@@ -283,7 +283,7 @@ import httpx
 async def test_concurrent():
     async with httpx.AsyncClient() as client:
         tasks = [
-            client.post("http://localhost:8000/api/v1/card-reasoner/explain-async", 
+            client.post("http://127.0.0.1:8000/api/v1/card-reasoner/explain-async", 
                        json=request_payload)
             for _ in range(10)
         ]
@@ -402,4 +402,4 @@ Refer to:
 - Service: `backend/app/services/card_reasoner_service.py` (detailed docstrings)
 - Route: `backend/app/routes/card_reasoner.py` (API examples)
 - Test: `backend/test_card_reasoner.py` (usage example)
-- API Docs: http://localhost:8000/api/docs (interactive testing)
+- API Docs: http://127.0.0.1:8000/api/docs (interactive testing)
