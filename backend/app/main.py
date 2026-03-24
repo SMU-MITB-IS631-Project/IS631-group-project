@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
+from app.config.cors import get_cors_allow_credentials, get_cors_allowed_origins
 
 from app.routes import (
     transactions_router,
