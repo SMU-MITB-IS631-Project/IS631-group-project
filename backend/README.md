@@ -52,6 +52,24 @@ INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 ```
 
+### 3. Run Tests With Coverage
+
+```bash
+cd backend
+python -m pytest -c pytest.ini tests
+```
+
+This backend pytest configuration now generates:
+
+- Statement coverage
+- Line coverage
+- Branch coverage
+- HTML report views by file, function, and class in `backend/htmlcov/`
+
+The function and class pages are report views over the collected coverage data.
+They are not separate instrumentation modes beyond the statement/line and branch
+coverage collected by `coverage.py`.
+
 ---
 
 ## Testing the API
