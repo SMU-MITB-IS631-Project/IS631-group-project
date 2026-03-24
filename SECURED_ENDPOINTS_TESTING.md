@@ -25,7 +25,7 @@ Use the commands below for quick testing from terminal.
 
 ## Base URL
 
-- Local API: http://127.0.0.1:8000
+- Local API: http://localhost:8000
 
 ## Required Header
 
@@ -36,14 +36,14 @@ Use the commands below for quick testing from terminal.
 ### Get all transactions
 
 ```powershell
-Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/transactions" -Headers @{"x-user-id"="u_001"} |
+Invoke-RestMethod -Uri "http://localhost:8000/api/v1/transactions" -Headers @{"x-user-id"="u_001"} |
   ConvertTo-Json -Depth 6
 ```
 
 ### Get transactions by user ID
 
 ```powershell
-Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/transactions/1?sort=date_desc" -Headers @{"x-user-id"="u_001"} |
+Invoke-RestMethod -Uri "http://localhost:8000/api/v1/transactions/1?sort=date_desc" -Headers @{"x-user-id"="u_001"} |
   ConvertTo-Json -Depth 6
 ```
 
@@ -62,7 +62,7 @@ $payload = @{
   }
 } | ConvertTo-Json -Depth 3
 
-Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/v1/transactions" -Headers @{"x-user-id"="u_001"} -ContentType "application/json" -Body $payload |
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/api/v1/transactions" -Headers @{"x-user-id"="u_001"} -ContentType "application/json" -Body $payload |
   ConvertTo-Json -Depth 6
 ```
 
@@ -78,7 +78,7 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/v1/transactions" 
 ### Get user cards
 
 ```powershell
-Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/user_cards" -Headers @{"x-user-id"="u_001"} |
+Invoke-RestMethod -Uri "http://localhost:8000/api/v1/user_cards" -Headers @{"x-user-id"="u_001"} |
   ConvertTo-Json -Depth 6
 ```
 
@@ -94,14 +94,14 @@ $payload = @{
   }
 } | ConvertTo-Json -Depth 3
 
-Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/v1/user_cards" -Headers @{"x-user-id"="u_001"} -ContentType "application/json" -Body $payload |
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/api/v1/user_cards" -Headers @{"x-user-id"="u_001"} -ContentType "application/json" -Body $payload |
   ConvertTo-Json -Depth 6
 ```
 
 ### Get wallet
 
 ```powershell
-Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/wallet" -Headers @{"x-user-id"="u_001"} |
+Invoke-RestMethod -Uri "http://localhost:8000/api/v1/wallet" -Headers @{"x-user-id"="u_001"} |
   ConvertTo-Json -Depth 6
 ```
 
@@ -119,7 +119,7 @@ Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/wallet" -Headers @{"x-user-
 4. **Click Send**: Test the endpoint and view the response
 
 All endpoints are pre-configured with:
-- Base URL: `http://127.0.0.1:8000`
+- Base URL: `http://localhost:8000`
 - Headers: `x-user-id` set to `u_001`
 - Request bodies: Sample payloads ready to use
 
