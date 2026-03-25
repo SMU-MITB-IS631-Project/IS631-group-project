@@ -9,6 +9,7 @@ from app.models.transaction import (
     TransactionChannel,
     TransactionCreate,
     TransactionStatus,
+    TransactionUpdate,
     UserTransaction,
 )
 from app.models.user_profile import UserProfile
@@ -53,30 +54,30 @@ def _build_transaction(
     )
 
 
-def test_resolve_user_id_numeric_string_returns_int(transaction_service):
-    assert transaction_service._resolve_user_id("12") == 12
+def test_resolve_user_sub_missing_raises_unauthorized(transaction_service):
+    with pytest.raises(ServiceError) as exc_info:
+        transaction_service._resolve_user_sub(None)
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.code == "UNAUTHORIZED"
 
 
-def test_resolve_user_id_prefixed_string_returns_int(transaction_service):
-    assert transaction_service._resolve_user_id("u_007") == 7
-
-
-def test_resolve_user_id_username_found_returns_profile_id(transaction_service, mock_db):
-    expected_profile = UserProfile(id=3, username="alice", password_hash="pw")
+def test_resolve_user_sub_found_returns_profile_id(transaction_service, mock_db):
+    expected_profile = UserProfile(id=3, username="alice", password_hash="pw", cognito_sub="sub-123")
     mock_db.query.return_value.filter.return_value.first.return_value = expected_profile
 
-    resolved = transaction_service._resolve_user_id("alice")
+    resolved = transaction_service._resolve_user_sub("sub-123")
 
     assert resolved == 3
     mock_db.query.assert_called_once_with(UserProfile)
     mock_db.query.return_value.filter.return_value.first.assert_called_once()
 
 
-def test_resolve_user_id_username_not_found_raises_service_error(transaction_service, mock_db):
+def test_resolve_user_sub_not_found_raises_service_error(transaction_service, mock_db):
     mock_db.query.return_value.filter.return_value.first.return_value = None
 
     with pytest.raises(ServiceError) as exc_info:
-        transaction_service._resolve_user_id("missing-user")
+        transaction_service._resolve_user_sub("missing-sub")
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.code == "NOT_FOUND"
@@ -114,7 +115,7 @@ def test_transaction_to_dict_formats_response(transaction_service):
     assert data["channel"] == "online"
     assert data["category"] == "entertainment"
     assert data["status"] == "deleted_with_card"
-    assert data["user_id"] == "u_004"
+    assert data["user_id"] == 4
 
 
 def test_create_transaction_success(transaction_service, mock_db):
@@ -128,7 +129,7 @@ def test_create_transaction_success(transaction_service, mock_db):
         date=date(2026, 2, 18),
     )
 
-    transaction_service._resolve_user_id = Mock(return_value=1)
+    transaction_service._resolve_user_sub = Mock(return_value=1)
     transaction_service._card_exists_in_wallet = Mock(return_value=True)
 
     created_record = _build_transaction(
@@ -155,7 +156,7 @@ def test_create_transaction_success(transaction_service, mock_db):
     assert result["item"] == "Lunch"
     assert result["card_id"] == "101"
     assert result["status"] == "active"
-    transaction_service._resolve_user_id.assert_called_once_with("1")
+    transaction_service._resolve_user_sub.assert_called_once_with("1")
     transaction_service._card_exists_in_wallet.assert_called_once_with(1, 101)
     mock_db.add.assert_called_once()
     mock_db.commit.assert_called_once()
@@ -172,7 +173,7 @@ def test_create_transaction_invalid_card_raises_service_error(transaction_servic
         date=date(2026, 2, 18),
     )
 
-    transaction_service._resolve_user_id = Mock(return_value=1)
+    transaction_service._resolve_user_sub = Mock(return_value=1)
     transaction_service._card_exists_in_wallet = Mock(return_value=False)
 
     with pytest.raises(ServiceError) as exc_info:
@@ -183,7 +184,7 @@ def test_create_transaction_invalid_card_raises_service_error(transaction_servic
 
 
 def test_get_user_transactions_returns_rows_desc_by_default(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
+    transaction_service._resolve_user_sub = Mock(return_value=1)
 
     base_query = Mock()
     filtered_query = Mock()
@@ -205,7 +206,7 @@ def test_get_user_transactions_returns_rows_desc_by_default(transaction_service,
 
 
 def test_get_transaction_by_id_not_found_returns_none(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
+    transaction_service._resolve_user_sub = Mock(return_value=1)
     mock_db.query.return_value.filter.return_value.first.return_value = None
 
     row = transaction_service.get_transaction_by_id(10, "1")
@@ -213,53 +214,8 @@ def test_get_transaction_by_id_not_found_returns_none(transaction_service, mock_
     assert row is None
 
 
-def test_update_transaction_status_success(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
-    existing = _build_transaction(txn_id=10, status=TransactionStatus.Active)
-    mock_db.query.return_value.filter.return_value.first.return_value = existing
-
-    updated = transaction_service.update_transaction_status("1", 10, "deleted_with_card")
-
-    assert updated["id"] == "10"
-    assert updated["status"] == "deleted_with_card"
-    mock_db.commit.assert_called_once()
-    mock_db.refresh.assert_called_once_with(existing)
-
-
-def test_update_transaction_status_invalid_value_raises_service_error(transaction_service):
-    transaction_service._resolve_user_id = Mock(return_value=1)
-
-    with pytest.raises(ServiceError) as exc_info:
-        transaction_service.update_transaction_status("1", 10, "invalid_status")
-
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.code == "VALIDATION_ERROR"
-
-
-def test_bulk_update_transaction_status_success_returns_count(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
-    mock_db.query.return_value.filter.return_value.update.return_value = 2
-
-    count = transaction_service.bulk_update_transaction_status("1", [10, 11], "deleted_with_card")
-
-    assert count == 2
-    mock_db.commit.assert_called_once()
-
-
-def test_update_transaction_non_nullable_field_none_raises_service_error(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
-    existing = _build_transaction(txn_id=10)
-    mock_db.query.return_value.filter.return_value.first.return_value = existing
-
-    with pytest.raises(ServiceError) as exc_info:
-        transaction_service.update_transaction("1", 10, {"item": None})
-
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.code == "VALIDATION_ERROR"
-
-
 def test_update_transaction_success(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
+    transaction_service._resolve_user_sub = Mock(return_value=1)
     transaction_service._card_exists_in_wallet = Mock(return_value=True)
 
     existing = _build_transaction(txn_id=10, item="Old Item", amount_sgd=Decimal("12.50"))
@@ -268,11 +224,11 @@ def test_update_transaction_success(transaction_service, mock_db):
     updated = transaction_service.update_transaction(
         "1",
         10,
-        {
-            "item": "Updated Item",
-            "amount_sgd": Decimal("20.00"),
-            "category": TransactionCategory.fashion,
-        },
+        TransactionUpdate(
+            item="Updated Item",
+            amount_sgd=Decimal("20.00"),
+            category=TransactionCategory.fashion,
+        ),
     )
 
     assert updated["item"] == "Updated Item"
@@ -282,8 +238,36 @@ def test_update_transaction_success(transaction_service, mock_db):
     mock_db.refresh.assert_called_once_with(existing)
 
 
+def test_update_transaction_updates_channel_overseas_and_date(transaction_service, mock_db):
+    transaction_service._resolve_user_sub = Mock(return_value=1)
+
+    existing = _build_transaction(
+        txn_id=11,
+        channel=TransactionChannel.online,
+        is_overseas=False,
+        txn_date=date(2026, 2, 18),
+    )
+    mock_db.query.return_value.filter.return_value.first.return_value = existing
+
+    updated = transaction_service.update_transaction(
+        "1",
+        11,
+        TransactionUpdate(
+            channel=TransactionChannel.offline,
+            is_overseas=True,
+            transaction_date=date(2026, 2, 25),
+        ),
+    )
+
+    assert updated["channel"] == "offline"
+    assert updated["is_overseas"] is True
+    assert updated["date"] == "2026-02-25"
+    mock_db.commit.assert_called_once()
+    mock_db.refresh.assert_called_once_with(existing)
+
+
 def test_delete_transaction_success(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
+    transaction_service._resolve_user_sub = Mock(return_value=1)
     existing = _build_transaction(txn_id=10)
     mock_db.query.return_value.filter.return_value.first.return_value = existing
 
@@ -295,7 +279,7 @@ def test_delete_transaction_success(transaction_service, mock_db):
 
 
 def test_delete_transaction_not_found_raises_service_error(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
+    transaction_service._resolve_user_sub = Mock(return_value=1)
     mock_db.query.return_value.filter.return_value.first.return_value = None
 
     with pytest.raises(ServiceError) as exc_info:
@@ -305,30 +289,10 @@ def test_delete_transaction_not_found_raises_service_error(transaction_service, 
     assert exc_info.value.code == "NOT_FOUND"
 
 
-def test_update_transactions_by_card_id_success(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
-    mock_db.query.return_value.filter.return_value.update.return_value = 3
-
-    count = transaction_service.update_transactions_by_card_id("1", 101, "deleted_with_card")
-
-    assert count == 3
-    mock_db.commit.assert_called_once()
-
-
-def test_update_transactions_by_card_id_invalid_status_raises_service_error(transaction_service):
-    transaction_service._resolve_user_id = Mock(return_value=1)
-
-    with pytest.raises(ServiceError) as exc_info:
-        transaction_service.update_transactions_by_card_id("1", 101, "bad_status")
-
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.code == "VALIDATION_ERROR"
-
-
 def test_card_exists_in_wallet_returns_true_when_record_exists(transaction_service, mock_db):
     mock_db.query.return_value.filter.return_value.first.return_value = (101,)
 
-    exists = transaction_service._card_exists_in_wallet(user_id=1, card_id=101)
+    exists = transaction_service._card_exists_in_wallet(1, 101)
 
     assert exists is True
 
@@ -336,40 +300,13 @@ def test_card_exists_in_wallet_returns_true_when_record_exists(transaction_servi
 def test_card_exists_in_wallet_returns_false_when_record_missing(transaction_service, mock_db):
     mock_db.query.return_value.filter.return_value.first.return_value = None
 
-    exists = transaction_service._card_exists_in_wallet(user_id=1, card_id=999)
+    exists = transaction_service._card_exists_in_wallet(1, 999)
 
     assert exists is False
 
 
-def test_create_transaction_uses_payload_user_id_when_request_user_id_missing(transaction_service, mock_db):
-    payload = TransactionCreate(
-        user_id=7,
-        card_id=101,
-        amount_sgd=Decimal("12.50"),
-        item="Lunch",
-        channel=TransactionChannel.online,
-        category=TransactionCategory.food,
-        is_overseas=False,
-        date=date(2026, 2, 18),
-    )
-
-    transaction_service._resolve_user_id = Mock(return_value=7)
-    transaction_service._card_exists_in_wallet = Mock(return_value=True)
-
-    def refresh_side_effect(record):
-        record.id = 777
-        record.status = TransactionStatus.Active
-
-    mock_db.refresh.side_effect = refresh_side_effect
-
-    result = transaction_service.create_transaction(None, payload)
-
-    transaction_service._resolve_user_id.assert_called_once_with("7")
-    assert result["id"] == "777"
-
-
 def test_get_user_transactions_returns_rows_asc_when_requested(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
+    transaction_service._resolve_user_sub = Mock(return_value=1)
 
     base_query = Mock()
     filtered_query = Mock()
@@ -390,40 +327,19 @@ def test_get_user_transactions_returns_rows_asc_when_requested(transaction_servi
     ordered_query.all.assert_called_once()
 
 
-def test_update_transaction_status_not_found_raises_service_error(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
-    mock_db.query.return_value.filter.return_value.first.return_value = None
-
-    with pytest.raises(ServiceError) as exc_info:
-        transaction_service.update_transaction_status("1", 10, "active")
-
-    assert exc_info.value.status_code == 404
-    assert exc_info.value.code == "NOT_FOUND"
-
-
-def test_bulk_update_transaction_status_invalid_status_raises_service_error(transaction_service):
-    transaction_service._resolve_user_id = Mock(return_value=1)
-
-    with pytest.raises(ServiceError) as exc_info:
-        transaction_service.bulk_update_transaction_status("1", [10, 11], "bad_status")
-
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.code == "VALIDATION_ERROR"
-
-
 def test_update_transaction_not_found_raises_service_error(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
+    transaction_service._resolve_user_sub = Mock(return_value=1)
     mock_db.query.return_value.filter.return_value.first.return_value = None
 
     with pytest.raises(ServiceError) as exc_info:
-        transaction_service.update_transaction("1", 999, {"item": "Updated"})
+        transaction_service.update_transaction("1", 999, TransactionUpdate(item="Updated"))
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.code == "NOT_FOUND"
 
 
 def test_update_transaction_card_id_not_in_wallet_raises_service_error(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
+    transaction_service._resolve_user_sub = Mock(return_value=1)
     transaction_service._parse_card_id = Mock(return_value=202)
     transaction_service._card_exists_in_wallet = Mock(return_value=False)
 
@@ -431,21 +347,21 @@ def test_update_transaction_card_id_not_in_wallet_raises_service_error(transacti
     mock_db.query.return_value.filter.return_value.first.return_value = existing
 
     with pytest.raises(ServiceError) as exc_info:
-        transaction_service.update_transaction("1", 10, {"card_id": "202"})
+        transaction_service.update_transaction("1", 10, TransactionUpdate(card_id=202))
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.code == "VALIDATION_ERROR"
 
 
 def test_update_transaction_card_id_changed_and_valid_wallet_updates_card_id(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
+    transaction_service._resolve_user_sub = Mock(return_value=1)
     transaction_service._parse_card_id = Mock(return_value=202)
     transaction_service._card_exists_in_wallet = Mock(return_value=True)
 
     existing = _build_transaction(txn_id=10, card_id=101)
     mock_db.query.return_value.filter.return_value.first.return_value = existing
 
-    updated = transaction_service.update_transaction("1", 10, {"card_id": "202", "item": "New"})
+    updated = transaction_service.update_transaction("1", 10, TransactionUpdate(card_id=202, item="New"))
 
     assert updated["card_id"] == "202"
     assert updated["item"] == "New"
@@ -454,7 +370,7 @@ def test_update_transaction_card_id_changed_and_valid_wallet_updates_card_id(tra
 
 
 def test_get_user_transactions_returns_rows_without_order_when_sort_flag_is_none(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
+    transaction_service._resolve_user_sub = Mock(return_value=1)
 
     base_query = Mock()
     filtered_query = Mock()
@@ -473,27 +389,27 @@ def test_get_user_transactions_returns_rows_without_order_when_sort_flag_is_none
 
 
 def test_update_transaction_card_id_same_value_skips_wallet_lookup(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
+    transaction_service._resolve_user_sub = Mock(return_value=1)
     transaction_service._parse_card_id = Mock(return_value=101)
-    transaction_service._card_exists_in_wallet = Mock()
+    transaction_service._card_exists_in_wallet = Mock(return_value=True)
 
     existing = _build_transaction(txn_id=10, card_id=101, item="Old")
     mock_db.query.return_value.filter.return_value.first.return_value = existing
 
-    updated = transaction_service.update_transaction("1", 10, {"card_id": "101", "item": "Same Card"})
+    updated = transaction_service.update_transaction("1", 10, TransactionUpdate(card_id=101, item="Same Card"))
 
     assert updated["card_id"] == "101"
     assert updated["item"] == "Same Card"
-    transaction_service._card_exists_in_wallet.assert_not_called()
+    transaction_service._card_exists_in_wallet.assert_called_once_with(1, 101)
 
 
-def test_update_transaction_ignores_unknown_field_with_none_value(transaction_service, mock_db):
-    transaction_service._resolve_user_id = Mock(return_value=1)
-
-    existing = _build_transaction(txn_id=10, item="Before")
+def test_get_transaction_by_id_success_returns_row(transaction_service, mock_db):
+    transaction_service._resolve_user_sub = Mock(return_value=1)
+    existing = _build_transaction(txn_id=44, user_id=1, item="Bus Fare")
     mock_db.query.return_value.filter.return_value.first.return_value = existing
 
-    updated = transaction_service.update_transaction("1", 10, {"unknown_field": None, "item": "After"})
+    row = transaction_service.get_transaction_by_id(44, "sub-1")
 
-    assert updated["item"] == "After"
-    assert not hasattr(existing, "unknown_field")
+    assert row is not None
+    assert row["id"] == "44"
+    assert row["item"] == "Bus Fare"
