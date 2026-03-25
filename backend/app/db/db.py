@@ -7,8 +7,9 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 # SQLAlchemy Database URL (SQLite for simplicity).
 # Default DB path is anchored to backend/app.db so running from workspace root
 # or backend folder resolves to the same database file.
-# Default DB path uses a persistent container data directory.
-DEFAULT_SQLITE_PATH = (Path("/app/data") / "app.db").as_posix()
+# In production the DATABASE_URL env var should be set (e.g. to
+# sqlite:////app/data/app.db) so the container's persistent mount is used.
+DEFAULT_SQLITE_PATH = (Path(__file__).resolve().parents[2] / "app.db").as_posix()
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_SQLITE_PATH}")
 
 # Ensure target directory exists for sqlite file-based databases.
