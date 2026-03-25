@@ -328,14 +328,37 @@ class ExplanationService:
             rate_display = f"{rate_pct:.2f} mpd"
         else:
             rate_display = f"{rate_pct:.2f}% ({rate_pct/100:.4f})"
-        merchant_clause = f" at {context.merchant_name}" if context.merchant_name else ""
+
+        # Sanitize merchant_name to reduce prompt-injection and formatting risks
+        def _sanitize_merchant_name(name: Optional[str]) -> Optional[str]:
+            if not name:
+                return None
+            # Strip leading/trailing whitespace
+            cleaned = name.strip()
+            if not cleaned:
+                return None
+            # Replace control/non-printable characters (incl. newlines/tabs) with spaces
+            cleaned = "".join(
+                (ch if ch.isprintable() and ch not in "\r\n\t" else " ")
+                for ch in cleaned
+            )
+            # Collapse multiple whitespace characters into a single space
+            cleaned = " ".join(cleaned.split())
+            # Enforce a reasonable maximum length
+            max_len = 128
+            if len(cleaned) > max_len:
+                cleaned = cleaned[:max_len]
+            return cleaned
+
+        safe_merchant_name = _sanitize_merchant_name(context.merchant_name)
+        merchant_clause = f" at {safe_merchant_name}" if safe_merchant_name else ""
         prompt = f"""You are an expert Singapore credit card advisor. Explain why the {bank_name} {context.card_name} is the best choice for a ${float(context.transaction_amount):.2f} {context.category} purchase.
 
 Ground Truth Facts:
 - Card: {context.bank} {context.card_name}
 - Benefit Type: {benefit_label}
 - Category: {context.category}
-- Merchant/Item: {context.merchant_name or 'N/A'}
+- Merchant/Item: {safe_merchant_name or 'N/A'}
 - Transaction: SGD {float(context.transaction_amount):.2f} {context.category}{merchant_clause}
 - Effective Rate: {rate_display}"""
 
