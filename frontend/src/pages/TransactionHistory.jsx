@@ -183,7 +183,7 @@ export default function TransactionHistory() {
               </div>
             ) : (
               <>
-                <p className="text-sm text-muted mb-6">{profile?.username || 'User'}, are you sure you want to delete <span className="font-medium">{deleteTransactionModal.itemName}</span>? This cannot be undone.</p>
+                <p className="text-sm text-muted mb-6">Are you sure you want to delete <span className="font-medium">{deleteTransactionModal.itemName}</span>? This cannot be undone.</p>
                 <div className="flex gap-3">
                   <button
                     onClick={() => setDeleteTransactionModal({ show: false, transactionId: null, itemName: null, isDeleting: false })}
@@ -307,18 +307,12 @@ export default function TransactionHistory() {
                         </label>
                         <label className="col-span-2 text-[11px] text-muted">
                           Card Used
-                          <select
-                            value={form.card_id}
-                            onChange={e => setForm(prev => ({ ...prev, card_id: e.target.value }))}
-                            className="mt-1 w-full h-10 px-3 bg-card border border-primary/50 rounded-[10px] text-sm"
-                          >
-                            <option value="">Select owned card</option>
-                            {editableCardIds.map(ownedCard => (
-                              <option key={ownedCard.card_id} value={ownedCard.card_id}>
-                                {ownedCard.card_name}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="mt-1 w-full h-10 px-3 flex items-center bg-card border border-primary/50 rounded-[10px] text-sm">
+                            {(() => {
+                              const card = cardsMaster.find(c => String(c.card_id) === String(form.card_id));
+                              return card ? card.card_name : '';
+                            })()}
+                          </div>
                         </label>
                       </div>
 
