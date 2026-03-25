@@ -175,10 +175,6 @@ class TransactionResponse(TransactionCreate):
     id: int
     created_date: datetime
 
-class TransactionStatusUpdate(BaseModel):
-    """Update transaction status"""
-    status: str  # "active" or "deleted_with_card"
-
 
 class TransactionUpdateRequest(BaseModel):
     """Wrapper for transaction update API"""

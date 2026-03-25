@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
 from app.dependencies.user_context import get_x_user_id
-from app.models.transaction import TransactionCreateRequest, TransactionStatusUpdate, TransactionUpdateRequest
+from app.models.transaction import TransactionCreateRequest, TransactionUpdateRequest
 from app.services.errors import ServiceError
 from app.services.transaction_service import TransactionService
 from app.dependencies.auth import required_authenticated
