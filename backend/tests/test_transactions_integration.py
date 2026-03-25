@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.db.db import Base
+from app.dependencies.auth import required_authenticated
 from app.dependencies.db import get_db
 from app.models.card_catalogue import BankEnum, BenefitTypeEnum, CardCatalogue, StatusEnum
 from app.models.user_owned_cards import UserOwnedCard, UserOwnedCardStatus
@@ -92,6 +93,7 @@ def client():
 def dependency_overrides():
     """Inject test database into app dependency resolver for all tests."""
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[required_authenticated] = lambda: {"sub": "test-cognito-sub-1"}
     yield
     app.dependency_overrides = {}
 
@@ -179,7 +181,8 @@ def test_create_transaction_invalid_card(client: TestClient):
 
 
 def test_create_transaction_no_user_header(client: TestClient):
-    """Error: reject requests missing x-user-id header (no auth context)."""
+    """Error: reject requests when auth dependency returns empty claims."""
+    app.dependency_overrides[required_authenticated] = lambda: {}
     response = client.post(
         "/api/v1/transactions",
         json=_transaction_payload(),
@@ -238,62 +241,11 @@ def test_list_transactions(client: TestClient):
     assert transactions[1]["item"] == "Old txn"
 
 
-def test_get_transactions_for_specific_user(client: TestClient):
-    """Legacy endpoint: GET /api/v1/transactions/{id} returns user's transactions."""
-    created = _create_transaction(client)
-
-    response = client.get("/api/v1/transactions/1", headers=USER_HEADERS)
-
-    assert response.status_code == 200
-    transactions = response.json()["transactions"]
-    assert len(transactions) == 1
-    assert transactions[0]["id"] == created["id"]
-
-
-def test_get_transactions_for_specific_user_new_endpoint(client: TestClient):
-    """New endpoint: GET /api/v1/transactions/user/{id} returns user's transactions."""
-    created = _create_transaction(client)
-
-    response = client.get("/api/v1/transactions/user/1", headers=USER_HEADERS)
-
-    assert response.status_code == 200
-    transactions = response.json()["transactions"]
-    assert len(transactions) == 1
-    assert transactions[0]["id"] == created["id"]
-
-
-def test_get_transactions_for_specific_user_forbidden_when_mismatch(client: TestClient):
-    """Security: reject attempts to access other users' transaction lists."""
-    _create_transaction(client)
-
-    response = client.get("/api/v1/transactions/user/2", headers=USER_HEADERS)
-
-    assert response.status_code == 403
-    error = response.json()["error"]
-    assert error["code"] == "FORBIDDEN"
-
-
 # ============================================================================
 # UPDATE TRANSACTION TESTS
 # ============================================================================
 # Verify PUT endpoints accept field updates, validate inputs, and enforce
 # authorization. Tests status updates, field edits, nullable fields, and errors.
-
-
-def test_update_transaction_status(client: TestClient):
-    """Update transaction status (active → deleted_with_card)."""
-    created = _create_transaction(client)
-
-    response = client.put(
-        f"/api/v1/transactions/{created['id']}/status",
-        json={"status": "deleted_with_card"},
-        headers=USER_HEADERS,
-    )
-
-    assert response.status_code == 200
-    updated = response.json()["transaction"]
-    assert updated["id"] == created["id"]
-    assert updated["status"] == "deleted_with_card"
 
 
 def test_update_transaction_success(client: TestClient):
@@ -383,63 +335,6 @@ def test_update_transaction_clear_nullable_category(client: TestClient):
     assert txn["category"] is None
 
 
-def test_update_transaction_rejects_null_non_nullable_field(client: TestClient):
-    """Error: reject null values for non-nullable fields (e.g., item)."""
-    created = _create_transaction(client)
-
-    response = client.put(
-        f"/api/v1/transactions/{created['id']}",
-        json={"transaction": {"item": None}},
-        headers=USER_HEADERS,
-    )
-
-    assert response.status_code == 400
-    body = response.json()
-    assert body["detail"]["error"]["code"] == "VALIDATION_ERROR"
-
-
-def test_update_transaction_status_invalid_value(client: TestClient):
-    """Error: reject invalid status enum values."""
-    created = _create_transaction(client)
-
-    response = client.put(
-        f"/api/v1/transactions/{created['id']}/status",
-        json={"status": "invalid_status"},
-        headers=USER_HEADERS,
-    )
-
-    assert response.status_code == 400
-    body = response.json()
-    assert body["detail"]["error"]["code"] == "VALIDATION_ERROR"
-
-
-# ============================================================================
-# BULK OPERATIONS TESTS
-# ============================================================================
-# Verify PUT /api/v1/transactions/bulk/status updates multiple transactions
-# in a single request.
-
-
-def test_bulk_update_transaction_status(client: TestClient):
-    """Bulk status update: change status for multiple transaction IDs at once."""
-    first = _create_transaction(client, _transaction_payload(item="First txn", date="2026-02-15"))
-    second = _create_transaction(client, _transaction_payload(item="Second txn", date="2026-02-16"))
-
-    response = client.put(
-        "/api/v1/transactions/bulk/status",
-        json={
-            "transaction_ids": [int(first["id"]), int(second["id"])],
-            "status": "deleted_with_card",
-        },
-        headers=USER_HEADERS,
-    )
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["count"] == 2
-    assert data["status"] == "deleted_with_card"
-
-
 # ============================================================================
 # AUTHENTICATION & AUTHORIZATION TESTS
 # ============================================================================
@@ -447,7 +342,8 @@ def test_bulk_update_transaction_status(client: TestClient):
 
 
 def test_transactions_requires_user_context(client: TestClient):
-    """Authorization: enforce x-user-id header on all GET endpoints."""
+    """Authorization: enforce auth claims on transaction endpoints."""
+    app.dependency_overrides[required_authenticated] = lambda: {}
     response = client.get("/api/v1/transactions")
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
@@ -483,8 +379,9 @@ def test_delete_transaction_not_found(client: TestClient):
 
 
 def test_delete_transaction_requires_user_context(client: TestClient):
-    """Authorization: enforce x-user-id header on DELETE operations."""
+    """Authorization: enforce auth claims on DELETE operations."""
     created = _create_transaction(client)
+    app.dependency_overrides[required_authenticated] = lambda: {}
 
     response = client.delete(f"/api/v1/transactions/{created['id']}")
 

@@ -6,8 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
-from app.dependencies.user_context import get_x_user_id
-from app.models.transaction import TransactionRequest, TransactionUpdate, TransactionStatus, BulkTransactionStatusUpdate
+from app.models.transaction import TransactionCreateRequest, TransactionUpdateRequest
 from app.services.errors import ServiceError
 from app.services.transaction_service import TransactionService
 from app.dependencies.auth import required_authenticated
@@ -16,17 +15,6 @@ router = APIRouter(
     prefix="/api/v1/transactions",
     tags=["transactions"]
 )
-
-
-class TransactionStatusUpdate(BaseModel):
-    """Update transaction status"""
-    status: str  # "active" or "deleted_with_card"
-
-
-class TransactionUpdateRequest(BaseModel):
-    """Wrapper for transaction update API"""
-    transaction: TransactionUpdate
-
 
 def _unauthorized_response() -> JSONResponse:
     return JSONResponse(
@@ -41,11 +29,9 @@ def _unauthorized_response() -> JSONResponse:
     )
 
 
-
-
 @router.post("", status_code=201, dependencies=[Depends(required_authenticated)])
 def create_transaction(
-    request: TransactionRequest,
+    request: TransactionCreateRequest,
     db: Session = Depends(get_db),
     claims: dict = Depends(required_authenticated),
 ) -> Dict[str, Any]:
@@ -125,7 +111,7 @@ def list_transactions(
         )
 
 
-@router.put("/{transaction_id}", dependencies=[Depends(required_authenticated)])
+@router.put("/{transaction_id:int}", dependencies=[Depends(required_authenticated)])
 def update_transaction(
     transaction_id: int,
     request: TransactionUpdateRequest,
@@ -155,109 +141,8 @@ def update_transaction(
         return _unauthorized_response()
     try:
         service = TransactionService(db)
-        updates = request.transaction.model_dump(exclude_unset=True, by_alias=False)
-        transaction = service.update_transaction(user_id, transaction_id, updates)
+        transaction = service.update_transaction(user_id, transaction_id, request.transaction)
         return {"transaction": transaction}
-    except ServiceError as exc:
-        raise HTTPException(
-            status_code=exc.status_code,
-            detail={
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details,
-                }
-            },
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": {
-                    "code": "INTERNAL_ERROR",
-                    "message": "Internal server error.",
-                    "details": {}
-                }
-            }
-        )
-
-
-@router.put("/{transaction_id:int}/status", dependencies=[Depends(required_authenticated)])
-def update_transaction_status(
-    transaction_id: int,
-    status_update: TransactionStatusUpdate,
-    http_request: Request,
-    db: Session = Depends(get_db),
-    claims: dict = Depends(required_authenticated),
-) -> Dict[str, Any]:
-    """
-    Update only a transaction's status (e.g., mark as deleted_with_card).
-    
-    Path Parameters:
-    - transaction_id: The transaction ID to update
-    
-    Request body:
-    {
-        "status": "deleted_with_card"
-    }
-    """
-    user_id = claims.get("sub")
-    if not user_id:
-        return _unauthorized_response()
-    try:
-        service = TransactionService(db)
-        transaction = service.update_transaction_status(user_id, transaction_id, status_update.status)
-        return {"transaction": transaction}
-    except ServiceError as exc:
-        raise HTTPException(
-            status_code=exc.status_code,
-            detail={
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details,
-                }
-            },
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": {
-                    "code": "INTERNAL_ERROR",
-                    "message": "Internal server error.",
-                    "details": {}
-                }
-            }
-        )
-
-
-@router.put("/bulk/status", dependencies=[Depends(required_authenticated)])
-def bulk_update_transaction_status(
-    bulk_update: BulkTransactionStatusUpdate,
-    http_request: Request,
-    db: Session = Depends(get_db),
-    claims: dict = Depends(required_authenticated),
-) -> Dict[str, Any]:
-    """
-    Bulk update multiple transactions' status.
-    
-    Request body:
-    {
-        "transaction_ids": [1, 2, 3],
-        "status": "deleted_with_card"
-    }
-    
-    Returns:
-    - count: Number of transactions updated
-    """
-    user_id = claims.get("sub")
-    if not user_id:
-        return _unauthorized_response()
-    try:
-        service = TransactionService(db)
-        count = service.bulk_update_transaction_status(user_id, bulk_update.transaction_ids, bulk_update.status)
-        return {"count": count, "status": bulk_update.status}
     except ServiceError as exc:
         raise HTTPException(
             status_code=exc.status_code,
