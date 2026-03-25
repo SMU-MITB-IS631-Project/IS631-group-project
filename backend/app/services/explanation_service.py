@@ -328,12 +328,38 @@ class ExplanationService:
             rate_display = f"{rate_pct:.2f} mpd"
         else:
             rate_display = f"{rate_pct:.2f}% ({rate_pct/100:.4f})"
-        prompt = f"""You are a Singapore credit card advisor. Explain why the {bank_name} {context.card_name} is the best choice for a ${float(context.transaction_amount):.2f} {context.category} purchase.
+
+        # Sanitize merchant_name to reduce prompt-injection and formatting risks
+        def _sanitize_merchant_name(name: Optional[str]) -> Optional[str]:
+            if not name:
+                return None
+            # Strip leading/trailing whitespace
+            cleaned = name.strip()
+            if not cleaned:
+                return None
+            # Replace control/non-printable characters (incl. newlines/tabs) with spaces
+            cleaned = "".join(
+                (ch if ch.isprintable() and ch not in "\r\n\t" else " ")
+                for ch in cleaned
+            )
+            # Collapse multiple whitespace characters into a single space
+            cleaned = " ".join(cleaned.split())
+            # Enforce a reasonable maximum length
+            max_len = 128
+            if len(cleaned) > max_len:
+                cleaned = cleaned[:max_len]
+            return cleaned
+
+        safe_merchant_name = _sanitize_merchant_name(context.merchant_name)
+        merchant_clause = f" at {safe_merchant_name}" if safe_merchant_name else ""
+        prompt = f"""You are an expert Singapore credit card advisor. Explain why the {bank_name} {context.card_name} is the best choice for a SGD {float(context.transaction_amount):.2f} {context.category} purchase.
 
 Ground Truth Facts:
 - Card: {context.bank} {context.card_name}
 - Benefit Type: {benefit_label}
 - Category: {context.category}
+- Merchant/Item: {safe_merchant_name or 'N/A'}
+- Transaction: SGD {float(context.transaction_amount):.2f} {context.category}{merchant_clause}
 - Effective Rate: {rate_display}"""
 
         if context.is_bonus_eligible and context.bonus_rate:
@@ -440,6 +466,19 @@ Ground Truth Facts:
         reward_value = float(context.total_reward_value) if context.total_reward_value else 0.0
         bank_name = context.bank.replace("_", " ")
 
+        # Sanitize merchant_name similarly to the LLM prompt path to avoid awkward or unsafe output
+        raw_merchant_name = context.merchant_name or ""
+        # Remove control/newline characters and keep only printable characters
+        cleaned_merchant_name = "".join(ch for ch in raw_merchant_name if ch.isprintable())
+        cleaned_merchant_name = cleaned_merchant_name.strip()
+        # Treat whitespace-only or empty result as missing, and cap length to prevent overly long phrases
+        if cleaned_merchant_name:
+            max_merchant_length = 100
+            if len(cleaned_merchant_name) > max_merchant_length:
+                cleaned_merchant_name = cleaned_merchant_name[:max_merchant_length]
+            merchant_phrase = f" at {cleaned_merchant_name}"
+        else:
+            merchant_phrase = ""
         if context.benefit_type == BenefitType.miles:
             rate_display = f"{float(effective_rate):.2f} mpd"
             reward_phrase = f"{reward_value:.0f} {benefit_label}"
@@ -451,14 +490,14 @@ Ground Truth Facts:
         if context.is_bonus_eligible:
             explanation = (
                 f"The {bank_name} {context.card_name} offers {rate_display} {benefit_label} "
-                f"on {context.category} purchases (bonus category). "
+                f"on {context.category} purchases{merchant_phrase} (bonus category). "
                 f"For this ${float(context.transaction_amount):.2f} transaction, you'll earn "
                 f"{reward_phrase}."
             )
         else:
             explanation = (
                 f"The {bank_name} {context.card_name} provides {rate_display} {benefit_label} "
-                f"on all purchases. For this ${float(context.transaction_amount):.2f} transaction, "
+                f"on all purchases{merchant_phrase}. For this ${float(context.transaction_amount):.2f} transaction, "
                 f"you'll receive {reward_phrase}."
             )
         
