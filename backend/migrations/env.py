@@ -21,7 +21,9 @@ config = context.config
 
 database_url = os.environ.get("DATABASE_URL")
 if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+    # Escape percent signs to avoid ConfigParser interpolation issues
+    safe_database_url = database_url.replace("%", "%%")
+    config.set_main_option("sqlalchemy.url", safe_database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
