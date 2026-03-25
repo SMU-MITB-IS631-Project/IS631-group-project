@@ -87,8 +87,12 @@ export function CardThumbnail({ imagePath, name, size = 'md' }) {
     lg: 'w-16 h-10',
   };
 
+  // Remove background if using the default card logo
+  const noBg = imagePath === '/card-logo.svg';
+  const containerClass = `${sizes[size]} rounded ${noBg ? '' : 'bg-gradient-to-br from-primary/20 to-primary/40'} flex items-center justify-center overflow-hidden flex-shrink-0`;
+
   return (
-    <div className={`${sizes[size]} rounded bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center overflow-hidden flex-shrink-0`}>
+    <div className={containerClass}>
       <img
         src={imagePath}
         alt={name}
