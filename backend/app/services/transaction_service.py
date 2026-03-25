@@ -68,7 +68,7 @@ class TransactionService:
             "category": category_value,
             "is_overseas": txn.is_overseas,
             "status": status_value,
-            "user_id": txn.id,  # user_profile.id
+            "user_id": txn.user_id,  # user_profile.id
         }
 
     def create_transaction(self, user_sub: Optional[str], payload: TransactionCreate) -> Dict[str, Any]:

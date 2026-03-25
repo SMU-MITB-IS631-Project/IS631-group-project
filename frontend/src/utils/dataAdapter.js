@@ -45,7 +45,7 @@ export function getMonthSummary(transactions, cardsMaster = [], wallet = []) {
     if (spend > topSpend) { topCardId = cid; topSpend = spend; }
   });
 
-  const topCard = (cardsMaster || []).find(c => c.card_id === topCardId);
+  const topCard = (cardsMaster || []).find(c => String(c.card_id) === String(topCardId));
 
   return {
     total,
@@ -93,109 +93,6 @@ function setCurrentUserId(userId) {
   }
 }
 
-/**
- * Card ID mapping: Frontend CSV uses string IDs, backend DB uses integers.
- * This mapping converts frontend string IDs to backend integer IDs.
- * 
- * TODO: When the database is properly seeded with actual cards, update this mapping
- * to match the card_catalogue table. For now, all cards map to ID 1 for testing.
- */
-const CARD_ID_MAP = {
-  'sc': 1,           // Standard Chartered Simply Cash
-  'ww': 2,           // DBS Woman's World Card
-  'prvi': 3,         // UOB PRVI Miles Card
-  'uobone': 4,       // UOB One Card
-};
-
-// Reverse mapping: integer -> string (for converting backend responses to frontend format)
-const REVERSE_CARD_ID_MAP = {};
-Object.entries(CARD_ID_MAP).forEach(([strId, intId]) => {
-  if (!REVERSE_CARD_ID_MAP[intId]) {
-    REVERSE_CARD_ID_MAP[intId] = strId; // Use first match
-  }
-});
-
-/**
- * Convert frontend card ID (string) to backend card ID (integer).
- * Falls back to 1 if the card ID is not found in the mapping.
- */
-export function convertCardId(frontendCardId) {
-  // If already a number, return it
-  if (typeof frontendCardId === 'number') {
-    return frontendCardId;
-  }
-  
-  // If it's a string that looks like a number, parse it
-  if (!isNaN(frontendCardId)) {
-    return parseInt(frontendCardId);
-  }
-  
-  // Otherwise, look it up in the mapping
-  const mapped = CARD_ID_MAP[frontendCardId];
-  if (mapped !== undefined) {
-    return mapped;
-  }
-  
-  // Fallback to 1 for unknown cards
-  console.warn(`Unknown card_id: ${frontendCardId}, falling back to 1`);
-  return 1;
-}
-
-/**
- * Convert backend card ID (integer) to frontend card ID (string).
- * Falls back to 'ww' if the card ID is not found in the mapping.
- */
-function convertBackendCardId(backendCardId) {
-  // If it's a numeric string, map it to the frontend string ID
-  if (typeof backendCardId === 'string') {
-    if (!isNaN(backendCardId)) {
-      backendCardId = parseInt(backendCardId, 10);
-    } else {
-      return backendCardId;
-    }
-  }
-  
-  // Look up in reverse mapping
-  const mapped = REVERSE_CARD_ID_MAP[backendCardId];
-  if (mapped !== undefined) {
-    return mapped;
-  }
-  
-  // Fallback to 'ww' for unknown integer IDs
-  console.warn(`Unknown backend card_id: ${backendCardId}, falling back to 'ww'`);
-  return 'ww';
-}
-
-// Fetch card catalogue from backend API
-export async function loadCardCatalogue() {
-  const endpointCandidates = [
-    `${API_BASE_URL}/api/v1/catalog/`,
-    `${API_BASE_URL}/api/v1/catalog`,
-  ];
-
-  let lastApiError = null;
-  for (const endpoint of endpointCandidates) {
-    try {
-      const response = await fetch(endpoint);
-      if (!response.ok) {
-        lastApiError = new Error(`Failed to fetch card catalogue (${response.status}) from ${endpoint}`);
-        continue;
-      }
-
-      const data = await response.json();
-      return data.cards || data.card_catalogue || data;
-    } catch (error) {
-      lastApiError = error;
-    }
-  }
-
-  if (lastApiError instanceof Error) {
-    throw lastApiError;
-  }
-
-  throw new Error('Failed to fetch card catalogue');
-}
-
 // --- User Profile ---
 
 export function loadUserProfile() {
@@ -203,12 +100,11 @@ export function loadUserProfile() {
   if (!raw) {
     return null;
   }
-
   const profile = JSON.parse(raw);
   if (Array.isArray(profile.wallet)) {
     profile.wallet = profile.wallet.map(card => ({
       ...card,
-      card_id: convertBackendCardId(card.card_id),
+      card_id: typeof card.card_id === 'string' ? Number(card.card_id) : card.card_id,
     }));
   }
   return profile;
@@ -226,15 +122,11 @@ export async function loadUserProfileFromAPI() {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       },
     });
-
     if (!response.ok) {
       throw new Error('Failed to load profile from API');
     }
-
     const data = await response.json();
-    // Backend returns the profile object directly
     const profile = data;
-    // Fetch user cards and attach as wallet
     try {
       const userId = getCurrentUserId();
       const accessToken = getAccessToken();
@@ -250,7 +142,7 @@ export async function loadUserProfileFromAPI() {
         const cardsData = await cardsResponse.json();
         profile.wallet = (cardsData.user_cards || cardsData || []).map(card => ({
           ...card,
-          card_id: convertBackendCardId(card.card_id),
+          card_id: typeof card.card_id === 'string' ? Number(card.card_id) : card.card_id,
         }));
       } else {
         profile.wallet = [];
@@ -258,12 +150,10 @@ export async function loadUserProfileFromAPI() {
     } catch (e) {
       profile.wallet = [];
     }
-    // Save to localStorage for caching
     saveUserProfile(profile);
     return profile;
   } catch (error) {
     console.error('Error loading profile from API:', error);
-    // Fallback to localStorage
     return loadUserProfile();
   }
 }
@@ -274,23 +164,20 @@ export function saveUserProfile(profile) {
 
 async function fetchUserCards(userId) {
   const accessToken = getAccessToken();
-  const response = await fetch(`${API_BASE_URL}/user/cards`, {
+  const response = await fetch(`${API_BASE_URL}/user/cards/`, {
     method: 'GET',
     headers: {
-      'x-user-id': String(userId),
       'Content-Type': 'application/json',
       ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
     },
   });
-
   if (!response.ok) {
     throw new Error('Failed to load user cards');
   }
-
   const data = await response.json();
   return (data.user_cards || []).map(card => ({
     id: card.id,
-    card_id: convertBackendCardId(card.card_id),
+    card_id: typeof card.card_id === 'string' ? Number(card.card_id) : card.card_id,
     refresh_day_of_month: card.refresh_day_of_month,
     annual_fee_billing_date: card.annual_fee_billing_date,
   }));
@@ -314,7 +201,7 @@ export async function postRegistrationTransactions(userId, walletCards) {
     .filter(w => (w.cycle_spend_sgd || 0) > 0)
     .map(w => ({
       transaction: {
-        card_id: convertCardId(w.card_id),
+        card_id: typeof w.card_id === 'string' ? Number(w.card_id) : w.card_id,
         amount_sgd: parseFloat(w.cycle_spend_sgd),
         item: 'registration',
         channel: 'online',
@@ -531,7 +418,6 @@ export async function loadTransactions(options = {}) {
     const response = await fetch(`${API_BASE_URL}/api/v1/transactions`, {
       method: 'GET',
       headers: {
-        'x-user-id': userId,
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       },
@@ -546,7 +432,7 @@ export async function loadTransactions(options = {}) {
     
     const mappedTransactions = transactions.map(txn => ({
       ...txn,
-      card_id: convertBackendCardId(txn.card_id)
+      card_id: typeof txn.card_id === 'string' ? Number(txn.card_id) : txn.card_id
     }));
 
     const mergedTransactions = mergePendingLocalTransactions(mappedTransactions);
@@ -619,7 +505,7 @@ export async function appendTransaction(txn) {
   console.log('[appendTransaction] Called with:', txn);
   try {
     const userId = getCurrentUserId();
-    const backendCardId = convertCardId(txn.card_id);
+    const backendCardId = typeof txn.card_id === 'string' ? Number(txn.card_id) : txn.card_id;
     console.log('[appendTransaction] User ID:', userId);
     console.log('[appendTransaction] Converting card_id:', txn.card_id, '->', backendCardId);
     console.log('[appendTransaction] Sending POST to:', `${API_BASE_URL}/api/v1/transactions`);
@@ -654,10 +540,9 @@ export async function appendTransaction(txn) {
     const data = await response.json();
     console.log('[appendTransaction] Success! Created transaction:', data.transaction);
     
-    // Convert backend integer card_id back to frontend string card_id
     const createdTransaction = {
       ...data.transaction,
-      card_id: convertBackendCardId(data.transaction.card_id)
+      card_id: typeof data.transaction.card_id === 'string' ? Number(data.transaction.card_id) : data.transaction.card_id,
     };
     
     return createdTransaction;
@@ -674,11 +559,9 @@ export async function appendTransaction(txn) {
 export async function updateTransactionById(transactionId, transactionPatch) {
   const userId = getCurrentUserId();
   const payload = { ...transactionPatch };
-
   if (payload.card_id !== undefined && payload.card_id !== null) {
-    payload.card_id = convertCardId(payload.card_id);
+    payload.card_id = typeof payload.card_id === 'string' ? Number(payload.card_id) : payload.card_id;
   }
-
   const accessToken = getAccessToken();
   const response = await fetch(`${API_BASE_URL}/api/v1/transactions/${transactionId}`, {
     method: 'PUT',
@@ -689,15 +572,13 @@ export async function updateTransactionById(transactionId, transactionPatch) {
     },
     body: JSON.stringify({ transaction: payload }),
   });
-
   if (!response.ok) {
     throw new Error(`Failed to update transaction: ${response.statusText}`);
   }
-
   const data = await response.json();
   return {
     ...data.transaction,
-    card_id: convertBackendCardId(data.transaction.card_id),
+    card_id: typeof data.transaction.card_id === 'string' ? Number(data.transaction.card_id) : data.transaction.card_id,
   };
 }
 
@@ -770,4 +651,26 @@ export function getCardSpendForMonth(transactions, cardId) {
     })
     .reduce((sum, t) => sum + (t.amount_sgd || 0), 0);
   return txnSpend;
+}
+
+// Fetch card catalogue from backend API
+export async function loadCardCatalogue() {
+  const response = await fetch(`${API_BASE_URL}/api/v1/catalog/`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load card catalogue');
+  }
+  const data = await response.json();
+  return data.cards || data || [];
+}
+
+// Utility to convert card ID to number (for compatibility with old imports)
+export function convertCardId(cardId) {
+  if (typeof cardId === 'number') return cardId;
+  if (!isNaN(cardId)) return parseInt(cardId, 10);
+  return 1;
 }
