@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, status, Header
 from typing import Optional, Dict
 from app.dependencies.services import get_rewards_earned_service
 from app.services.rewards_earned_service import RewardsEarnedService
+from app.dependencies.auth import required_authenticated
 
 # Attempt to import ServiceException; provide fallback if module not available
 try:
@@ -19,7 +20,7 @@ router = APIRouter(
 DEFAULT_USER_ID = 0 # non-existent user ID to trigger 404 if not provided
 
 
-@router.get("", response_model=Dict[str, float])
+@router.get("", response_model=Dict[str, float], dependencies=[Depends(required_authenticated)])
 def get_rewards_earned(
     x_user_id: Optional[str] = Header(default=None),
     service: RewardsEarnedService = Depends(get_rewards_earned_service)
