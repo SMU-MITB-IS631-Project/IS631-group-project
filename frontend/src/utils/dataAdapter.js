@@ -172,7 +172,7 @@ export async function loadCardCatalogue() {
     const response = await fetch(`${API_BASE_URL}/api/v1/catalog/`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
+        Accept: 'application/json',
       },
     });
     if (!response.ok) {
