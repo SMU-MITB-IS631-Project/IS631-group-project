@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies.db import get_db
 from app.dependencies.user_context import get_x_user_id
-from app.models.transaction import TransactionRequest, TransactionUpdate, TransactionStatus
+from app.models.transaction import TransactionRequest, TransactionUpdate, TransactionStatus, BulkTransactionStatusUpdate
 from app.services.errors import ServiceError
 from app.services.transaction_service import TransactionService
 from app.dependencies.auth import required_authenticated
@@ -123,87 +123,6 @@ def list_transactions(
                 }
             },
         )
-
-
-# @router.get("/{user_id}", dependencies=[Depends(required_authenticated)])
-# def get_user_transactions_by_id(
-#     user_id: str,
-#     request: Request,
-#     sort: str = "date_desc",
-#     db: Session = Depends(get_db),
-#     claims: dict = Depends(required_authenticated),
-# ) -> Dict[str, Any]:
-#     """
-#     Get all transactions for a specific user.
-    
-#     Path Parameters:
-#     - user_id: The user ID to fetch transactions for
-    
-#     Query Parameters:
-#     - sort: Sort order. Options: "date_desc" (default), "date_asc", "none"
-    
-#     Returns:
-#     - transactions: List of user's transactions, sorted by date DESC by default
-    
-#     Security:
-#     - Only returns transactions for the specified user
-#     """
-#     requester_user_id = claims.get("sub")
-#     if not requester_user_id:
-#         return _unauthorized_response()
-#     try:
-#         return _list_transactions_for_user(
-#             target_user_id=user_id,
-#             requester_user_id=requester_user_id,
-#             sort=sort,
-#             db=db,
-#         )
-#     except ServiceError as exc:
-#         raise HTTPException(
-#             status_code=exc.status_code,
-#             detail={
-#                 "error": {
-#                     "code": exc.code,
-#                     "message": exc.message,
-#                     "details": exc.details,
-#                 }
-#             },
-#         )
-
-
-# @router.get("/user/{user_id}", dependencies=[Depends(required_authenticated)])
-# def list_transactions_by_user_id(
-#     user_id: str,
-#     request: Request,
-#     sort: str = "date_desc",
-#     db: Session = Depends(get_db),
-#     claims: dict = Depends(required_authenticated),
-# ) -> Dict[str, Any]:
-#     """List all transactions for the specified user_id.
-
-#     Requires x-user-id header and only allows requesting your own transactions.
-#     """
-#     requester_user_id = claims.get("sub")
-#     if not requester_user_id:
-#         return _unauthorized_response()
-#     try:
-#         return _list_transactions_for_user(
-#             target_user_id=user_id,
-#             requester_user_id=requester_user_id,
-#             sort=sort,
-#             db=db,
-#         )
-#     except ServiceError as exc:
-#         raise HTTPException(
-#             status_code=exc.status_code,
-#             detail={
-#                 "error": {
-#                     "code": exc.code,
-#                     "message": exc.message,
-#                     "details": exc.details,
-#                 }
-#             },
-#         )
 
 
 @router.put("/{transaction_id}", dependencies=[Depends(required_authenticated)])
