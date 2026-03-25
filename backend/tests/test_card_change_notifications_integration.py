@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.db.db import Base
+from app.dependencies.auth import required_authenticated
 from app.dependencies.auth import required_admin_role
 from app.dependencies.db import get_db
 from app.models.card_bonus_category import BonusCategory, CardBonusCategory
@@ -48,6 +49,7 @@ def override_get_db():
 def dependency_overrides():
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[required_admin_role] = lambda: {"sub": "test-admin", "role": "admin"}
+    app.dependency_overrides[required_authenticated] = lambda: {"sub": "test-cognito-sub-owner-1"}
     yield
     app.dependency_overrides = {}
 
