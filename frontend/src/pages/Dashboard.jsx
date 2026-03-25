@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import CardSurface from '../components/CardSurface';
 import { CardThumbnail } from '../components/CardAutocomplete';
 import {
-  loadCardsMaster, loadUserProfileFromAPI, loadTransactions,
+  loadCardCatalogue, loadUserProfileFromAPI, loadTransactions,
   getCurrentMonthKey, shiftMonth, formatMonthLabel,
   filterTransactionsByMonth, getMonthSummary, getCardSpendForMonth,
   getAvailableMonths, convertCardId, postRegistrationTransactions, saveTransactions,
@@ -33,14 +33,14 @@ export default function Dashboard() {
   const [monthKey, setMonthKey] = useState(getCurrentMonthKey());
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [deleteCardModal, setDeleteCardModal] = useState({ show: false, cardId: null, cardName: null, isDeleting: false });
-  const [addCardModal, setAddCardModal] = useState({ show: false, selectedCardId: '', refreshDay: 1, billingDate: '', cycleSpend: '', isAdding: false });
+  const [addCardModal, setAddCardModal] = useState({ show: false, selectedCardId: '', refreshDay: 1, billingDate: '', expiryDate: '', cycleSpend: '', isAdding: false });
 
   useEffect(() => {
     const loadData = async () => {
       const p = await loadUserProfileFromAPI();
       if (!p) { navigate('/register'); return; }
       setProfile(p);
-      loadCardsMaster().then(setCardsMaster);
+      loadCardCatalogue().then(setCardsMaster);
     };
     loadData();
   }, []);
@@ -65,7 +65,7 @@ export default function Dashboard() {
   const summary = getMonthSummary(monthTxns, cardsMaster, profile?.wallet || []);
   const showArrows = availableMonths.length > 1;
 
-  const topCardMaster = cardsMaster.find(c => c.card_id === summary.topCardId);
+  const topCardMaster = cardsMaster.find(c => String(c.card_id) === String(summary.topCardId));
 
   function handleConfirmLogout() {
     localStorage.clear();
@@ -126,15 +126,13 @@ export default function Dashboard() {
       }
 
       const payload = {
-        wallet_card: {
-          card_id: String(convertCardId(addCardModal.selectedCardId)),
-          refresh_day_of_month: addCardModal.refreshDay,
-          annual_fee_billing_date: addCardModal.billingDate,
-          cycle_spend_sgd: parseFloat(addCardModal.cycleSpend) || 0,
-        },
+        card_id: String(convertCardId(addCardModal.selectedCardId)),
+        billing_cycle_refresh_day_of_month: addCardModal.refreshDay,
+        billing_cycle_refresh_date: addCardModal.billingDate || undefined,
+        card_expiry_date: addCardModal.expiryDate || undefined,
       };
 
-      const response = await fetch(`${API_BASE_URL}/api/v1/user_cards`, {
+      const response = await fetch(`${API_BASE_URL}/user/cards`, {
         method: 'POST',
         headers: {
           'x-user-id': userId,
@@ -196,7 +194,7 @@ export default function Dashboard() {
           setTransactions(updatedTransactions);
         }
 
-        setAddCardModal({ show: false, selectedCardId: '', refreshDay: 1, billingDate: '', cycleSpend: '', isAdding: false });
+        setAddCardModal({ show: false, selectedCardId: '', refreshDay: 1, billingDate: '', expiryDate: '', cycleSpend: '', isAdding: false });
       } else {
         console.error('Failed to add card:', response.statusText);
         setAddCardModal(prev => ({ ...prev, isAdding: false }));
@@ -330,7 +328,7 @@ export default function Dashboard() {
                       </select>
                     </div>
 
-                    {/* Refresh Date and Annual Fee Date */}
+                    {/* Refresh Date, Annual Fee Date, and Expiry Date */}
                     <div className="flex gap-2">
                       <div className="flex-1">
                         <label className="text-xs font-medium text-muted mb-1 block">Refresh Date</label>
@@ -353,6 +351,15 @@ export default function Dashboard() {
                           className="w-full h-11 px-3 bg-card border-2 border-primary rounded-[14px] text-sm text-text outline-none focus:border-primary transition-colors"
                         />
                       </div>
+                      <div className="flex-1">
+                        <label className="text-xs font-medium text-muted mb-1 block">Card Expiry Date</label>
+                        <input
+                          type="date"
+                          value={addCardModal.expiryDate}
+                          onChange={(e) => setAddCardModal(prev => ({ ...prev, expiryDate: e.target.value }))}
+                          className="w-full h-11 px-3 bg-card border-2 border-primary rounded-[14px] text-sm text-text outline-none focus:border-primary transition-colors"
+                        />
+                      </div>
                     </div>
 
                     {/* Cycle Spend */}
@@ -372,7 +379,7 @@ export default function Dashboard() {
 
                   <div className="flex gap-3">
                     <button
-                      onClick={() => setAddCardModal({ show: false, selectedCardId: '', refreshDay: 1, billingDate: '', cycleSpend: '', isAdding: false })}
+                      onClick={() => setAddCardModal({ show: false, selectedCardId: '', refreshDay: 1, billingDate: '', expiryDate: '', cycleSpend: '', isAdding: false })}
                       className="flex-1 h-10 border-2 border-primary text-text font-medium rounded-[12px] hover:bg-white/60 transition-all text-sm"
                     >
                       Cancel
@@ -439,7 +446,7 @@ export default function Dashboard() {
           </div>
           <div className="flex flex-col items-end">
             {topCardMaster && (
-              <CardThumbnail imagePath={topCardMaster.image_path} name={topCardMaster.card_name} size="lg" />
+              <CardThumbnail imagePath={'/card-logo.svg'} name={topCardMaster.card_name} size="lg" />
             )}
             <div className="mt-2 text-right">
               <div className="text-xs font-medium text-text">Top Card:</div>
@@ -517,7 +524,13 @@ export default function Dashboard() {
           {profile.wallet && profile.wallet.length > 0 ? (
             <div className="space-y-3">
               {profile.wallet.map(wc => {
-                const card = cardsMaster.find(c => c.card_id === wc.card_id);
+                // Find card name from card catalogue using card_id (robust for string/number)
+                let card = cardsMaster.find(c => String(c.card_id) === String(wc.card_id));
+                // If not found, try matching by mapped backend card_id if wc.card_id is an alias (e.g. 'sc')
+                if (!card && typeof wc.card_id === 'string') {
+                  const asNum = convertCardId(wc.card_id);
+                  card = cardsMaster.find(c => String(c.card_id) === String(asNum));
+                }
                 const spend = getCardSpendForMonth(monthTxns, wc.card_id);
                 const expired = isCardExpired(wc.annual_fee_billing_date);
                 const handleOpenCardBonus = () => navigate(`/cards/bonus/${wc.card_id}`);
@@ -529,24 +542,20 @@ export default function Dashboard() {
                     <button
                       type="button"
                       onClick={handleOpenCardBonus}
-                      className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+                      className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 mr-1"
                       aria-label={`View bonus details for ${card?.card_name || wc.card_id}`}
                     >
-                      <CardThumbnail imagePath={card?.image_path} name={card?.card_name} size="md" />
+                      <img
+                        src={card?.image_path || '/card-logo.svg'}
+                        alt={card?.card_name || wc.card_id}
+                        style={{ width: 60, height: 40, objectFit: 'contain', borderRadius: 10, background: 'transparent', marginLeft: '-8px' }}
+                      />
                     </button>
-                    <div className="flex-1 min-w-0 pr-2">
-                      <button
-                        type="button"
-                        onClick={handleOpenCardBonus}
-                        className={`block w-full text-sm font-medium truncate text-left hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 rounded-sm ${expired ? 'text-gray-600' : 'text-text'}`}
-                      >
-                        {card?.card_name || wc.card_id}
-                      </button>
-                      <div className={`text-xs ${expired ? 'text-gray-500' : 'text-muted'}`}>
-                        {wc.annual_fee_billing_date || 'Not set'}{expired ? ' (Expired)' : ''}
-                      </div>
+                    <div className="flex-1 min-w-0 pr-2 flex flex-col justify-center">
+                      <span className={`block text-sm font-medium truncate ${expired ? 'text-gray-600' : 'text-text'}`}>{card && card.card_name ? card.card_name : ''}</span>
+                      <span className={`block text-xs ${expired ? 'text-gray-500' : 'text-muted'}`}>{wc.card_expiry_date ? wc.card_expiry_date : 'No expiry date'}{expired ? ' (Expired)' : ''}</span>
                     </div>
-                    <div className={`w-[88px] shrink-0 text-right text-sm font-semibold tabular-nums ${expired ? 'text-gray-600' : 'text-text'}`}>
+                    <div className={`w-[60px] shrink-0 text-right text-xs font-semibold tabular-nums ${expired ? 'text-gray-600' : 'text-text'}`} style={{ marginRight: '-8px' }}>
                       ${spend.toFixed(2)}
                     </div>
                     <button

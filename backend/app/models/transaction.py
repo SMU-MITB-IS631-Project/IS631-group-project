@@ -86,7 +86,6 @@ class UserTransaction(Base):
 class TransactionCreate(BaseModel):
     """Transaction creation request (from API contract)"""
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
-    user_id: int | None = None
     card_id: int
     amount_sgd: Decimal
     item: str
@@ -130,10 +129,11 @@ class TransactionCreate(BaseModel):
     def set_transaction_date(cls, v):
         return date.today() if v is None else v
 
-class TransactionResponse(TransactionCreate):
-    """Transaction response model"""
-    id: int
-    created_date: datetime
+class BulkTransactionStatusUpdate(BaseModel):
+    """Bulk update multiple transactions status"""
+    transaction_ids: list[int]
+    status: str  # "active" or "deleted_with_card"
+
 
 class TransactionUpdate(BaseModel):
     """Transaction update request - all fields optional"""
@@ -173,3 +173,14 @@ class TransactionUpdate(BaseModel):
 class TransactionRequest(BaseModel):
     """Wrapper for API contract - POST body"""
     transaction: TransactionCreate
+
+
+class BulkTransactionStatusUpdate(BaseModel):
+    """Bulk update multiple transactions status"""
+    transaction_ids: list[int]
+    status: str  # "active" or "deleted_with_card"
+
+class TransactionResponse(TransactionCreate):
+    """Transaction response model"""
+    id: int
+    created_date: datetime

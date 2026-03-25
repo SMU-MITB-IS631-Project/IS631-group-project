@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import CardSurface from '../components/CardSurface';
 import SegmentedControl from '../components/SegmentedControl';
 import { CardThumbnail } from '../components/CardAutocomplete';
-import { loadCardsMaster, loadUserProfile, loadTransactions, appendTransaction } from '../utils/dataAdapter';
+import cardLogoSvg from '/card-logo.svg';
+import { loadCardCatalogue, loadUserProfile, loadTransactions, appendTransaction, convertCardId } from '../utils/dataAdapter';
 import { getRecommendationWithAIExplanation } from '../utils/recommendation';
 
 export default function Recommend() {
@@ -30,7 +31,7 @@ export default function Recommend() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   useEffect(() => {
-    loadCardsMaster().then(setCardsMaster);
+    loadCardCatalogue().then(setCardsMaster);
     const p = loadUserProfile();
     if (!p) { navigate('/register'); return; }
     setProfile(p);
@@ -155,7 +156,21 @@ export default function Recommend() {
   }
 
   const currentCard = result && !exhausted ? result.ranked_cards[cursor] : null;
-  const currentCardMaster = currentCard ? cardsMaster.find(c => c.card_id === currentCard.card_id) : null;
+  // Robustly find card master by id or alias (string/number)
+  let currentCardMaster = null;
+  let currentCardName = currentCard?.card_id;
+  if (currentCard) {
+    // Try direct string match
+    currentCardMaster = cardsMaster.find(c => String(c.card_id) === String(currentCard.card_id));
+    // If not found, try mapping card_id using convertCardId (handles string/integer mapping)
+    if (!currentCardMaster) {
+      const mappedId = convertCardId(currentCard.card_id);
+      currentCardMaster = cardsMaster.find(c => String(c.card_id) === String(mappedId));
+    }
+    if (currentCardMaster && currentCardMaster.card_name) {
+      currentCardName = currentCardMaster.card_name;
+    }
+  }
   const minSpendRequired = Number(
     currentCard?.min_spend_required_sgd ?? currentCard?.reward_breakdown?.min_spend_required_sgd ?? 0
   );
@@ -310,14 +325,18 @@ export default function Recommend() {
 
           {/* Card info row */}
           <div className="flex items-center gap-3 mb-3">
-            <CardThumbnail
-              imagePath={currentCardMaster?.image_path}
-              name={currentCardMaster?.card_name}
-              size="lg"
+            <img
+              src={cardLogoSvg}
+              alt={currentCardName}
+              className="w-16 h-10 object-contain rounded bg-gradient-to-br from-primary/20 to-primary/40 flex-shrink-0"
+              onError={e => {
+                e.target.style.display = 'none';
+                e.target.parentElement.innerHTML = `<span class='text-[8px] text-primary font-medium text-center leading-tight px-0.5'>${currentCardName?.split(' ').slice(0, 2).join(' ') || 'Card'}</span>`;
+              }}
             />
             <div className="flex-1">
-              <div className="font-semibold text-sm text-text">{currentCardMaster?.card_name || currentCard.card_id}</div>
-              <div className="text-xs text-muted">{currentCardMaster?.issuer}</div>
+              <div className="font-semibold text-sm text-text">{currentCardName}</div>
+              <div className="text-xs text-muted">{currentCardMaster?.issuer || ''}</div>
             </div>
             <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-full">
               #{cursor + 1} of {result.ranked_cards.length}

@@ -32,7 +32,7 @@ class UserOwnedCard(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("user_profile.id", ondelete="CASCADE"), nullable=False)
     card_id = Column(Integer, ForeignKey("card_catalogue.card_id", ondelete="CASCADE"), nullable=False)
-    card_expiry_date = Column(Date, default=lambda: date(9999,1,1), nullable=False)
+    card_expiry_date = Column(Date, default=lambda: date(2026,5,8), nullable=False)
     billing_cycle_refresh_date = Column(Date, default=get_billing_cycle_date, nullable=False)
     # DB column created by Alembic is `billing_cycle_refresh_day_of_mth`.
     # Keep the Python attribute name for API/test compatibility.

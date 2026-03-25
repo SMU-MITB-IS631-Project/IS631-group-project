@@ -6,7 +6,7 @@ import {
   convertCardId,
   filterTransactionsByMonth,
   getCurrentMonthKey,
-  loadCardsMaster,
+  loadCardCatalogue,
   loadTransactions,
   loadUserProfile,
 } from '../utils/dataAdapter';
@@ -46,7 +46,7 @@ export default function CardBonusDescription() {
         const backendCardId = convertCardId(cardId);
 
         const [cardsMasterData, catalogRes, transactionsData] = await Promise.all([
-          loadCardsMaster(),
+          loadCardCatalogue(),
           fetch(`${API_BASE_URL}/api/v1/catalog/`),
           loadTransactions(),
         ]);

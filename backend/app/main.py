@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
+from app.config.cors import get_cors_allow_credentials, get_cors_allowed_origins
 
 from app.routes import (
     transactions_router,
@@ -52,21 +53,11 @@ app = FastAPI(
 )
 
 # CORS middleware - MUST be added first before other middlewares
+cors_allowed_origins = get_cors_allowed_origins()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:5175",
-        "http://localhost:5176",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",
-        "http://127.0.0.1:5175",
-        "http://127.0.0.1:5176",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
-    allow_credentials=True,
+    allow_origins=cors_allowed_origins,
+    allow_credentials=get_cors_allow_credentials(cors_allowed_origins),
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )

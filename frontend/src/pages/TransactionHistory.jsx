@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CardSurface from '../components/CardSurface';
-import { CardThumbnail } from '../components/CardAutocomplete';
+import CardThumbnail from '../components/CardThumbnail';
 import {
-  loadCardsMaster,
+  loadCardCatalogue,
   loadUserProfile,
   loadTransactions,
   loadUserOwnedCards,
@@ -58,7 +58,7 @@ export default function TransactionHistory() {
         setError('');
         const [txns, cards, walletCards] = await Promise.all([
           loadTransactions({ allowLocalFallback: false, includeDeleted: true }),
-          loadCardsMaster(),
+          loadCardCatalogue(),
           loadUserOwnedCards(),
         ]);
         setProfile(loadUserProfile());
@@ -209,7 +209,7 @@ export default function TransactionHistory() {
           <h2 className="text-xs font-semibold text-muted uppercase tracking-wide">All Transactions</h2>
           <span className="text-xs text-muted">{transactions.length} records</span>
         </div>
-        <p className="text-xs text-muted">View full transaction history. You can update or delete active transactions. Greyed-out transactions can't be edited because the card was deleted.</p>
+        <p className="text-xs text-muted">View full transaction history. You can update or delete active transactions. {/* Greyed-out transactions can't be edited because the card was deleted. */}</p>
       </CardSurface>
 
       <CardSurface>

@@ -52,6 +52,26 @@ INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 ```
 
+### 3. Run Tests With Coverage
+
+```bash
+cd backend
+python -m pytest tests --cov-report=html
+```
+
+Default backend test runs generate:
+
+- Statement coverage
+- Line coverage
+- Branch coverage
+
+Adding `--cov-report=html` also generates HTML report views by file, function,
+and class in `backend/htmlcov/`.
+
+The function and class pages are report views over the collected coverage data.
+They are not separate instrumentation modes beyond the statement/line and branch
+coverage collected by `coverage.py`.
+
 ---
 
 ## Testing the API
@@ -276,7 +296,11 @@ Per API Contract specification:
 ### CORS
 
 CORS is enabled for frontend integration:
-- Allowed origins: `http://localhost:5173`, `http://localhost:3000`, and all (`*`)
+- Default behavior: if `CORS_ALLOWED_ORIGINS` is unset (or blank), backend allows local dev origins (`localhost`/`127.0.0.1` on common frontend ports).
+- Explicit list mode: set `CORS_ALLOWED_ORIGINS` to a comma-separated list, for example `https://app.example.com,https://admin.example.com`.
+- Dynamic IP mode: set `CORS_ALLOWED_ORIGINS=*` to allow requests from any origin.
+- Safety guard: when wildcard `*` is used, credentialed CORS is automatically disabled.
+- Validation: `*` cannot be combined with explicit origins in the same value.
 
 ---
 
