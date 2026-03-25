@@ -30,9 +30,7 @@ from app.routes import (
     user_card_router,
     recommendation_router,
     user_profile_router,
-    rewards_earned_router,
     auth_router,
-    notifications_router,
 )
 
 
@@ -108,9 +106,7 @@ app.include_router(catalog_router)
 app.include_router(user_card_router)
 app.include_router(user_profile_router)
 app.include_router(recommendation_router)
-app.include_router(rewards_earned_router)
 app.include_router(auth_router, prefix="", tags=["Auth"])
-app.include_router(notifications_router)
 
 # Mount the built frontend after API routes so /api endpoints keep priority.
 static_dir = (Path(__file__).resolve().parents[1] / "static")
