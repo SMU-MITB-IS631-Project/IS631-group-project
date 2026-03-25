@@ -9,7 +9,6 @@ from app.models.card_catalogue import CardCatalogue
 from app.models.card_catalogue import CardBonusRuleUpdate, CardRewardUpdatePayload
 from app.models.card_catalogue import CardCatalogueCreate, BankEnum, BenefitTypeEnum, StatusEnum
 from app.models.card_bonus_category import BonusCategory, CardBonusCategory
-from app.models.user_owned_cards import UserOwnedCard
 
 @pytest.fixture
 def mock_db():
@@ -148,7 +147,7 @@ def test_update_card_rewards_not_found_raises_service_error(catalog_service, moc
     mock_db.commit.assert_not_called()
 
 
-def test_update_card_rewards_no_changes_creates_no_notifications(catalog_service, mock_db):
+def test_update_card_rewards_no_changes_returns_empty_changed_fields(catalog_service, mock_db):
     card = CardCatalogue(card_id=1, card_name="DBS Altitude", base_benefit_rate=Decimal("1.5"))
     existing_bonus_rows = [
         CardBonusCategory(
@@ -171,8 +170,6 @@ def test_update_card_rewards_no_changes_creates_no_notifications(catalog_service
             return card_query
         if model is CardBonusCategory:
             return bonus_query
-        if model is UserOwnedCard.user_id:
-            raise AssertionError("Owner query should not be executed when there are no changes.")
         raise AssertionError(f"Unexpected query model: {model}")
 
     mock_db.query.side_effect = query_side_effect
@@ -184,13 +181,13 @@ def test_update_card_rewards_no_changes_creates_no_notifications(catalog_service
     assert result["card_name"] == "DBS Altitude"
     assert result["effective_date"] == "2026-01-01"
     assert result["changed_fields"] == {}
-    assert result["notifications_created"] == 0
+    assert "notifications_created" not in result
     mock_db.add.assert_not_called()
     mock_db.delete.assert_not_called()
     mock_db.commit.assert_called_once()
 
 
-def test_update_card_rewards_updates_rules_and_creates_notifications(catalog_service, mock_db):
+def test_update_card_rewards_updates_rules_and_returns_changed_fields(catalog_service, mock_db):
     card = CardCatalogue(card_id=1, card_name="DBS Altitude", base_benefit_rate=Decimal("1.5"))
     old_food = CardBonusCategory(
         card_id=1,
@@ -231,19 +228,11 @@ def test_update_card_rewards_updates_rules_and_creates_notifications(catalog_ser
         [updated_food, added_entertainment],
     ]
 
-    owner_query = Mock()
-    owner_query.filter.return_value.distinct.return_value.all.return_value = [
-        Mock(user_id=10),
-        Mock(user_id=11),
-    ]
-
     def query_side_effect(model):
         if model is CardCatalogue:
             return card_query
         if model is CardBonusCategory:
             return bonus_query
-        if model is UserOwnedCard.user_id:
-            return owner_query
         raise AssertionError(f"Unexpected query model: {model}")
 
     mock_db.query.side_effect = query_side_effect
@@ -273,45 +262,14 @@ def test_update_card_rewards_updates_rules_and_creates_notifications(catalog_ser
     mock_db.delete.assert_called_once_with(old_transport)
 
     added_objects = [call.args[0] for call in mock_db.add.call_args_list]
-    assert len(added_objects) == 3
+    assert len(added_objects) == 1
     assert sum(isinstance(obj, CardBonusCategory) for obj in added_objects) == 1
     assert result["card_id"] == 1
     assert result["effective_date"] == "2026-02-01"
-    assert result["notifications_created"] == 2
+    assert "notifications_created" not in result
     assert "base_benefit_rate" in result["changed_fields"]
     assert "bonus_rules" in result["changed_fields"]
     mock_db.flush.assert_called_once()
-    mock_db.commit.assert_called_once()
-
-
-def test_update_card_rewards_changes_without_owners_creates_zero_notifications(catalog_service, mock_db):
-    card = CardCatalogue(card_id=1, card_name="DBS Altitude", base_benefit_rate=Decimal("1.5"))
-
-    card_query = Mock()
-    card_query.filter.return_value.first.return_value = card
-
-    bonus_query = Mock()
-    bonus_query.filter.return_value.all.return_value = []
-
-    owner_query = Mock()
-    owner_query.filter.return_value.distinct.return_value.all.return_value = []
-
-    def query_side_effect(model):
-        if model is CardCatalogue:
-            return card_query
-        if model is CardBonusCategory:
-            return bonus_query
-        if model is UserOwnedCard.user_id:
-            return owner_query
-        raise AssertionError(f"Unexpected query model: {model}")
-
-    mock_db.query.side_effect = query_side_effect
-
-    payload = CardRewardUpdatePayload(base_benefit_rate=Decimal("2.0"), effective_date=date(2026, 3, 1))
-    result = catalog_service.update_card_rewards(card_id=1, payload=payload)
-
-    assert result["changed_fields"] == {"base_benefit_rate": {"old": "1.5", "new": "2"}}
-    assert result["notifications_created"] == 0
     mock_db.commit.assert_called_once()
 
 

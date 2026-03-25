@@ -145,7 +145,7 @@ class AuthSecurityLoggingTests(unittest.TestCase):
         ) as mock_log_otp:
             resp = self.client.post(
                 "/api/v1/auth/confirmation",
-                params={"username": "alice", "confirmation_code": "123456"},
+                json={"username": "alice", "confirmation_code": "123456"},
             )
 
         self.assertEqual(resp.status_code, 200, msg=resp.text)

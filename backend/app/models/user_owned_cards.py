@@ -67,7 +67,7 @@ class UserOwnedCardBase(BaseModel):
     card_id: int
 
 class UserOwnedCardCreate(UserOwnedCardBase):
-    card_expiry_date: date = date(9999,1,1)
+    card_expiry_date: Optional[date] = None
     billing_cycle_refresh_date: date = Field(default_factory=get_billing_cycle_date)
     billing_cycle_refresh_day_of_month: int = Field(1, ge=1, le=31) 
 
