@@ -16,12 +16,7 @@ def run_migrations() -> None:
     """Apply Alembic migrations before starting the API server."""
     backend_dir = Path(__file__).resolve().parent
     env = os.environ.copy()
-    db_url = env.get("DATABASE_URL")
-    cmd = [sys.executable, "-m", "alembic", "upgrade", "head"]
-    if db_url:
-        # Pass the application database URL through to Alembic so it
-        # can target the same database as the API.
-        cmd.extend(["-x", f"db_url={db_url}"])
+    cmd = [sys.executable, '-m', 'alembic', 'upgrade', 'head']
     subprocess.run(
         cmd,
         cwd=backend_dir,
