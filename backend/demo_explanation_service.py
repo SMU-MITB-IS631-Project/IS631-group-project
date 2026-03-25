@@ -18,11 +18,16 @@ What this demonstrates:
 
 import os
 import sys
+from pathlib import Path
 from decimal import Decimal
+from dotenv import load_dotenv
 
 # Add backend to Python path
 BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__)))
 sys.path.insert(0, BACKEND_DIR)
+
+# Load backend/.env so OPENAI_API_KEY and related flags are available in demo runs.
+load_dotenv(dotenv_path=Path(BACKEND_DIR) / ".env")
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

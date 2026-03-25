@@ -328,12 +328,15 @@ class ExplanationService:
             rate_display = f"{rate_pct:.2f} mpd"
         else:
             rate_display = f"{rate_pct:.2f}% ({rate_pct/100:.4f})"
-        prompt = f"""You are a Singapore credit card advisor. Explain why the {bank_name} {context.card_name} is the best choice for a ${float(context.transaction_amount):.2f} {context.category} purchase.
+        merchant_clause = f" at {context.merchant_name}" if context.merchant_name else ""
+        prompt = f"""You are an expert Singapore credit card advisor. Explain why the {bank_name} {context.card_name} is the best choice for a ${float(context.transaction_amount):.2f} {context.category} purchase.
 
 Ground Truth Facts:
 - Card: {context.bank} {context.card_name}
 - Benefit Type: {benefit_label}
 - Category: {context.category}
+- Merchant/Item: {context.merchant_name or 'N/A'}
+- Transaction: SGD {float(context.transaction_amount):.2f} {context.category}{merchant_clause}
 - Effective Rate: {rate_display}"""
 
         if context.is_bonus_eligible and context.bonus_rate:
@@ -439,6 +442,7 @@ Ground Truth Facts:
         benefit_label = "cashback" if context.benefit_type == BenefitType.cashback else "miles"
         reward_value = float(context.total_reward_value) if context.total_reward_value else 0.0
         bank_name = context.bank.replace("_", " ")
+        merchant_phrase = f" at {context.merchant_name}" if context.merchant_name else ""
 
         if context.benefit_type == BenefitType.miles:
             rate_display = f"{float(effective_rate):.2f} mpd"
@@ -451,14 +455,14 @@ Ground Truth Facts:
         if context.is_bonus_eligible:
             explanation = (
                 f"The {bank_name} {context.card_name} offers {rate_display} {benefit_label} "
-                f"on {context.category} purchases (bonus category). "
+                f"on {context.category} purchases{merchant_phrase} (bonus category). "
                 f"For this ${float(context.transaction_amount):.2f} transaction, you'll earn "
                 f"{reward_phrase}."
             )
         else:
             explanation = (
                 f"The {bank_name} {context.card_name} provides {rate_display} {benefit_label} "
-                f"on all purchases. For this ${float(context.transaction_amount):.2f} transaction, "
+                f"on all purchases{merchant_phrase}. For this ${float(context.transaction_amount):.2f} transaction, "
                 f"you'll receive {reward_phrase}."
             )
         
