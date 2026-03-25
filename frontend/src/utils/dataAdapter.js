@@ -93,6 +93,109 @@ function setCurrentUserId(userId) {
   }
 }
 
+/**
+ * Card ID mapping: Frontend CSV uses string IDs, backend DB uses integers.
+ * This mapping converts frontend string IDs to backend integer IDs.
+ * 
+ * TODO: When the database is properly seeded with actual cards, update this mapping
+ * to match the card_catalogue table. For now, all cards map to ID 1 for testing.
+ */
+const CARD_ID_MAP = {
+  'sc': 1,           // Standard Chartered Simply Cash
+  'ww': 2,           // DBS Woman's World Card
+  'prvi': 3,         // UOB PRVI Miles Card
+  'uobone': 4,       // UOB One Card
+};
+
+// Reverse mapping: integer -> string (for converting backend responses to frontend format)
+const REVERSE_CARD_ID_MAP = {};
+Object.entries(CARD_ID_MAP).forEach(([strId, intId]) => {
+  if (!REVERSE_CARD_ID_MAP[intId]) {
+    REVERSE_CARD_ID_MAP[intId] = strId; // Use first match
+  }
+});
+
+/**
+ * Convert frontend card ID (string) to backend card ID (integer).
+ * Falls back to 1 if the card ID is not found in the mapping.
+ */
+export function convertCardId(frontendCardId) {
+  // If already a number, return it
+  if (typeof frontendCardId === 'number') {
+    return frontendCardId;
+  }
+  
+  // If it's a string that looks like a number, parse it
+  if (!isNaN(frontendCardId)) {
+    return parseInt(frontendCardId);
+  }
+  
+  // Otherwise, look it up in the mapping
+  const mapped = CARD_ID_MAP[frontendCardId];
+  if (mapped !== undefined) {
+    return mapped;
+  }
+  
+  // Fallback to 1 for unknown cards
+  console.warn(`Unknown card_id: ${frontendCardId}, falling back to 1`);
+  return 1;
+}
+
+/**
+ * Convert backend card ID (integer) to frontend card ID (string).
+ * Falls back to 'ww' if the card ID is not found in the mapping.
+ */
+function convertBackendCardId(backendCardId) {
+  // If it's a numeric string, map it to the frontend string ID
+  if (typeof backendCardId === 'string') {
+    if (!isNaN(backendCardId)) {
+      backendCardId = parseInt(backendCardId, 10);
+    } else {
+      return backendCardId;
+    }
+  }
+  
+  // Look up in reverse mapping
+  const mapped = REVERSE_CARD_ID_MAP[backendCardId];
+  if (mapped !== undefined) {
+    return mapped;
+  }
+  
+  // Fallback to 'ww' for unknown integer IDs
+  console.warn(`Unknown backend card_id: ${backendCardId}, falling back to 'ww'`);
+  return 'ww';
+}
+
+// Fetch card catalogue from backend API
+export async function loadCardCatalogue() {
+  const endpointCandidates = [
+    `${API_BASE_URL}/api/v1/catalog/`,
+    `${API_BASE_URL}/api/v1/catalog`,
+  ];
+
+  let lastApiError = null;
+  for (const endpoint of endpointCandidates) {
+    try {
+      const response = await fetch(endpoint);
+      if (!response.ok) {
+        lastApiError = new Error(`Failed to fetch card catalogue (${response.status}) from ${endpoint}`);
+        continue;
+      }
+
+      const data = await response.json();
+      return data.cards || data.card_catalogue || data;
+    } catch (error) {
+      lastApiError = error;
+    }
+  }
+
+  if (lastApiError instanceof Error) {
+    throw lastApiError;
+  }
+
+  throw new Error('Failed to fetch card catalogue');
+}
+
 // --- User Profile ---
 
 export function loadUserProfile() {

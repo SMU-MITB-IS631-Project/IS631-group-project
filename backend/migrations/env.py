@@ -18,6 +18,12 @@ from app.models.card_change_notification import CardChangeNotification  # Import
 # access to the values within the .ini file in use.
 config = context.config
 
+# Allow DATABASE_URL to be passed via -x db_url=... (e.g. from run.py at
+# startup) so that migrations always target the same database as the API.
+_db_url = context.get_x_argument(as_dictionary=True).get("db_url")
+if _db_url:
+    config.set_main_option("sqlalchemy.url", _db_url)
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
