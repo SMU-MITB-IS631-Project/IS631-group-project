@@ -45,7 +45,7 @@ export function getMonthSummary(transactions, cardsMaster = [], wallet = []) {
     if (spend > topSpend) { topCardId = cid; topSpend = spend; }
   });
 
-  const topCard = (cardsMaster || []).find(c => c.card_id === topCardId);
+  const topCard = (cardsMaster || []).find(c => String(c.card_id) === String(topCardId));
 
   return {
     total,
@@ -203,12 +203,11 @@ export function loadUserProfile() {
   if (!raw) {
     return null;
   }
-
   const profile = JSON.parse(raw);
   if (Array.isArray(profile.wallet)) {
     profile.wallet = profile.wallet.map(card => ({
       ...card,
-      card_id: convertBackendCardId(card.card_id),
+      card_id: typeof card.card_id === 'string' ? Number(card.card_id) : card.card_id,
     }));
   }
   return profile;
@@ -226,15 +225,11 @@ export async function loadUserProfileFromAPI() {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       },
     });
-
     if (!response.ok) {
       throw new Error('Failed to load profile from API');
     }
-
     const data = await response.json();
-    // Backend returns the profile object directly
     const profile = data;
-    // Fetch user cards and attach as wallet
     try {
       const userId = getCurrentUserId();
       const accessToken = getAccessToken();
@@ -250,7 +245,7 @@ export async function loadUserProfileFromAPI() {
         const cardsData = await cardsResponse.json();
         profile.wallet = (cardsData.user_cards || cardsData || []).map(card => ({
           ...card,
-          card_id: convertBackendCardId(card.card_id),
+          card_id: typeof card.card_id === 'string' ? Number(card.card_id) : card.card_id,
         }));
       } else {
         profile.wallet = [];
@@ -258,12 +253,10 @@ export async function loadUserProfileFromAPI() {
     } catch (e) {
       profile.wallet = [];
     }
-    // Save to localStorage for caching
     saveUserProfile(profile);
     return profile;
   } catch (error) {
     console.error('Error loading profile from API:', error);
-    // Fallback to localStorage
     return loadUserProfile();
   }
 }
@@ -274,23 +267,20 @@ export function saveUserProfile(profile) {
 
 async function fetchUserCards(userId) {
   const accessToken = getAccessToken();
-  const response = await fetch(`${API_BASE_URL}/user/cards`, {
+  const response = await fetch(`${API_BASE_URL}/user/cards/`, {
     method: 'GET',
     headers: {
-      'x-user-id': String(userId),
       'Content-Type': 'application/json',
       ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
     },
   });
-
   if (!response.ok) {
     throw new Error('Failed to load user cards');
   }
-
   const data = await response.json();
   return (data.user_cards || []).map(card => ({
     id: card.id,
-    card_id: convertBackendCardId(card.card_id),
+    card_id: typeof card.card_id === 'string' ? Number(card.card_id) : card.card_id,
     refresh_day_of_month: card.refresh_day_of_month,
     annual_fee_billing_date: card.annual_fee_billing_date,
   }));
@@ -314,7 +304,7 @@ export async function postRegistrationTransactions(userId, walletCards) {
     .filter(w => (w.cycle_spend_sgd || 0) > 0)
     .map(w => ({
       transaction: {
-        card_id: convertCardId(w.card_id),
+        card_id: typeof w.card_id === 'string' ? Number(w.card_id) : w.card_id,
         amount_sgd: parseFloat(w.cycle_spend_sgd),
         item: 'registration',
         channel: 'online',
@@ -531,7 +521,6 @@ export async function loadTransactions(options = {}) {
     const response = await fetch(`${API_BASE_URL}/api/v1/transactions`, {
       method: 'GET',
       headers: {
-        'x-user-id': userId,
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       },
@@ -546,7 +535,7 @@ export async function loadTransactions(options = {}) {
     
     const mappedTransactions = transactions.map(txn => ({
       ...txn,
-      card_id: convertBackendCardId(txn.card_id)
+      card_id: typeof txn.card_id === 'string' ? Number(txn.card_id) : txn.card_id
     }));
 
     const mergedTransactions = mergePendingLocalTransactions(mappedTransactions);
@@ -619,7 +608,7 @@ export async function appendTransaction(txn) {
   console.log('[appendTransaction] Called with:', txn);
   try {
     const userId = getCurrentUserId();
-    const backendCardId = convertCardId(txn.card_id);
+    const backendCardId = typeof txn.card_id === 'string' ? Number(txn.card_id) : txn.card_id;
     console.log('[appendTransaction] User ID:', userId);
     console.log('[appendTransaction] Converting card_id:', txn.card_id, '->', backendCardId);
     console.log('[appendTransaction] Sending POST to:', `${API_BASE_URL}/api/v1/transactions`);
@@ -654,10 +643,9 @@ export async function appendTransaction(txn) {
     const data = await response.json();
     console.log('[appendTransaction] Success! Created transaction:', data.transaction);
     
-    // Convert backend integer card_id back to frontend string card_id
     const createdTransaction = {
       ...data.transaction,
-      card_id: convertBackendCardId(data.transaction.card_id)
+      card_id: typeof data.transaction.card_id === 'string' ? Number(data.transaction.card_id) : data.transaction.card_id,
     };
     
     return createdTransaction;
@@ -674,11 +662,9 @@ export async function appendTransaction(txn) {
 export async function updateTransactionById(transactionId, transactionPatch) {
   const userId = getCurrentUserId();
   const payload = { ...transactionPatch };
-
   if (payload.card_id !== undefined && payload.card_id !== null) {
-    payload.card_id = convertCardId(payload.card_id);
+    payload.card_id = typeof payload.card_id === 'string' ? Number(payload.card_id) : payload.card_id;
   }
-
   const accessToken = getAccessToken();
   const response = await fetch(`${API_BASE_URL}/api/v1/transactions/${transactionId}`, {
     method: 'PUT',
@@ -689,15 +675,13 @@ export async function updateTransactionById(transactionId, transactionPatch) {
     },
     body: JSON.stringify({ transaction: payload }),
   });
-
   if (!response.ok) {
     throw new Error(`Failed to update transaction: ${response.statusText}`);
   }
-
   const data = await response.json();
   return {
     ...data.transaction,
-    card_id: convertBackendCardId(data.transaction.card_id),
+    card_id: typeof data.transaction.card_id === 'string' ? Number(data.transaction.card_id) : data.transaction.card_id,
   };
 }
 
@@ -770,4 +754,26 @@ export function getCardSpendForMonth(transactions, cardId) {
     })
     .reduce((sum, t) => sum + (t.amount_sgd || 0), 0);
   return txnSpend;
+}
+
+// Fetch card catalogue from backend API
+export async function loadCardCatalogue() {
+  const response = await fetch(`${API_BASE_URL}/api/v1/catalog/`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load card catalogue');
+  }
+  const data = await response.json();
+  return data.cards || data || [];
+}
+
+// Utility to convert card ID to number (for compatibility with old imports)
+export function convertCardId(cardId) {
+  if (typeof cardId === 'number') return cardId;
+  if (!isNaN(cardId)) return parseInt(cardId, 10);
+  return 1;
 }

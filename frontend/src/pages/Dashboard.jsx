@@ -65,7 +65,7 @@ export default function Dashboard() {
   const summary = getMonthSummary(monthTxns, cardsMaster, profile?.wallet || []);
   const showArrows = availableMonths.length > 1;
 
-  const topCardMaster = cardsMaster.find(c => c.card_id === summary.topCardId);
+  const topCardMaster = cardsMaster.find(c => String(c.card_id) === String(summary.topCardId));
 
   function handleConfirmLogout() {
     localStorage.clear();
@@ -446,7 +446,7 @@ export default function Dashboard() {
           </div>
           <div className="flex flex-col items-end">
             {topCardMaster && (
-              <CardThumbnail imagePath={topCardMaster.image_path} name={topCardMaster.card_name} size="lg" />
+              <CardThumbnail imagePath={'/card-logo.svg'} name={topCardMaster.card_name} size="lg" />
             )}
             <div className="mt-2 text-right">
               <div className="text-xs font-medium text-text">Top Card:</div>
@@ -542,20 +542,20 @@ export default function Dashboard() {
                     <button
                       type="button"
                       onClick={handleOpenCardBonus}
-                      className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+                      className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 mr-1"
                       aria-label={`View bonus details for ${card?.card_name || wc.card_id}`}
                     >
                       <img
                         src={card?.image_path || '/card-logo.svg'}
                         alt={card?.card_name || wc.card_id}
-                        style={{ width: 72, height: 48, objectFit: 'contain', borderRadius: 10, background: 'transparent' }}
+                        style={{ width: 60, height: 40, objectFit: 'contain', borderRadius: 10, background: 'transparent', marginLeft: '-8px' }}
                       />
                     </button>
                     <div className="flex-1 min-w-0 pr-2 flex flex-col justify-center">
-                      <span className={`block text-base font-semibold truncate ${expired ? 'text-gray-600' : 'text-text'}`}>{card && card.card_name ? card.card_name : ''}</span>
+                      <span className={`block text-sm font-medium truncate ${expired ? 'text-gray-600' : 'text-text'}`}>{card && card.card_name ? card.card_name : ''}</span>
                       <span className={`block text-xs ${expired ? 'text-gray-500' : 'text-muted'}`}>{wc.card_expiry_date ? wc.card_expiry_date : 'No expiry date'}{expired ? ' (Expired)' : ''}</span>
                     </div>
-                    <div className={`w-[70px] shrink-0 text-right text-sm font-semibold tabular-nums ${expired ? 'text-gray-600' : 'text-text'}`}>
+                    <div className={`w-[60px] shrink-0 text-right text-xs font-semibold tabular-nums ${expired ? 'text-gray-600' : 'text-text'}`} style={{ marginRight: '-8px' }}>
                       ${spend.toFixed(2)}
                     </div>
                     <button
