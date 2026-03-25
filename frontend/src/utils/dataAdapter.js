@@ -168,32 +168,24 @@ function convertBackendCardId(backendCardId) {
 
 // Fetch card catalogue from backend API
 export async function loadCardCatalogue() {
-  const endpointCandidates = [
-    `${API_BASE_URL}/api/v1/catalog/`,
-    `${API_BASE_URL}/api/v1/catalog`,
-  ];
-
-  let lastApiError = null;
-  for (const endpoint of endpointCandidates) {
-    try {
-      const response = await fetch(endpoint);
-      if (!response.ok) {
-        lastApiError = new Error(`Failed to fetch card catalogue (${response.status}) from ${endpoint}`);
-        continue;
-      }
-
-      const data = await response.json();
-      return data.cards || data.card_catalogue || data;
-    } catch (error) {
-      lastApiError = error;
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/catalog/`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch card catalogue (${response.status})`);
     }
+    const data = await response.json();
+    return data.cards || data.card_catalogue || data;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Failed to fetch card catalogue');
   }
-
-  if (lastApiError instanceof Error) {
-    throw lastApiError;
-  }
-
-  throw new Error('Failed to fetch card catalogue');
 }
 
 // --- User Profile ---
@@ -754,26 +746,4 @@ export function getCardSpendForMonth(transactions, cardId) {
     })
     .reduce((sum, t) => sum + (t.amount_sgd || 0), 0);
   return txnSpend;
-}
-
-// Fetch card catalogue from backend API
-export async function loadCardCatalogue() {
-  const response = await fetch(`${API_BASE_URL}/api/v1/catalog/`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-  if (!response.ok) {
-    throw new Error('Failed to load card catalogue');
-  }
-  const data = await response.json();
-  return data.cards || data || [];
-}
-
-// Utility to convert card ID to number (for compatibility with old imports)
-export function convertCardId(cardId) {
-  if (typeof cardId === 'number') return cardId;
-  if (!isNaN(cardId)) return parseInt(cardId, 10);
-  return 1;
 }
