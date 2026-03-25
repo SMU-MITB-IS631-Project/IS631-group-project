@@ -442,8 +442,20 @@ Ground Truth Facts:
         benefit_label = "cashback" if context.benefit_type == BenefitType.cashback else "miles"
         reward_value = float(context.total_reward_value) if context.total_reward_value else 0.0
         bank_name = context.bank.replace("_", " ")
-        merchant_phrase = f" at {context.merchant_name}" if context.merchant_name else ""
 
+        # Sanitize merchant_name similarly to the LLM prompt path to avoid awkward or unsafe output
+        raw_merchant_name = context.merchant_name or ""
+        # Remove control/newline characters and keep only printable characters
+        cleaned_merchant_name = "".join(ch for ch in raw_merchant_name if ch.isprintable())
+        cleaned_merchant_name = cleaned_merchant_name.strip()
+        # Treat whitespace-only or empty result as missing, and cap length to prevent overly long phrases
+        if cleaned_merchant_name:
+            max_merchant_length = 100
+            if len(cleaned_merchant_name) > max_merchant_length:
+                cleaned_merchant_name = cleaned_merchant_name[:max_merchant_length]
+            merchant_phrase = f" at {cleaned_merchant_name}"
+        else:
+            merchant_phrase = ""
         if context.benefit_type == BenefitType.miles:
             rate_display = f"{float(effective_rate):.2f} mpd"
             reward_phrase = f"{reward_value:.0f} {benefit_label}"
