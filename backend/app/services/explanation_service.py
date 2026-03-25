@@ -352,7 +352,7 @@ class ExplanationService:
 
         safe_merchant_name = _sanitize_merchant_name(context.merchant_name)
         merchant_clause = f" at {safe_merchant_name}" if safe_merchant_name else ""
-        prompt = f"""You are an expert Singapore credit card advisor. Explain why the {bank_name} {context.card_name} is the best choice for a ${float(context.transaction_amount):.2f} {context.category} purchase.
+        prompt = f"""You are an expert Singapore credit card advisor. Explain why the {bank_name} {context.card_name} is the best choice for a SGD {float(context.transaction_amount):.2f} {context.category} purchase.
 
 Ground Truth Facts:
 - Card: {context.bank} {context.card_name}
