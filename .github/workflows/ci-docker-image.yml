@@ -70,6 +70,7 @@ jobs:
               -e COGNITO_CLIENT_SECRET="${{ secrets.COGNITO_CLIENT_SECRET }}" \
               -e COGNITO_ADMIN_ROLE="${{ secrets.COGNITO_ADMIN_ROLE }}" \
               -e COGNITO_USER_ROLE="${{ secrets.COGNITO_USER_ROLE }}" \
+              -e PYTHONPATH="/app/backend" \
               -e DATABASE_URL="sqlite:////app/data/app.db" \
               -e LLM_MODEL="${{ secrets.LLM_MODEL }}" \
               -e LLM_TEMPERATURE="${{ secrets.LLM_TEMPERATURE }}" \
