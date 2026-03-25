@@ -527,7 +527,7 @@ export async function loadTransactions(options = {}) {
     
     const mappedTransactions = transactions.map(txn => ({
       ...txn,
-      card_id: typeof txn.card_id === 'string' ? Number(txn.card_id) : txn.card_id
+      card_id: convertCardId(txn.card_id)
     }));
 
     const mergedTransactions = mergePendingLocalTransactions(mappedTransactions);
@@ -600,7 +600,7 @@ export async function appendTransaction(txn) {
   console.log('[appendTransaction] Called with:', txn);
   try {
     const userId = getCurrentUserId();
-    const backendCardId = typeof txn.card_id === 'string' ? Number(txn.card_id) : txn.card_id;
+    const backendCardId = convertCardId(txn.card_id);
     console.log('[appendTransaction] User ID:', userId);
     console.log('[appendTransaction] Converting card_id:', txn.card_id, '->', backendCardId);
     console.log('[appendTransaction] Sending POST to:', `${API_BASE_URL}/api/v1/transactions`);
@@ -637,7 +637,7 @@ export async function appendTransaction(txn) {
     
     const createdTransaction = {
       ...data.transaction,
-      card_id: typeof data.transaction.card_id === 'string' ? Number(data.transaction.card_id) : data.transaction.card_id,
+      card_id: convertBackendCardId(data.transaction.card_id),
     };
     
     return createdTransaction;
