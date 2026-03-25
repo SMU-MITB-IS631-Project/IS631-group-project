@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from app.models.card_bonus_category import CardBonusCategory
 from app.models.card_catalogue import CardCatalogue, CardCatalogueCreate, CardRewardUpdatePayload
-from app.models.card_change_notification import CardChangeNotification
 from app.models.user_owned_cards import UserOwnedCard
 from app.services.errors import ServiceError
 
@@ -131,27 +130,6 @@ class CatalogService:
         new_snapshot = self._snapshot_card_rewards(card, updated_bonus_rows)
         changed_fields = self._diff_snapshots(old_snapshot, new_snapshot)
 
-        notifications_created = 0
-        if changed_fields:
-            owner_user_ids = (
-                self.db.query(UserOwnedCard.user_id)
-                .filter(UserOwnedCard.card_id == card_id)
-                .distinct()
-                .all()
-            )
-
-            for owner_row in owner_user_ids:
-                self.db.add(
-                    CardChangeNotification(
-                        user_id=owner_row.user_id,
-                        card_id=card_id,
-                        card_name=card.card_name,
-                        changed_fields=changed_fields,
-                        effective_date=payload.effective_date,
-                        is_read=False,
-                    )
-                )
-                notifications_created += 1
 
         self.db.commit()
         return {
@@ -159,7 +137,6 @@ class CatalogService:
             "card_name": card.card_name,
             "effective_date": payload.effective_date.isoformat(),
             "changed_fields": changed_fields,
-            "notifications_created": notifications_created,
         }
     
     def create_card(self, card_data: CardCatalogueCreate) -> CardCatalogue:

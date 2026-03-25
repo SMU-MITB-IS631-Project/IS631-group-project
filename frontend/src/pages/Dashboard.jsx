@@ -8,6 +8,7 @@ import {
   filterTransactionsByMonth, getMonthSummary, getCardSpendForMonth,
   getAvailableMonths, convertCardId, postRegistrationTransactions, saveTransactions,
 } from '../utils/dataAdapter';
+import { getUsernameFromJWT } from '../utils/jwt';
 import API_BASE_URL from '../utils/apiBaseUrl';
 
 function formatDateDMonYYYY(dateStr) {
@@ -228,7 +229,7 @@ export default function Dashboard() {
 
       {/* Header */}
       <div className="mb-4 px-[14px] pt-20">
-        <p className="text-sm text-white/80 mb-1">Hello, {profile?.username || 'User'}!</p>
+        <p className="text-sm text-white/80 mb-1">Hello, {profile?.username || getUsernameFromJWT() || 'User'}!</p>
         <h1 className="text-[22px] font-semibold tracking-tight text-white">Dashboard</h1>
       </div>
 
@@ -501,7 +502,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-xs font-semibold text-muted uppercase tracking-wide">Card Overview</h2>
             <div className="flex items-center gap-3">
-              <Link
+              {/* <Link
                 to="/cards/reward"
                 className="text-sm font-medium text-cyan-600 hover:text-cyan-700 transition-colors"
               >
@@ -518,7 +519,7 @@ export default function Dashboard() {
                   <line x1="5" y1="12" x2="19" y2="12"/>
                 </svg>
                 Add Card
-              </button>
+              </button> */}
             </div>
           </div>
           {profile.wallet && profile.wallet.length > 0 ? (

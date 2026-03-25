@@ -72,10 +72,7 @@ class TransactionService:
         }
 
     def create_transaction(self, user_sub: Optional[str], payload: TransactionCreate) -> Dict[str, Any]:
-        raw_user_sub = user_sub
-        if not raw_user_sub and payload.user_id is not None:
-            raw_user_sub = str(payload.user_id)
-        resolved_user_id = self._resolve_user_sub(raw_user_sub or "")
+        resolved_user_id = self._resolve_user_sub(user_sub)
 
         card_id = self._parse_card_id(payload.card_id)
         if not self._card_exists_in_wallet(resolved_user_id, card_id):
