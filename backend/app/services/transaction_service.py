@@ -168,57 +168,6 @@ class TransactionService:
         self.db.refresh(transaction)
         return self._transaction_to_dict(transaction)
 
-    def update_transaction_status(self, user_sub: str, transaction_id: int, status: str) -> Dict[str, Any]:
-        resolved_user_id = self._resolve_user_sub(user_sub)
-
-        # Validate status
-        valid_statuses = [s.value for s in TransactionStatus]
-        if status not in valid_statuses:
-            raise ServiceError(
-                400,
-                "VALIDATION_ERROR",
-                f"Invalid status '{status}'. Must be one of: {', '.join(valid_statuses)}",
-                {"field": "status", "valid_values": valid_statuses},
-            )
-
-        transaction = (
-            self.db.query(UserTransaction)
-            .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.id == transaction_id)
-            .first()
-        )
-
-        if not transaction:
-            raise ServiceError(404, "NOT_FOUND", "Transaction not found.", {})
-
-        transaction.status = TransactionStatus[status.replace("deleted_with_card", "DeletedWithCard").replace("active", "Active")]
-        self.db.commit()
-        self.db.refresh(transaction)
-        return self._transaction_to_dict(transaction)
-    
-    def update_transactions_by_card_id(self, user_sub: str, card_id: int, status: str) -> int:
-        """Update all transactions for a card to the given status. Returns count of updated transactions."""
-        resolved_user_id = self._resolve_user_sub(user_sub)
-
-        # Validate status
-        valid_statuses = [s.value for s in TransactionStatus]
-        if status not in valid_statuses:
-            raise ServiceError(
-                400,
-                "VALIDATION_ERROR",
-                f"Invalid status '{status}'. Must be one of: {', '.join(valid_statuses)}",
-                {"field": "status", "valid_values": valid_statuses},
-            )
-        
-        status_enum = TransactionStatus[status.replace("deleted_with_card", "DeletedWithCard").replace("active", "Active")]
-        
-        count = (
-            self.db.query(UserTransaction)
-                .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.card_id == card_id)
-            .update({"status": status_enum})
-        )
-        
-        self.db.commit()
-        return count
 
     def delete_transaction(self, user_id: str, transaction_id: int) -> Dict[str, Any]:
         """Delete a transaction. Returns deleted transaction."""
