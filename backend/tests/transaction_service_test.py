@@ -183,6 +183,23 @@ def test_create_transaction_invalid_card_raises_service_error(transaction_servic
     assert exc_info.value.code == "VALIDATION_ERROR"
 
 
+def test_create_transaction_missing_user_sub_raises_unauthorized(transaction_service):
+    payload = TransactionCreate(
+        card_id=101,
+        amount_sgd=Decimal("12.50"),
+        item="Lunch",
+        channel=TransactionChannel.online,
+        is_overseas=False,
+        date=date(2026, 2, 18),
+    )
+
+    with pytest.raises(ServiceError) as exc_info:
+        transaction_service.create_transaction(None, payload)
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.code == "UNAUTHORIZED"
+
+
 def test_get_user_transactions_returns_rows_desc_by_default(transaction_service, mock_db):
     transaction_service._resolve_user_sub = Mock(return_value=1)
 
