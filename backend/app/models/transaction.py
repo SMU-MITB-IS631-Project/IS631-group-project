@@ -129,11 +129,6 @@ class TransactionCreate(BaseModel):
     def set_transaction_date(cls, v):
         return date.today() if v is None else v
 
-class BulkTransactionStatusUpdate(BaseModel):
-    """Bulk update multiple transactions status"""
-    transaction_ids: list[int]
-    status: str  # "active" or "deleted_with_card"
-
 
 class TransactionUpdate(BaseModel):
     """Transaction update request - all fields optional"""
@@ -170,17 +165,21 @@ class TransactionUpdate(BaseModel):
     def normalize_category(cls, v):
         return _normalize_enum_input(v, TransactionCategory)
 
-class TransactionRequest(BaseModel):
+class TransactionCreateRequest(BaseModel):
     """Wrapper for API contract - POST body"""
     transaction: TransactionCreate
 
-
-class BulkTransactionStatusUpdate(BaseModel):
-    """Bulk update multiple transactions status"""
-    transaction_ids: list[int]
-    status: str  # "active" or "deleted_with_card"
 
 class TransactionResponse(TransactionCreate):
     """Transaction response model"""
     id: int
     created_date: datetime
+
+class TransactionStatusUpdate(BaseModel):
+    """Update transaction status"""
+    status: str  # "active" or "deleted_with_card"
+
+
+class TransactionUpdateRequest(BaseModel):
+    """Wrapper for transaction update API"""
+    transaction: TransactionUpdate

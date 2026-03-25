@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional, cast
 from sqlalchemy import String, cast as sa_cast, func, or_
 from sqlalchemy.orm import Session
 
-from app.models.transaction import TransactionCreate, UserTransaction, TransactionStatus
+from app.models.transaction import TransactionCreate, TransactionUpdate, UserTransaction, TransactionStatus
 from app.models.user_owned_cards import UserOwnedCard, UserOwnedCardStatus
 from app.models.user_profile import UserProfile
 from app.services.errors import ServiceError
@@ -121,6 +121,52 @@ class TransactionService:
             .first()
         )
         return self._transaction_to_dict(row) if row else None
+
+    def update_transaction(self, user_sub: str, transaction_id: int, updates: TransactionUpdate) -> Dict[str, Any]:
+        resolved_user_id = self._resolve_user_sub(user_sub)
+        transaction = (
+            self.db.query(UserTransaction)
+            .filter(UserTransaction.user_id == resolved_user_id, UserTransaction.id == transaction_id)
+            .first()
+        )
+
+        if not transaction:
+            raise ServiceError(404, "NOT_FOUND", "Transaction not found.", {})
+
+        updates_dict = updates.model_dump(exclude_unset=True, by_alias=False)
+
+        if "card_id" in updates_dict:
+            card_id = self._parse_card_id(updates_dict["card_id"])
+            if not self._card_exists_in_wallet(resolved_user_id, card_id):
+                raise ServiceError(
+                    400,
+                    "VALIDATION_ERROR",
+                    f"card_id '{card_id}' not found in user wallet",
+                    {},
+                )
+            transaction.card_id = card_id
+
+        if "amount_sgd" in updates_dict:
+            transaction.amount_sgd = updates_dict["amount_sgd"]
+
+        if "item" in updates_dict:
+            transaction.item = updates_dict["item"]
+
+        if "channel" in updates_dict:
+            transaction.channel = updates_dict["channel"]
+
+        if "is_overseas" in updates_dict:
+            transaction.is_overseas = updates_dict["is_overseas"]
+
+        if "transaction_date" in updates_dict:
+            transaction.transaction_date = updates_dict["transaction_date"]
+
+        if "category" in updates_dict:
+            transaction.category = updates_dict["category"]
+
+        self.db.commit()
+        self.db.refresh(transaction)
+        return self._transaction_to_dict(transaction)
 
     def update_transaction_status(self, user_sub: str, transaction_id: int, status: str) -> Dict[str, Any]:
         resolved_user_id = self._resolve_user_sub(user_sub)
